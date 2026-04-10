@@ -92,7 +92,7 @@
     7. Bulk insert dos estornos
   - **Requisito:** 5.1–5.8
 
-- [~] 5.3 Implementar consulta paginada de lançamentos
+- [x] 5.3 Implementar consulta paginada de lançamentos
   - Implementar `ConsultarLancamentos(ctx, data, pagina, tamanho) (*PaginaLancamentos, error)`
   - **Requisito:** 9.1–9.4
 
