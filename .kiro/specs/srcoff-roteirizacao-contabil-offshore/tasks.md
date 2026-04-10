@@ -123,7 +123,7 @@
 
 ## Fase 6: Serviço de Regras Contábeis
 
-- [~] 6.1 Implementar serviço de regras contábeis
+- [x] 6.1 Implementar serviço de regras contábeis
   - Criar `internal/service/regra_contabil_service.go`
   - Implementar `ListarRegras`, `CriarRegra`, `EditarRegra`, `ListarCondicoes`, `CriarCondicao`, `EditarCondicao`
   - Validar campos obrigatórios antes de persistir (retornar erro de validação)
