@@ -131,7 +131,7 @@
 
 ## Fase 7: Handlers HTTP (API REST)
 
-- [~] 7.1 Implementar handler de movimento contábil
+- [x] 7.1 Implementar handler de movimento contábil
   - Criar `internal/handler/movimento_contabil_handler.go`
   - `POST /api/v1/movimento-contabil` — decodifica payload `{data}`, chama serviço, retorna 200 ou erro
   - `POST /api/v1/estorno` — decodifica payload `{data}`, chama serviço, retorna 200 ou erro
