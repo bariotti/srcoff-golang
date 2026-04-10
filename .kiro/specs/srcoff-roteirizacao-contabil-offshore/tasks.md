@@ -96,7 +96,7 @@
   - Implementar `ConsultarLancamentos(ctx, data, pagina, tamanho) (*PaginaLancamentos, error)`
   - **Requisito:** 9.1–9.4
 
-- [~] 5.4 Escrever testes de propriedade para geração de movimento (P1, P3, P4, P5)
+- [x] 5.4 Escrever testes de propriedade para geração de movimento (P1, P3, P4, P5)
   - P1: Tag `// Feature: srcoff-roteirizacao-contabil-offshore, Property 1: Seleção da versão máxima da posição de carteira`
     - Gerar registros com múltiplas versões e datas; verificar que apenas data correta e versão máxima são selecionadas
   - P3: Tag `// Feature: srcoff-roteirizacao-contabil-offshore, Property 3: Lançamentos gerados correspondem às condições satisfeitas`
