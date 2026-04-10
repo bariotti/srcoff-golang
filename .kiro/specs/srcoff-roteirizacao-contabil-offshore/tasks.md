@@ -158,7 +158,7 @@
   - Criar `cmd/frontend/templates/consulta.html` com campo de data, tabela de lançamentos e controles de paginação
   - **Requisito:** 9.1, 9.4
 
-- [~] 8.3 Implementar templates HTML para cadastro de regras e condições
+- [x] 8.3 Implementar templates HTML para cadastro de regras e condições
   - Criar `cmd/frontend/templates/regras.html` com listagem, formulário de criação/edição de regras e condições
   - Implementar validação de campos obrigatórios no frontend (HTML5 `required` + mensagem de erro)
   - **Requisito:** 7.1–7.8
