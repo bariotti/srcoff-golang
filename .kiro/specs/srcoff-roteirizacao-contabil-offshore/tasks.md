@@ -143,7 +143,7 @@
   - Implementar endpoints: `GET /api/v1/regras`, `POST /api/v1/regras`, `PUT /api/v1/regras/{id}`, `GET /api/v1/regras/{id}/condicoes`, `POST /api/v1/regras/{id}/condicoes`, `PUT /api/v1/condicoes/{id}`
   - **Requisito:** 7.1–7.6
 
-- [~] 7.3 Implementar roteador e ponto de entrada da API
+- [x] 7.3 Implementar roteador e ponto de entrada da API
   - Criar `cmd/api/main.go` com inicialização do banco, injeção de dependências e registro de rotas
   - **Requisito:** 11.1, 11.2
 
