@@ -1,0 +1,13 @@
+{
+  "enabled": true,
+  "name": "Commit After Task Phase",
+  "description": "Após completar cada Fase da lista de tasks, comita automaticamente o código no repositório com uma mensagem descritiva",
+  "version": "1",
+  "when": {
+    "type": "postTaskExecution"
+  },
+  "then": {
+    "type": "runCommand",
+    "command": "git add . && git commit -m \"chore: fase concluída - task completada\""
+  }
+}

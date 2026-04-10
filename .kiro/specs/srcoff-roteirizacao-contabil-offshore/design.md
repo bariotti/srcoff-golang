@@ -1,0 +1,414 @@
+# Design Técnico — SRCOff: Roteirização Contábil Offshore
+
+## Visão Geral
+
+O SRCOff é um sistema de roteirização contábil que processa em lote a posição de carteira offshore da Tesouraria para uma data específica, aplica regras contábeis parametrizadas dinamicamente e persiste os lançamentos contábeis resultantes. O sistema também é responsável por estornar lançamentos de D-1 que divergem do lote atual e por consolidar o lote contábil final.
+
+O sistema é composto por:
+- **API REST** em Golang — toda a lógica de negócio, persistência e exposição de endpoints.
+- **Frontend** em Golang (HTML/template) — interface web para operação e consulta.
+- **Banco de Dados** Microsoft SQL Server Express — persistência de todos os dados.
+
+### Fluxo Principal
+
+```mermaid
+sequenceDiagram
+    participant Op as Operador
+    participant FE as Frontend
+    participant API as API REST
+    participant AE as Avaliador de Expressão
+    participant DB as SQL Server
+
+    Op->>FE: Informa data e aciona processamento
+    FE->>API: POST /movimento-contabil {data}
+    API->>DB: Busca posicao_carteira (data, max versão)
+    DB-->>API: Registros de posição
+    API->>DB: Busca regras_contabeis e condicoes_regra
+    DB-->>API: Regras e condições
+    loop Para cada registro de posição
+        loop Para cada condição de regra
+            API->>AE: Avalia expressão booleana (condicao)
+            AE-->>API: true/false
+            alt Condição verdadeira
+                API->>AE: Avalia expressão de valor (campo_valor)
+                AE-->>API: valor numérico
+                API->>API: Monta Lancamento_Contabil
+            end
+        end
+    end
+    API->>DB: Bulk insert movimento_contabil
+    API-->>FE: 200 OK
+    FE-->>Op: Mensagem de confirmação
+```
+
+---
+
+## Arquitetura
+
+### Estilo Arquitetural
+
+Aplicação monolítica em Golang com separação em camadas:
+
+```
+cmd/
+  api/        → ponto de entrada da API (main.go)
+  frontend/   → ponto de entrada do frontend (main.go)
+internal/
+  handler/    → handlers HTTP (controllers)
+  service/    → lógica de negócio
+  repository/ → acesso ao banco de dados
+  evaluator/  → avaliador de expressões dinâmicas
+  model/      → structs de domínio
+  db/         → inicialização e pool de conexão
+```
+
+### Decisões de Design
+
+1. **Avaliador de Expressão Dinâmico**: Utilizar a biblioteca `github.com/expr-lang/expr` para avaliar expressões booleanas e aritméticas em tempo de execução. Essa biblioteca compila expressões para bytecode e é segura para uso concorrente.
+
+2. **Bulk Insert**: Os lançamentos contábeis são acumulados em memória durante o processamento do lote e persistidos em uma única operação de bulk insert via `database/sql` com múltiplos `VALUES` na instrução SQL, evitando chamadas individuais ao banco.
+
+3. **Trusted Connection**: A string de conexão utiliza `trusted_connection=yes` via driver `github.com/denisenkom/go-mssqldb`, sem necessidade de usuário/senha.
+
+4. **Frontend com templates Go**: O frontend utiliza `html/template` da stdlib do Go, servindo páginas HTML com dados renderizados no servidor.
+
+5. **Versionamento de conteúdo**: O campo `codigo_versao_conteudo` é calculado no momento da inserção como `MAX(codigo_versao_conteudo) + 1` para a data do lote, garantindo unicidade de versão por data.
+
+---
+
+## Componentes e Interfaces
+
+### API REST — Endpoints
+
+| Método | Caminho | Descrição |
+|--------|---------|-----------|
+| POST | `/api/v1/movimento-contabil` | Gera o movimento contábil para uma data |
+| POST | `/api/v1/estorno` | Gera o estorno do lote de D-1 para uma data |
+| GET | `/api/v1/movimento-contabil` | Consulta lançamentos paginados por data |
+| GET | `/api/v1/regras` | Lista regras contábeis |
+| POST | `/api/v1/regras` | Cria nova regra contábil |
+| PUT | `/api/v1/regras/{id}` | Edita regra contábil |
+| GET | `/api/v1/regras/{id}/condicoes` | Lista condições de uma regra |
+| POST | `/api/v1/regras/{id}/condicoes` | Cria nova condição de regra |
+| PUT | `/api/v1/condicoes/{id}` | Edita condição de regra |
+
+### Payloads
+
+**POST /api/v1/movimento-contabil**
+```json
+{ "data": "2024-01-15" }
+```
+
+**POST /api/v1/estorno**
+```json
+{ "data": "2024-01-15" }
+```
+
+**GET /api/v1/movimento-contabil**
+```
+?data=2024-01-15&pagina=1&tamanho=100
+```
+
+**Resposta paginada:**
+```json
+{
+  "total": 1500,
+  "pagina": 1,
+  "tamanho": 100,
+  "lancamentos": [ ... ]
+}
+```
+
+### Avaliador de Expressão
+
+Interface interna:
+
+```go
+type Evaluator interface {
+    // Avalia expressão booleana sobre os campos do registro de posição
+    EvaluateCondition(expr string, env map[string]interface{}) (bool, error)
+    // Avalia expressão de valor sobre os campos do registro de posição
+    EvaluateValue(expr string, env map[string]interface{}) (float64, error)
+}
+```
+
+O `env` é construído a partir dos campos do registro `PosicaoCarteira` convertidos para `map[string]interface{}`.
+
+### Serviços
+
+```go
+type MovimentoContabilService interface {
+    GerarMovimento(ctx context.Context, data time.Time) error
+    GerarEstorno(ctx context.Context, data time.Time) error
+    ConsultarLancamentos(ctx context.Context, data time.Time, pagina, tamanho int) (*PaginaLancamentos, error)
+}
+
+type RegraContabilService interface {
+    ListarRegras(ctx context.Context) ([]RegraContabil, error)
+    CriarRegra(ctx context.Context, regra RegraContabil) (int64, error)
+    EditarRegra(ctx context.Context, regra RegraContabil) error
+    ListarCondicoes(ctx context.Context, idRegra int64) ([]CondicaoRegra, error)
+    CriarCondicao(ctx context.Context, condicao CondicaoRegra) (int64, error)
+    EditarCondicao(ctx context.Context, condicao CondicaoRegra) error
+}
+```
+
+---
+
+## Modelos de Dados
+
+### Tabelas do Banco de Dados
+
+#### posicao_carteira
+```sql
+CREATE TABLE posicao_carteira (
+    id                              BIGINT IDENTITY PRIMARY KEY,
+    data_posicao_carteira           DATE NOT NULL,
+    codigo_versao_conteudo          INT NOT NULL,
+    codigo_identificador_boleto     VARCHAR(50) NOT NULL,
+    descricao_veiculo               VARCHAR(100),
+    indicador_contraparte_afiliada  BIT,
+    valor_mtm                       DECIMAL(18,6),
+    principal_remanescente          DECIMAL(18,6),
+    moeda_principal_remanescente    VARCHAR(10),
+    -- demais campos da posição conforme layout offshore
+    INDEX IX_posicao_data_versao (data_posicao_carteira, codigo_versao_conteudo)
+);
+```
+
+#### regra_contabil
+```sql
+CREATE TABLE regra_contabil (
+    id                          BIGINT IDENTITY PRIMARY KEY,
+    descricao                   VARCHAR(255) NOT NULL,
+    codigo_produto_corporativo  VARCHAR(50) NOT NULL,
+    ativo                       BIT NOT NULL DEFAULT 1
+);
+```
+
+#### condicao_regra
+```sql
+CREATE TABLE condicao_regra (
+    id          BIGINT IDENTITY PRIMARY KEY,
+    id_regra    BIGINT NOT NULL REFERENCES regra_contabil(id),
+    condicao    VARCHAR(1000) NOT NULL,
+    conta_debito    VARCHAR(20) NOT NULL,
+    conta_credito   VARCHAR(20) NOT NULL,
+    campo_valor     VARCHAR(500) NOT NULL,
+    campo_moeda     VARCHAR(100) NOT NULL,
+    ativo           BIT NOT NULL DEFAULT 1
+);
+```
+
+#### movimento_contabil
+```sql
+CREATE TABLE movimento_contabil (
+    id                          BIGINT IDENTITY PRIMARY KEY,
+    data_lote_contabil          DATE NOT NULL,
+    codigo_versao_conteudo      INT NOT NULL,
+    codigo_identificador_boleto VARCHAR(50) NOT NULL,
+    valor_lancamento_contabil   DECIMAL(18,6) NOT NULL,
+    moeda_lancamento_contabil   VARCHAR(10) NOT NULL,
+    conta_debito                VARCHAR(20) NOT NULL,
+    conta_credito               VARCHAR(20) NOT NULL,
+    indicador_reversao          BIT NOT NULL DEFAULT 0,
+    descricao_regra_contabil    VARCHAR(255),
+    descricao_condicao_contabil VARCHAR(1000),
+    id_regra_contabil           BIGINT REFERENCES regra_contabil(id),
+    INDEX IX_movimento_data_versao (data_lote_contabil, codigo_versao_conteudo),
+    INDEX IX_movimento_data_reversao (data_lote_contabil, indicador_reversao)
+);
+```
+
+### Structs Go (model)
+
+```go
+type PosicaoCarteira struct {
+    ID                           int64
+    DataPosicaoCarteira          time.Time
+    CodigoVersaoConteudo         int
+    CodigoIdentificadorBoleto    string
+    DescricaoVeiculo             string
+    IndicadorContraparteAfiliada bool
+    ValorMTM                     float64
+    PrincipalRemanescente        float64
+    MoedaPrincipalRemanescente   string
+    // demais campos
+}
+
+type RegraContabil struct {
+    ID                       int64
+    Descricao                string
+    CodigoProdutoCorporativo string
+    Ativo                    bool
+    Condicoes                []CondicaoRegra
+}
+
+type CondicaoRegra struct {
+    ID          int64
+    IDRegra     int64
+    Condicao    string
+    ContaDebito string
+    ContaCredito string
+    CampoValor  string
+    CampoMoeda  string
+    Ativo       bool
+}
+
+type LancamentoContabil struct {
+    ID                        int64
+    DataLoteContabil          time.Time
+    CodigoVersaoConteudo      int
+    CodigoIdentificadorBoleto string
+    ValorLancamentoContabil   float64
+    MoedaLancamentoContabil   string
+    ContaDebito               string
+    ContaCredito              string
+    IndicadorReversao         bool
+    DescricaoRegraContabil    string
+    DescricaoCondicaoContabil string
+    IDRegraContabil           int64
+}
+```
+
+---
+
+## Propriedades de Corretude
+
+*Uma propriedade é uma característica ou comportamento que deve ser verdadeiro em todas as execuções válidas de um sistema — essencialmente, uma declaração formal sobre o que o sistema deve fazer. As propriedades servem como ponte entre especificações legíveis por humanos e garantias de corretude verificáveis por máquina.*
+
+### Propriedade 1: Seleção da versão máxima da posição de carteira
+
+*Para qualquer* conjunto de registros de posicao_carteira com múltiplas versões para a mesma data, o sistema deve selecionar exclusivamente os registros cujo codigo_versao_conteudo é igual ao maior valor disponível para aquela data, e nenhum registro de outra data deve ser incluído.
+
+**Valida: Requisitos 1.1, 1.2**
+
+---
+
+### Propriedade 2: Avaliador de expressão é determinístico
+
+*Para qualquer* expressão (booleana ou aritmética) e qualquer mapa de variáveis de entrada, o Avaliador_Expressao deve retornar o mesmo resultado toda vez que for invocado com os mesmos argumentos — tanto para avaliações de condição quanto para avaliações de valor.
+
+**Valida: Requisitos 2.1, 2.2**
+
+---
+
+### Propriedade 3: Lançamentos gerados correspondem às condições satisfeitas
+
+*Para qualquer* conjunto de registros de posicao_carteira e qualquer conjunto de condicoes_regra, o número de lançamentos gerados deve ser igual ao número de pares (registro, condição) para os quais a expressão booleana da condição é verdadeira — registros que não satisfazem nenhuma condição não geram lançamentos.
+
+**Valida: Requisitos 3.1, 4.5**
+
+---
+
+### Propriedade 4: Campos do lançamento contábil são preenchidos corretamente
+
+*Para qualquer* lançamento contábil gerado, todos os campos (conta_debito, conta_credito, valor_lancamento_contabil, moeda_lancamento_contabil, codigo_identificador_boleto, indicador_reversao=false, descricao_regra_contabil, descricao_condicao_contabil) devem corresponder exatamente aos valores da condicao_regra e do registro de posicao_carteira que o originaram.
+
+**Valida: Requisitos 3.2, 3.3, 3.4, 3.5, 3.6, 3.7, 3.8, 3.9, 3.10**
+
+---
+
+### Propriedade 5: Versão do lote é sempre incrementada monotonicamente
+
+*Para qualquer* data de lote, o codigo_versao_conteudo atribuído ao novo lote deve ser estritamente maior que todos os valores de codigo_versao_conteudo existentes na tabela movimento_contabil para aquela mesma data, ou igual a 1 se não houver registros anteriores.
+
+**Valida: Requisito 3.11**
+
+---
+
+### Propriedade 6: Invariantes do estorno — inversão de contas e indicador de reversão
+
+*Para qualquer* lançamento de D-1 que origina um estorno, o estorno gerado deve ter: conta_debito igual ao conta_credito do lançamento original, conta_credito igual ao conta_debito do lançamento original, e indicador_reversao igual a verdadeiro.
+
+**Valida: Requisitos 5.4, 5.5**
+
+---
+
+### Propriedade 7: Estorno é gerado se e somente se há divergência ou ausência de correspondente
+
+*Para qualquer* par de lotes (D-1, D), um estorno deve ser gerado se e somente se o lançamento de D-1 não possui correspondente em D pela chave (codigo_identificador_boleto, id_regra_contabil), ou possui correspondente com valor_lancamento_contabil diferente. Lançamentos com valores iguais não devem gerar estorno.
+
+**Valida: Requisitos 5.4, 5.6, 5.7**
+
+---
+
+### Propriedade 8: Lote consolidado contém exatamente todos os lançamentos e estornos da data
+
+*Para qualquer* data D processada com sucesso, a consulta ao lote consolidado deve retornar exatamente o conjunto de lançamentos com indicador_reversao=false mais o conjunto de estornos com indicador_reversao=true gerados para aquela data — sem omissões e sem duplicatas.
+
+**Valida: Requisitos 6.1, 6.2**
+
+---
+
+### Propriedade 9: Paginação retorna subconjunto correto e total consistente
+
+*Para qualquer* data e qualquer combinação válida de página e tamanho de página, a união dos registros retornados em todas as páginas deve ser igual ao conjunto completo de lançamentos da data, o total informado pela API deve ser consistente com esse conjunto, e nenhum lançamento deve aparecer em mais de uma página.
+
+**Valida: Requisitos 9.2, 9.3**
+
+---
+
+## Tratamento de Erros
+
+| Situação | Comportamento |
+|----------|--------------|
+| Nenhum registro de posicao_carteira para a data | Retorna HTTP 200 com mensagem indicando ausência de dados; nenhum lançamento é gerado |
+| Expressão booleana inválida para um registro | Registra erro no log; prossegue para o próximo registro sem interromper o lote |
+| Expressão de valor inválida para um registro | Registra erro no log; prossegue para o próximo registro sem interromper o lote |
+| Nenhum lote em D-1 para estorno | Retorna HTTP 200 com mensagem indicando ausência de lote em D-1; nenhum estorno é gerado |
+| Falha na conexão com o banco na inicialização | Registra erro no log e encerra com código de saída != 0 |
+| Erro de validação no frontend (campo obrigatório vazio) | Exibe mensagem de validação; impede envio do formulário |
+| API retorna erro para processamento/estorno | Frontend exibe a mensagem de erro retornada pela API |
+
+### Estratégia de Log
+
+- Todos os erros de avaliação de expressão são registrados com: data do lote, codigo_identificador_boleto, expressão que falhou e mensagem de erro.
+- Erros de infraestrutura (banco, rede) são registrados com stack trace.
+- Nível de log configurável via variável de ambiente `LOG_LEVEL`.
+
+---
+
+## Estratégia de Testes
+
+### Abordagem Dual
+
+O projeto adota dois tipos complementares de teste:
+
+- **Testes unitários**: verificam exemplos específicos, casos de borda e condições de erro.
+- **Testes de propriedade (PBT)**: verificam propriedades universais sobre conjuntos de entradas geradas aleatoriamente.
+
+### Testes Unitários
+
+Focados em:
+- Exemplos concretos das regras NDF (Requisito 4): cada combinação de condição com valores específicos.
+- Integração entre camadas (handler → service → repository).
+- Casos de borda: posição vazia, lote D-1 inexistente, expressão inválida.
+- Validação de formulários no frontend.
+
+### Testes de Propriedade (PBT)
+
+**Biblioteca**: `github.com/leanovate/gopter` (Go) — biblioteca madura de property-based testing para Go, com suporte a geradores arbitrários e shrinking.
+
+**Configuração mínima**: 100 iterações por propriedade (`gopter.NewProperties` com `MinSuccessfulTests: 100`).
+
+**Formato de tag obrigatório em cada teste**:
+```
+// Feature: srcoff-roteirizacao-contabil-offshore, Property N: <texto da propriedade>
+```
+
+Cada propriedade de corretude listada na seção anterior deve ser implementada por **um único** teste de propriedade.
+
+#### Mapeamento Propriedade → Teste
+
+| Propriedade | Descrição do Teste |
+|-------------|-------------------|
+| P1 | Gera registros com múltiplas versões e datas variadas; verifica que apenas os registros da data correta com a versão máxima são selecionados |
+| P2 | Gera expressões booleanas e aritméticas com envs aleatórios; verifica determinismo chamando duas vezes com os mesmos argumentos |
+| P3 | Gera posições e condições aleatórias; conta pares satisfeitos e compara com lançamentos gerados; verifica ausência de lançamentos para registros sem condição satisfeita |
+| P4 | Gera posições e condições aleatórias; verifica todos os campos de cada lançamento contra a origem (posição + condição) |
+| P5 | Gera lotes para a mesma data em sequência; verifica que cada versão é estritamente maior que a anterior e que a primeira versão é 1 |
+| P6 | Gera lançamentos de D-1 aleatórios com divergência de valor; verifica inversão de contas e indicador_reversao=true nos estornos |
+| P7 | Gera pares de lotes (D-1, D) aleatórios com combinações de igualdade/divergência/ausência; verifica que estornos são gerados se e somente se há divergência ou ausência |
+| P8 | Gera lotes completos com movimento e estorno; verifica que a consulta retorna exatamente lançamentos + estornos da data sem omissões ou duplicatas |
+| P9 | Gera lotes com N lançamentos aleatórios; itera todas as páginas e verifica que a união é igual ao total sem duplicatas e que o total retornado é consistente |
