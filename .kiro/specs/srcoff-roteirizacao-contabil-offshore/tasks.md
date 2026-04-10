@@ -154,7 +154,7 @@
   - Exibir mensagem de confirmação ou erro retornado pela API
   - **Requisito:** 8.1–8.6
 
-- [~] 8.2 Implementar templates HTML para consulta de movimento contábil
+- [x] 8.2 Implementar templates HTML para consulta de movimento contábil
   - Criar `cmd/frontend/templates/consulta.html` com campo de data, tabela de lançamentos e controles de paginação
   - **Requisito:** 9.1, 9.4
 
