@@ -149,7 +149,7 @@
 
 ## Fase 8: Frontend
 
-- [~] 8.1 Implementar templates HTML para operação (processamento e estorno)
+- [x] 8.1 Implementar templates HTML para operação (processamento e estorno)
   - Criar `cmd/frontend/templates/operacao.html` com formulário de data + botão de processamento e formulário de data + botão de estorno
   - Exibir mensagem de confirmação ou erro retornado pela API
   - **Requisito:** 8.1–8.6
