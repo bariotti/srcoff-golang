@@ -114,7 +114,7 @@
     - Gerar pares de lotes com combinações de igualdade/divergência/ausência; verificar condição de geração
   - **Requisito:** 5.4–5.7
 
-- [~] 5.6 Escrever testes de propriedade para consulta paginada (P8, P9)
+- [x] 5.6 Escrever testes de propriedade para consulta paginada (P8, P9)
   - P8: Tag `// Feature: srcoff-roteirizacao-contabil-offshore, Property 8: Lote consolidado contém exatamente todos os lançamentos e estornos da data`
     - Gerar lotes completos; verificar que consulta retorna exatamente lançamentos + estornos sem omissões ou duplicatas
   - P9: Tag `// Feature: srcoff-roteirizacao-contabil-offshore, Property 9: Paginação retorna subconjunto correto e total consistente`
