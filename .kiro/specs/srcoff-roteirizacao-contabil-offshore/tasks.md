@@ -138,7 +138,7 @@
   - `GET /api/v1/movimento-contabil` — lê query params `data`, `pagina`, `tamanho`, retorna JSON paginado
   - **Requisito:** 8.2, 8.4, 9.2, 9.3
 
-- [~] 7.2 Implementar handler de regras contábeis
+- [x] 7.2 Implementar handler de regras contábeis
   - Criar `internal/handler/regra_contabil_handler.go`
   - Implementar endpoints: `GET /api/v1/regras`, `POST /api/v1/regras`, `PUT /api/v1/regras/{id}`, `GET /api/v1/regras/{id}/condicoes`, `POST /api/v1/regras/{id}/condicoes`, `PUT /api/v1/condicoes/{id}`
   - **Requisito:** 7.1–7.6
