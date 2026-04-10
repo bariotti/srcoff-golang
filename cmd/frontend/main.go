@@ -26,7 +26,11 @@ type operacaoData struct {
 }
 
 type consultaData struct {
-	Data           string
+	DataInicio     string
+	DataFim        string
+	Boleto         string
+	VersaoModo     string
+	Versao         string
 	Pagina         int
 	Tamanho        int
 	Resultado      *paginaLancamentosView
@@ -46,6 +50,7 @@ type paginaLancamentosView struct {
 
 type lancamentoView struct {
 	DataLoteContabil          time.Time
+	CodigoVersaoConteudo      int
 	CodigoIdentificadorBoleto string
 	ContaDebito               string
 	ContaCredito              string
@@ -53,6 +58,22 @@ type lancamentoView struct {
 	MoedaLancamentoContabil   string
 	IndicadorReversao         bool
 	DescricaoRegraContabil    string
+}
+
+type conciliacaoData struct {
+	Data            string
+	TotalPosicoes   int
+	TotalMovimentos int
+	Inconsistencias []inconsistenciaView
+	Erro            string
+}
+
+type inconsistenciaView struct {
+	Tipo                      string
+	CodigoIdentificadorBoleto string
+	DescricaoRegra            string
+	IndicadorReversao         bool
+	Detalhe                   string
 }
 
 type regrasData struct {
@@ -197,9 +218,17 @@ func main() {
 
 	// GET /consulta
 	http.HandleFunc("/consulta", func(w http.ResponseWriter, r *http.Request) {
-		dataParam := r.URL.Query().Get("data")
+		dataInicio := r.URL.Query().Get("data_inicio")
+		dataFim := r.URL.Query().Get("data_fim")
+		boleto := r.URL.Query().Get("boleto")
+		versaoModo := r.URL.Query().Get("versao_modo")
+		versao := r.URL.Query().Get("versao")
 		paginaParam := r.URL.Query().Get("pagina")
 		tamanhoParam := r.URL.Query().Get("tamanho")
+
+		if versaoModo == "" {
+			versaoModo = "vigente"
+		}
 
 		pagina := 1
 		if p, err := strconv.Atoi(paginaParam); err == nil && p > 0 {
@@ -210,14 +239,16 @@ func main() {
 			tamanho = t
 		}
 
-		if dataParam == "" {
-			renderTemplate(tmpl, w, "consulta.html", consultaData{Tamanho: tamanho})
+		d := consultaData{DataInicio: dataInicio, DataFim: dataFim, Boleto: boleto, VersaoModo: versaoModo, Versao: versao, Pagina: pagina, Tamanho: tamanho}
+
+		if dataInicio == "" && dataFim == "" && boleto == "" {
+			renderTemplate(tmpl, w, "consulta.html", d)
 			return
 		}
 
-		url := fmt.Sprintf("%s/api/v1/movimento-contabil?data=%s&pagina=%d&tamanho=%d", apiURL, dataParam, pagina, tamanho)
-		resp, err := client.Get(url)
-		d := consultaData{Data: dataParam, Pagina: pagina, Tamanho: tamanho}
+		apiURL2 := fmt.Sprintf("%s/api/v1/movimento-contabil?data_inicio=%s&data_fim=%s&boleto=%s&versao_modo=%s&versao=%s&pagina=%d&tamanho=%d",
+			apiURL, dataInicio, dataFim, boleto, versaoModo, versao, pagina, tamanho)
+		resp, err := client.Get(apiURL2)
 		if err != nil {
 			d.Erro = fmt.Sprintf("Erro ao comunicar com a API: %v", err)
 			renderTemplate(tmpl, w, "consulta.html", d)
@@ -231,14 +262,12 @@ func main() {
 			renderTemplate(tmpl, w, "consulta.html", d)
 			return
 		}
-
 		if errMsg, ok := raw["erro"].(string); ok && errMsg != "" {
 			d.Erro = errMsg
 			renderTemplate(tmpl, w, "consulta.html", d)
 			return
 		}
 
-		// Parse paginaLancamentosView from raw JSON
 		rawBytes, _ := json.Marshal(raw)
 		var view paginaLancamentosView
 		if err := json.Unmarshal(rawBytes, &view); err != nil {
@@ -411,6 +440,56 @@ func main() {
 		}
 
 		renderTemplate(tmpl, w, "regras.html", d)
+	})
+
+	// GET /conciliacao
+	http.HandleFunc("/conciliacao", func(w http.ResponseWriter, r *http.Request) {
+		dataParam := r.URL.Query().Get("data")
+		d := conciliacaoData{Data: dataParam}
+
+		if dataParam == "" {
+			renderTemplate(tmpl, w, "conciliacao.html", d)
+			return
+		}
+
+		resp, err := client.Get(fmt.Sprintf("%s/api/v1/conciliacao?data=%s", apiURL, dataParam))
+		if err != nil {
+			d.Erro = fmt.Sprintf("Erro ao comunicar com a API: %v", err)
+			renderTemplate(tmpl, w, "conciliacao.html", d)
+			return
+		}
+		defer resp.Body.Close()
+
+		var raw map[string]interface{}
+		if err := json.NewDecoder(resp.Body).Decode(&raw); err != nil {
+			d.Erro = fmt.Sprintf("Erro ao decodificar resposta: %v", err)
+			renderTemplate(tmpl, w, "conciliacao.html", d)
+			return
+		}
+		if errMsg, ok := raw["erro"].(string); ok && errMsg != "" {
+			d.Erro = errMsg
+			renderTemplate(tmpl, w, "conciliacao.html", d)
+			return
+		}
+
+		d.TotalPosicoes = int(toFloat(raw["TotalPosicoes"]))
+		d.TotalMovimentos = int(toFloat(raw["TotalMovimentos"]))
+
+		if incs, ok := raw["Inconsistencias"].([]interface{}); ok {
+			for _, item := range incs {
+				if m, ok := item.(map[string]interface{}); ok {
+					d.Inconsistencias = append(d.Inconsistencias, inconsistenciaView{
+						Tipo:                      toString(m["Tipo"]),
+						CodigoIdentificadorBoleto: toString(m["CodigoIdentificadorBoleto"]),
+						DescricaoRegra:            toString(m["DescricaoRegra"]),
+						IndicadorReversao:         m["IndicadorReversao"] == true,
+						Detalhe:                   toString(m["Detalhe"]),
+					})
+				}
+			}
+		}
+
+		renderTemplate(tmpl, w, "conciliacao.html", d)
 	})
 
 	// Root redirect

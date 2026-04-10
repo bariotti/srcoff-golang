@@ -14,6 +14,7 @@ type movimentoContabilSvc interface {
 	GerarMovimento(ctx context.Context, data time.Time) error
 	GerarEstorno(ctx context.Context, data time.Time) error
 	ConsultarLancamentos(ctx context.Context, data time.Time, pagina, tamanho int) (*model.PaginaLancamentos, error)
+	ConsultarLancamentosFiltrado(ctx context.Context, dataInicio, dataFim time.Time, boleto string, versao int, versaoModo string, pagina, tamanho int) (*model.PaginaLancamentos, error)
 }
 
 // MovimentoContabilHandler expõe os endpoints de movimento contábil.
@@ -100,27 +101,65 @@ func (h *MovimentoContabilHandler) ConsultarMovimento(w http.ResponseWriter, r *
 
 	q := r.URL.Query()
 
-	data, err := time.Parse("2006-01-02", q.Get("data"))
-	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"erro": "data inválida: use o formato YYYY-MM-DD"})
-		return
-	}
-
 	pagina := 1
 	if v, err := strconv.Atoi(q.Get("pagina")); err == nil && v > 0 {
 		pagina = v
 	}
-
 	tamanho := 100
 	if v, err := strconv.Atoi(q.Get("tamanho")); err == nil && v > 0 {
 		tamanho = v
 	}
 
+	boleto := q.Get("boleto")
+	dataInicioStr := q.Get("data_inicio")
+	dataFimStr := q.Get("data_fim")
+	dataStr := q.Get("data")
+
+	// Suporte ao filtro por período
+	if dataInicioStr != "" || dataFimStr != "" || boleto != "" {
+		if dataInicioStr == "" {
+			dataInicioStr = "2000-01-01"
+		}
+		if dataFimStr == "" {
+			dataFimStr = "2999-12-31"
+		}
+		dataInicio, err := time.Parse("2006-01-02", dataInicioStr)
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"erro": "data_inicio inválida: use YYYY-MM-DD"})
+			return
+		}
+		dataFim, err := time.Parse("2006-01-02", dataFimStr)
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"erro": "data_fim inválida: use YYYY-MM-DD"})
+			return
+		}
+		versaoModo := q.Get("versao_modo") // "vigente" | "todas" | "especifica"
+		if versaoModo == "" {
+			versaoModo = "vigente"
+		}
+		versao := 0
+		if versaoModo == "especifica" {
+			versao, _ = strconv.Atoi(q.Get("versao"))
+		}
+		resultado, err := h.svc.ConsultarLancamentosFiltrado(r.Context(), dataInicio, dataFim, boleto, versao, versaoModo, pagina, tamanho)
+		if err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"erro": err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusOK, resultado)
+		return
+	}
+
+	// Compatibilidade com filtro por data única
+	data, err := time.Parse("2006-01-02", dataStr)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"erro": "data inválida: use o formato YYYY-MM-DD"})
+		return
+	}
 	resultado, err := h.svc.ConsultarLancamentos(r.Context(), data, pagina, tamanho)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"erro": err.Error()})
 		return
 	}
-
 	writeJSON(w, http.StatusOK, resultado)
 }

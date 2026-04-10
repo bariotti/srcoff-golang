@@ -72,7 +72,78 @@ internal/
 
 4. **Frontend com templates Go**: O frontend utiliza `html/template` da stdlib do Go, servindo páginas HTML com dados renderizados no servidor.
 
-5. **Versionamento de conteúdo**: O campo `codigo_versao_conteudo` é calculado no momento da inserção como `MAX(codigo_versao_conteudo) + 1` para a data do lote, garantindo unicidade de versão por data.
+5. **Versionamento de conteúdo**: O campo `codigo_versao_conteudo` é calculado no momento da inserção como `MAX(codigo_versao_conteudo) + 1` para a data do lote, garantindo unicidade de versão por data. Para estornos, utiliza-se a versão vigente (`MAX`) sem incremento.
+
+6. **Concatenação de SQL**: Devido a limitações do driver `go-mssqldb` com parâmetros nomeados, todas as queries utilizam concatenação direta de strings com escape de aspas simples (`''`) para valores textuais.
+
+7. **Configuração via variáveis de ambiente**:
+   - `STORAGE_BACKEND` — backend de persistência: `sqlserver` (padrão) ou `file`
+   - `FILE_STORAGE_DIR` — diretório dos arquivos JSON quando `STORAGE_BACKEND=file` (padrão: `./data`)
+   - `DB_SERVER` — servidor SQL Server (padrão: `DESKTOP-B1QQIIN\SQLEXPRESS`)
+   - `DB_NAME` — nome do banco (padrão: `srcoff`)
+   - `API_PORT` — porta da API (padrão: `8080`)
+   - `FRONTEND_PORT` — porta do frontend (padrão: `9090`)
+   - `API_URL` — URL da API consumida pelo frontend (padrão: `http://localhost:8080`)
+
+8. **Conciliação em memória**: A conciliação entre posição e movimento é realizada inteiramente em memória no serviço, sem persistência de inconsistências no banco de dados.
+
+9. **Backend de persistência plugável via interfaces**: Os repositórios são definidos como interfaces Go em `internal/repository/interfaces.go`. O `cmd/api/main.go` instancia a implementação correta (SQL Server ou arquivo) com base em `STORAGE_BACKEND`, sem que os serviços precisem conhecer o backend ativo.
+
+---
+
+## Arquitetura de Repositórios
+
+```
+internal/repository/
+  interfaces.go              → interfaces PosicaoCarteiraRepository,
+                               RegraContabilRepository, MovimentoContabilRepository
+  posicao_carteira_repo.go   → implementação SQL Server
+  regra_contabil_repo.go     → implementação SQL Server
+  movimento_contabil_repo.go → implementação SQL Server
+  file/
+    store.go                 → helper genérico de leitura/escrita JSON
+    posicao_carteira_repo.go → implementação arquivo JSON
+    regra_contabil_repo.go   → implementação arquivo JSON
+    movimento_contabil_repo.go → implementação arquivo JSON
+```
+
+### Interfaces de Repositório
+
+```go
+type PosicaoCarteiraRepository interface {
+    BuscarPorDataEVersaoMaxima(ctx context.Context, data time.Time) ([]model.PosicaoCarteira, error)
+}
+
+type RegraContabilRepository interface {
+    ListarRegrasAtivas(ctx context.Context) ([]model.RegraContabil, error)
+    CriarRegra(ctx context.Context, regra model.RegraContabil) (int64, error)
+    EditarRegra(ctx context.Context, regra model.RegraContabil) error
+    ListarCondicoes(ctx context.Context, idRegra int64) ([]model.CondicaoRegra, error)
+    CriarCondicao(ctx context.Context, condicao model.CondicaoRegra) (int64, error)
+    EditarCondicao(ctx context.Context, condicao model.CondicaoRegra) error
+}
+
+type MovimentoContabilRepository interface {
+    BulkInsert(ctx context.Context, lancamentos []model.LancamentoContabil) error
+    BuscarPorDataEIndicador(ctx context.Context, data time.Time, indicadorReversao bool) ([]model.LancamentoContabil, error)
+    ObterProximaVersao(ctx context.Context, data time.Time) (int, error)
+    ObterVersaoAtual(ctx context.Context, data time.Time) (int, error)
+    ConsultarPaginado(ctx context.Context, data time.Time, pagina, tamanho int) (*model.PaginaLancamentos, error)
+    ConsultarPaginadoFiltrado(ctx context.Context, dataInicio, dataFim time.Time, boleto string, versao int, versaoModo string, pagina, tamanho int) (*model.PaginaLancamentos, error)
+}
+```
+
+### Backend Arquivo JSON
+
+Quando `STORAGE_BACKEND=file`, os dados são armazenados em `FILE_STORAGE_DIR` (padrão `./data`):
+
+| Arquivo | Conteúdo |
+|---------|----------|
+| `posicao_carteira.json` | Array de `PosicaoCarteira` |
+| `regras.json` | Objeto com arrays de `RegraContabil`, `CondicaoRegra` e contadores de ID |
+| `movimento_contabil.json` | Array de `LancamentoContabil` |
+
+Todas as operações de leitura/escrita são protegidas por `sync.Mutex` para segurança em acesso concorrente.
 
 ---
 
@@ -84,7 +155,8 @@ internal/
 |--------|---------|-----------|
 | POST | `/api/v1/movimento-contabil` | Gera o movimento contábil para uma data |
 | POST | `/api/v1/estorno` | Gera o estorno do lote de D-1 para uma data |
-| GET | `/api/v1/movimento-contabil` | Consulta lançamentos paginados por data |
+| GET | `/api/v1/movimento-contabil` | Consulta lançamentos paginados com filtros |
+| GET | `/api/v1/conciliacao` | Concilia posição de carteira com movimento contábil |
 | GET | `/api/v1/regras` | Lista regras contábeis |
 | POST | `/api/v1/regras` | Cria nova regra contábil |
 | PUT | `/api/v1/regras/{id}` | Edita regra contábil |
@@ -104,9 +176,19 @@ internal/
 { "data": "2024-01-15" }
 ```
 
-**GET /api/v1/movimento-contabil**
+**GET /api/v1/movimento-contabil — filtros disponíveis**
 ```
-?data=2024-01-15&pagina=1&tamanho=100
+?data_inicio=2024-01-01&data_fim=2024-01-31&boleto=BOL-001&versao_modo=vigente&versao=1&pagina=1&tamanho=100
+```
+- `data_inicio` / `data_fim`: período (opcional; se omitidos, busca tudo)
+- `boleto`: busca parcial por substring (opcional)
+- `versao_modo`: `vigente` (padrão) | `todas` | `especifica`
+- `versao`: número da versão (obrigatório quando `versao_modo=especifica`)
+- `data`: compatibilidade com filtro por data única (legado)
+
+**GET /api/v1/conciliacao**
+```
+?data=2024-01-15
 ```
 
 **Resposta paginada:**
@@ -116,6 +198,24 @@ internal/
   "pagina": 1,
   "tamanho": 100,
   "lancamentos": [ ... ]
+}
+```
+
+**Resposta de conciliação:**
+```json
+{
+  "Data": "2024-01-15",
+  "TotalPosicoes": 100,
+  "TotalMovimentos": 98,
+  "Inconsistencias": [
+    {
+      "Tipo": "POSICAO_SEM_MOVIMENTO",
+      "CodigoIdentificadorBoleto": "BOL-001",
+      "DescricaoRegra": "",
+      "IndicadorReversao": false,
+      "Detalhe": "Boleto presente na posição de 2024-01-15 não possui lançamento contábil"
+    }
+  ]
 }
 ```
 
@@ -141,6 +241,7 @@ type MovimentoContabilService interface {
     GerarMovimento(ctx context.Context, data time.Time) error
     GerarEstorno(ctx context.Context, data time.Time) error
     ConsultarLancamentos(ctx context.Context, data time.Time, pagina, tamanho int) (*PaginaLancamentos, error)
+    ConsultarLancamentosFiltrado(ctx context.Context, dataInicio, dataFim time.Time, boleto string, versao int, versaoModo string, pagina, tamanho int) (*PaginaLancamentos, error)
 }
 
 type RegraContabilService interface {
@@ -150,6 +251,10 @@ type RegraContabilService interface {
     ListarCondicoes(ctx context.Context, idRegra int64) ([]CondicaoRegra, error)
     CriarCondicao(ctx context.Context, condicao CondicaoRegra) (int64, error)
     EditarCondicao(ctx context.Context, condicao CondicaoRegra) error
+}
+
+type ConciliacaoService interface {
+    Conciliar(ctx context.Context, data time.Time) (*ResultadoConciliacao, error)
 }
 ```
 
@@ -233,7 +338,6 @@ type PosicaoCarteira struct {
     ValorMTM                     float64
     PrincipalRemanescente        float64
     MoedaPrincipalRemanescente   string
-    // demais campos
 }
 
 type RegraContabil struct {
@@ -268,6 +372,21 @@ type LancamentoContabil struct {
     DescricaoRegraContabil    string
     DescricaoCondicaoContabil string
     IDRegraContabil           int64
+}
+
+type Inconsistencia struct {
+    Tipo                      TipoInconsistencia // "POSICAO_SEM_MOVIMENTO" | "LANCAMENTO_DUPLICADO"
+    CodigoIdentificadorBoleto string
+    DescricaoRegra            string
+    IndicadorReversao         bool
+    Detalhe                   string
+}
+
+type ResultadoConciliacao struct {
+    Data            string
+    TotalPosicoes   int
+    TotalMovimentos int
+    Inconsistencias []Inconsistencia
 }
 ```
 

@@ -20,8 +20,10 @@ type regraContabilRepo interface {
 type movimentoContabilRepo interface {
 	BulkInsert(ctx context.Context, lancamentos []model.LancamentoContabil) error
 	ObterProximaVersao(ctx context.Context, data time.Time) (int, error)
+	ObterVersaoAtual(ctx context.Context, data time.Time) (int, error)
 	BuscarPorDataEIndicador(ctx context.Context, data time.Time, indicadorReversao bool) ([]model.LancamentoContabil, error)
 	ConsultarPaginado(ctx context.Context, data time.Time, pagina, tamanho int) (*model.PaginaLancamentos, error)
+	ConsultarPaginadoFiltrado(ctx context.Context, dataInicio, dataFim time.Time, boleto string, versao int, versaoModo string, pagina, tamanho int) (*model.PaginaLancamentos, error)
 }
 
 // MovimentoContabilService implementa a lógica de geração e consulta de movimentos contábeis.
@@ -144,6 +146,11 @@ func (s *MovimentoContabilService) ConsultarLancamentos(ctx context.Context, dat
 	return s.movimentoRepo.ConsultarPaginado(ctx, data, pagina, tamanho)
 }
 
+// ConsultarLancamentosFiltrado retorna lançamentos paginados por período, boleto e versão.
+func (s *MovimentoContabilService) ConsultarLancamentosFiltrado(ctx context.Context, dataInicio, dataFim time.Time, boleto string, versao int, versaoModo string, pagina, tamanho int) (*model.PaginaLancamentos, error) {
+	return s.movimentoRepo.ConsultarPaginadoFiltrado(ctx, dataInicio, dataFim, boleto, versao, versaoModo, pagina, tamanho)
+}
+
 // GerarEstorno compara os lançamentos de D-1 com os de D e gera estornos para
 // lançamentos com valor divergente ou sem correspondente em D.
 func (s *MovimentoContabilService) GerarEstorno(ctx context.Context, data time.Time) error {
@@ -203,10 +210,10 @@ func (s *MovimentoContabilService) GerarEstorno(ctx context.Context, data time.T
 		return nil
 	}
 
-	// 6. Obter próxima versão para a data D
-	versao, err := s.movimentoRepo.ObterProximaVersao(ctx, data)
+	// 6. Obter versão atual para a data D (estorno usa a mesma versão do lote, não incrementa)
+	versao, err := s.movimentoRepo.ObterVersaoAtual(ctx, data)
 	if err != nil {
-		return fmt.Errorf("erro ao obter próxima versão para estorno: %w", err)
+		return fmt.Errorf("erro ao obter versão atual para estorno: %w", err)
 	}
 	for i := range estornos {
 		estornos[i].CodigoVersaoConteudo = versao

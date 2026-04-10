@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <title>SRCOff — Conciliação</title>
+  <style>
+    body { font-family: sans-serif; max-width: 1100px; margin: 40px auto; padding: 0 16px; }
+    h1 { font-size: 1.4rem; margin-bottom: 32px; }
+    nav { margin-bottom: 24px; }
+    nav a { margin-right: 16px; color: #0066cc; text-decoration: none; font-size: 0.95rem; }
+    section { margin-bottom: 40px; padding: 20px; border: 1px solid #ddd; border-radius: 6px; }
+    h2 { font-size: 1.1rem; margin-top: 0; }
+    .filtros { display: flex; gap: 12px; align-items: flex-end; }
+    .filtros label { display: flex; flex-direction: column; font-size: 0.85rem; gap: 4px; }
+    input[type="date"] { padding: 6px 10px; font-size: 0.95rem; }
+    button { padding: 7px 18px; font-size: 1rem; cursor: pointer; }
+    .resumo { display: flex; gap: 24px; margin: 16px 0; }
+    .resumo div { padding: 12px 20px; border-radius: 6px; font-size: 0.9rem; background: #f5f5f5; }
+    .resumo .ok { background: #e6f4ea; color: #1e7e34; }
+    .resumo .alerta { background: #fff3cd; color: #856404; }
+    table { border-collapse: collapse; width: 100%; margin-top: 16px; }
+    th, td { border: 1px solid #ddd; padding: 8px 10px; text-align: left; font-size: 0.85rem; }
+    th { background: #f5f5f5; }
+    .badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 0.78rem; font-weight: bold; }
+    .badge-sem-mov { background: #f8d7da; color: #721c24; }
+    .badge-dup { background: #fff3cd; color: #856404; }
+    .msg-err { color: red; margin-top: 10px; }
+    .sem-inc { color: #1e7e34; font-weight: bold; margin-top: 12px; }
+  </style>
+</head>
+<body>
+  <h1>SRCOff</h1>
+  <nav>
+    <a href="/operacao">Operação</a>
+    <a href="/consulta">Consulta</a>
+    <a href="/conciliacao">Conciliação</a>
+    <a href="/regras">Regras</a>
+  </nav>
+
+  <section>
+    <h2>Conciliação — Posição × Movimento Contábil</h2>
+    <form method="GET" action="/conciliacao">
+      <div class="filtros">
+        <label>
+          Data
+          <input type="date" name="data" value="{{.Data}}" required>
+        </label>
+        <button type="submit">Conciliar</button>
+      </div>
+    </form>
+
+    {{if .Erro}}
+    <p class="msg-err">{{.Erro}}</p>
+    {{end}}
+
+    {{if .Data}}
+    <div class="resumo">
+      <div>Posições carregadas: <strong>{{.TotalPosicoes}}</strong></div>
+      <div>Lançamentos (vigente): <strong>{{.TotalMovimentos}}</strong></div>
+      {{if .Inconsistencias}}
+      <div class="alerta">Inconsistências encontradas: <strong>{{len .Inconsistencias}}</strong></div>
+      {{else}}
+      <div class="ok">Nenhuma inconsistência encontrada</div>
+      {{end}}
+    </div>
+
+    {{if .Inconsistencias}}
+    <table>
+      <thead>
+        <tr>
+          <th>Tipo</th>
+          <th>Boleto</th>
+          <th>Regra</th>
+          <th>Reversão</th>
+          <th>Detalhe</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{range .Inconsistencias}}
+        <tr>
+          <td>
+            {{if eq .Tipo "POSICAO_SEM_MOVIMENTO"}}
+            <span class="badge badge-sem-mov">Sem movimento</span>
+            {{else}}
+            <span class="badge badge-dup">Duplicidade</span>
+            {{end}}
+          </td>
+          <td>{{.CodigoIdentificadorBoleto}}</td>
+          <td>{{.DescricaoRegra}}</td>
+          <td>{{if .IndicadorReversao}}Sim{{else}}—{{end}}</td>
+          <td>{{.Detalhe}}</td>
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+    {{else}}
+    <p class="sem-inc">✓ Posição e movimento contábil estão conciliados para {{.Data}}.</p>
+    {{end}}
+    {{end}}
+  </section>
+</body>
+</html>

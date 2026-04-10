@@ -185,3 +185,75 @@
   - Testar fluxo: inserir posição → gerar movimento → gerar estorno → consultar lote consolidado
   - Verificar que nova regra cadastrada é aplicada no próximo processamento sem redeploy
   - **Requisito:** 2.3, 6.1, 6.2
+
+## Fase 10: Melhorias na Consulta de Movimento Contábil
+
+- [x] 10.1 Implementar consulta por período de datas e boleto
+  - Adicionar método `ConsultarPaginadoFiltrado(ctx, dataInicio, dataFim, boleto, versao, versaoModo, pagina, tamanho)` em `movimento_contabil_repo.go`
+  - Adicionar método `ConsultarLancamentosFiltrado` em `movimento_contabil_service.go`
+  - Atualizar handler `ConsultarMovimento` para aceitar `data_inicio`, `data_fim`, `boleto`, `versao_modo`, `versao`
+  - **Requisito:** 12.1–12.4
+
+- [x] 10.2 Implementar filtro de versão na consulta
+  - Suportar modos: `vigente` (MAX por data), `todas`, `especifica` (número informado pelo usuário)
+  - Adicionar método `ObterVersaoAtual` no repositório para uso no estorno
+  - **Requisito:** 13.1–13.6
+
+- [x] 10.3 Atualizar frontend de consulta
+  - Atualizar `cmd/frontend/templates/consulta.html` com campos de período, boleto e seletor de versão
+  - Exibir coluna `codigo_versao_conteudo` no grid de resultados
+  - Campo de versão específica exibido dinamicamente via JavaScript
+  - Atualizar struct `consultaData` e handler `/consulta` em `cmd/frontend/main.go`
+  - **Requisito:** 12.1, 13.1, 13.5, 13.6
+
+## Fase 11: Configuração de Banco de Dados via Variável de Ambiente
+
+- [x] 11.1 Parametrizar servidor de banco de dados
+  - Atualizar `internal/db/db.go` para ler `DB_SERVER` via `os.Getenv`
+  - Manter `DESKTOP-B1QQIIN\SQLEXPRESS` como valor padrão
+  - **Requisito:** 14.1–14.3
+
+## Fase 12: Conciliação entre Posição e Movimento Contábil
+
+- [x] 12.1 Implementar modelo de conciliação
+  - Criar `internal/model/conciliacao.go` com structs `Inconsistencia`, `ResultadoConciliacao` e constantes `TipoInconsistencia`
+  - **Requisito:** 15.1–15.7
+
+- [x] 12.2 Implementar serviço de conciliação
+  - Criar `internal/service/conciliacao_service.go` com `ConciliacaoService`
+  - Validação 1: boleto presente na posição sem lançamento no movimento → `POSICAO_SEM_MOVIMENTO`
+  - Validação 2: mais de um lançamento para mesmo boleto + regra + indicador_reversao → `LANCAMENTO_DUPLICADO`
+  - Resultado não persistido no banco de dados
+  - **Requisito:** 15.2–15.5
+
+- [x] 12.3 Implementar handler e endpoint de conciliação
+  - Criar `internal/handler/conciliacao_handler.go`
+  - Registrar `GET /api/v1/conciliacao?data=YYYY-MM-DD` em `cmd/api/main.go`
+  - **Requisito:** 15.1, 15.5
+
+- [x] 12.4 Implementar frontend de conciliação
+  - Criar `cmd/frontend/templates/conciliacao.html` com formulário de data, resumo e grid de inconsistências
+  - Adicionar handler `/conciliacao` em `cmd/frontend/main.go`
+  - Exibir badges coloridos por tipo de inconsistência
+  - Exibir mensagem de sucesso quando não há inconsistências
+  - **Requisito:** 15.1, 15.6, 15.7
+
+## Fase 13: Backend de Persistência Configurável
+
+- [x] 13.1 Definir interfaces de repositório
+  - Criar `internal/repository/interfaces.go` com interfaces `PosicaoCarteiraRepository`, `RegraContabilRepository` e `MovimentoContabilRepository`
+  - Todas as implementações (SQL Server e arquivo) devem satisfazer essas interfaces
+  - **Requisito:** 16.6
+
+- [x] 13.2 Implementar backend de arquivo JSON
+  - Criar `internal/repository/file/store.go` com helper genérico thread-safe para leitura/escrita de arquivos JSON
+  - Criar `internal/repository/file/posicao_carteira_repo.go` — lê `posicao_carteira.json`, filtra por data e versão máxima em memória
+  - Criar `internal/repository/file/regra_contabil_repo.go` — persiste regras e condições em `regras.json` com controle de IDs sequenciais
+  - Criar `internal/repository/file/movimento_contabil_repo.go` — persiste lançamentos em `movimento_contabil.json`, implementa todos os filtros em memória
+  - **Requisito:** 16.3, 16.6, 16.7
+
+- [x] 13.3 Atualizar ponto de entrada da API para seleção de backend
+  - Atualizar `cmd/api/main.go` para ler `STORAGE_BACKEND` via `os.Getenv`
+  - WHEN `STORAGE_BACKEND=file`: instanciar repositórios do pacote `file` com diretório `FILE_STORAGE_DIR`
+  - WHEN `STORAGE_BACKEND=sqlserver` (padrão): instanciar repositórios SQL Server existentes
+  - **Requisito:** 16.1, 16.2, 16.4, 16.5

@@ -10,31 +10,57 @@ import (
 	"srcoff/internal/evaluator"
 	"srcoff/internal/handler"
 	"srcoff/internal/repository"
+	filerepo "srcoff/internal/repository/file"
 	"srcoff/internal/service"
 )
 
 func main() {
-	// 1. Inicializar banco de dados
-	sqlDB := db.Connect()
-	defer sqlDB.Close()
+	// 1. Selecionar backend de armazenamento via STORAGE_BACKEND (sqlserver | file)
+	backend := os.Getenv("STORAGE_BACKEND")
+	if backend == "" {
+		backend = "sqlserver"
+	}
 
-	// 2. Instanciar repositórios
-	posicaoRepo := repository.NewPosicaoCarteiraRepo(sqlDB)
-	regraRepo := repository.NewRegraContabilRepo(sqlDB)
-	movimentoRepo := repository.NewMovimentoContabilRepo(sqlDB)
+	var (
+		posicaoRepo   repository.PosicaoCarteiraRepository
+		regraRepo     repository.RegraContabilRepository
+		movimentoRepo repository.MovimentoContabilRepository
+	)
 
-	// 3. Instanciar avaliador de expressões
+	switch backend {
+	case "file":
+		dir := os.Getenv("FILE_STORAGE_DIR")
+		if dir == "" {
+			dir = "./data"
+		}
+		log.Printf("Backend: arquivo (dir=%s)", dir)
+		posicaoRepo = filerepo.NewPosicaoCarteiraRepo(dir)
+		regraRepo = filerepo.NewRegraContabilRepo(dir)
+		movimentoRepo = filerepo.NewMovimentoContabilRepo(dir)
+
+	default: // sqlserver
+		sqlDB := db.Connect()
+		defer sqlDB.Close()
+		log.Printf("Backend: SQL Server")
+		posicaoRepo = repository.NewPosicaoCarteiraRepo(sqlDB)
+		regraRepo = repository.NewRegraContabilRepo(sqlDB)
+		movimentoRepo = repository.NewMovimentoContabilRepo(sqlDB)
+	}
+
+	// 2. Instanciar avaliador de expressões
 	eval := evaluator.New()
 
-	// 4. Instanciar serviços
+	// 3. Instanciar serviços
 	movimentoSvc := service.NewMovimentoContabilService(posicaoRepo, regraRepo, movimentoRepo, eval)
 	regraSvc := service.NewRegraContabilService(regraRepo)
+	conciliacaoSvc := service.NewConciliacaoService(posicaoRepo, movimentoRepo)
 
-	// 5. Instanciar handlers
+	// 4. Instanciar handlers
 	movimentoHandler := handler.NewMovimentoContabilHandler(movimentoSvc)
 	regraHandler := handler.NewRegraContabilHandler(regraSvc)
+	conciliacaoHandler := handler.NewConciliacaoHandler(conciliacaoSvc)
 
-	// 6. Registrar rotas
+	// 5. Registrar rotas
 	http.HandleFunc("/api/v1/movimento-contabil", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodGet {
 			movimentoHandler.ConsultarMovimento(w, r)
@@ -67,17 +93,15 @@ func main() {
 	})
 
 	http.HandleFunc("/api/v1/condicoes/", regraHandler.EditarCondicao)
+	http.HandleFunc("/api/v1/conciliacao", conciliacaoHandler.Conciliar)
 
-	// 7. Ler porta da variável de ambiente
+	// 6. Ler porta
 	port := os.Getenv("API_PORT")
 	if port == "" {
 		port = "8080"
 	}
 
-	// 8. Log de inicialização
 	log.Printf("API SRCOff iniciada na porta %s", port)
-
-	// 9. Iniciar servidor
 	if err := http.ListenAndServe(":"+port, nil); err != nil {
 		log.Fatalf("erro ao iniciar servidor: %v", err)
 	}

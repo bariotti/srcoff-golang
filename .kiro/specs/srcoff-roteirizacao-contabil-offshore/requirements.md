@@ -182,3 +182,75 @@ O Sistema de Roteirização Contábil Offshore (SRCOff) tem como objetivo gerar 
 
 1. THE API SHALL conectar-se ao Microsoft SQL Server Express no servidor DESKTOP-BBARIOTTI utilizando Trusted Connection (autenticação integrada do Windows).
 2. IF a conexão com o Banco_de_Dados não puder ser estabelecida na inicialização da API, THEN THE API SHALL registrar o erro no log e encerrar a inicialização com código de saída diferente de zero.
+
+---
+
+### Requisito 12: Consulta de Movimento Contábil por Período e Boleto
+
+**User Story:** Como operador da Tesouraria, quero consultar o movimento contábil filtrando por período de datas e/ou número do boleto, para que eu possa localizar lançamentos específicos com mais flexibilidade.
+
+#### Critérios de Aceitação
+
+1. THE Frontend SHALL permitir ao usuário informar uma data de início, uma data de fim e/ou um número de boleto (parcial ou completo) para filtrar os lançamentos.
+2. THE API SHALL aceitar os parâmetros `data_inicio`, `data_fim` e `boleto` no endpoint de consulta de movimento contábil.
+3. WHEN apenas `boleto` é informado sem datas, THE API SHALL retornar todos os lançamentos que contenham o valor informado no campo `codigo_identificador_boleto`.
+4. THE API SHALL suportar busca parcial por boleto utilizando correspondência por substring.
+
+---
+
+### Requisito 13: Filtro de Versão na Consulta de Movimento Contábil
+
+**User Story:** Como operador da Tesouraria, quero filtrar os lançamentos por versão do lote contábil, para que eu possa auditar versões específicas ou visualizar apenas a versão vigente.
+
+#### Critérios de Aceitação
+
+1. THE Frontend SHALL exibir um seletor de versão com as opções: Vigente (maior versão por data), Todas as versões, e Versão específica.
+2. WHEN o usuário seleciona "Vigente", THE API SHALL retornar apenas os lançamentos cuja `codigo_versao_conteudo` é igual ao maior valor disponível para cada data no período consultado.
+3. WHEN o usuário seleciona "Todas", THE API SHALL retornar lançamentos de todas as versões sem filtro adicional.
+4. WHEN o usuário seleciona "Específica", THE Frontend SHALL exibir um campo numérico para o usuário informar o número da versão desejada.
+5. THE Frontend SHALL exibir a coluna `codigo_versao_conteudo` no grid de resultados.
+6. O filtro padrão SHALL ser "Vigente".
+
+---
+
+### Requisito 14: Configuração do Servidor de Banco de Dados via Variável de Ambiente
+
+**User Story:** Como administrador do sistema, quero configurar o servidor de banco de dados via variável de ambiente, para que a aplicação possa ser executada em diferentes ambientes sem recompilação.
+
+#### Critérios de Aceitação
+
+1. THE API SHALL ler o servidor de banco de dados a partir da variável de ambiente `DB_SERVER`.
+2. IF `DB_SERVER` não estiver definida, THE API SHALL utilizar o valor padrão `DESKTOP-B1QQIIN\SQLEXPRESS`.
+3. THE API SHALL ler o nome do banco de dados a partir da variável de ambiente `DB_NAME` com padrão `srcoff`.
+
+---
+
+### Requisito 15: Conciliação entre Posição de Carteira e Movimento Contábil
+
+**User Story:** Como operador da Tesouraria, quero conciliar a posição de carteira com o movimento contábil de uma data específica, para que eu possa identificar inconsistências antes do fechamento contábil.
+
+#### Critérios de Aceitação
+
+1. THE Frontend SHALL disponibilizar uma página de conciliação onde o usuário informa uma data e aciona a verificação.
+2. WHEN acionada, THE API SHALL comparar os registros da posicao_carteira (versão máxima) com os lançamentos do movimento_contabil (versão vigente) para a data informada.
+3. IF um registro de posicao_carteira não possuir nenhum lançamento correspondente no movimento_contabil para o mesmo `codigo_identificador_boleto` e data, THEN THE API SHALL reportar uma inconsistência do tipo `POSICAO_SEM_MOVIMENTO`.
+4. IF existir mais de um lançamento no movimento_contabil para o mesmo `codigo_identificador_boleto`, `descricao_regra_contabil` e `indicador_reversao` na mesma data, THEN THE API SHALL reportar uma inconsistência do tipo `LANCAMENTO_DUPLICADO`.
+5. THE API SHALL retornar o resultado da conciliação sem persistir as inconsistências no banco de dados.
+6. THE Frontend SHALL exibir as inconsistências em um grid com tipo, boleto, regra, indicador de reversão e detalhe.
+7. WHEN nenhuma inconsistência for encontrada, THE Frontend SHALL exibir uma mensagem de confirmação de conciliação bem-sucedida.
+
+---
+
+### Requisito 16: Backend de Persistência Configurável
+
+**User Story:** Como administrador do sistema, quero poder escolher entre persistência em banco de dados SQL Server ou em arquivos JSON, para que o sistema possa ser executado em ambientes sem SQL Server disponível.
+
+#### Critérios de Aceitação
+
+1. THE API SHALL suportar dois backends de persistência: `sqlserver` e `file`.
+2. THE API SHALL ler o backend ativo a partir da variável de ambiente `STORAGE_BACKEND`. Se não definida, o padrão SHALL ser `sqlserver`.
+3. WHEN `STORAGE_BACKEND=file`, THE API SHALL persistir todos os dados em arquivos JSON no diretório configurado pela variável de ambiente `FILE_STORAGE_DIR` (padrão: `./data`).
+4. WHEN `STORAGE_BACKEND=sqlserver`, THE API SHALL utilizar o Microsoft SQL Server conforme configuração existente.
+5. A troca de backend SHALL ser feita exclusivamente via variável de ambiente, sem necessidade de recompilação.
+6. Ambos os backends SHALL implementar as mesmas interfaces de repositório, garantindo comportamento equivalente para todas as operações.
+7. WHEN `STORAGE_BACKEND=file`, os dados SHALL ser armazenados em três arquivos: `posicao_carteira.json`, `regras.json` e `movimento_contabil.json`.

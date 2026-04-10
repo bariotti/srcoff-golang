@@ -4,35 +4,73 @@
   <meta charset="UTF-8">
   <title>SRCOff — Consulta de Movimento</title>
   <style>
-    body { font-family: sans-serif; max-width: 1000px; margin: 40px auto; padding: 0 16px; }
+    body { font-family: sans-serif; max-width: 1200px; margin: 40px auto; padding: 0 16px; }
     h1 { font-size: 1.4rem; margin-bottom: 32px; }
+    nav { margin-bottom: 24px; }
+    nav a { margin-right: 16px; color: #0066cc; text-decoration: none; font-size: 0.95rem; }
     section { margin-bottom: 40px; padding: 20px; border: 1px solid #ddd; border-radius: 6px; }
     h2 { font-size: 1.1rem; margin-top: 0; }
-    label { display: block; margin-bottom: 6px; font-size: 0.9rem; }
-    input[type="date"], select { padding: 6px 10px; font-size: 1rem; margin-right: 8px; }
+    .filtros { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; }
+    .filtros label { display: flex; flex-direction: column; font-size: 0.85rem; gap: 4px; }
+    input[type="date"], input[type="text"], input[type="number"], select { padding: 6px 10px; font-size: 0.95rem; }
+    input[type="number"] { width: 80px; }
     button { padding: 7px 18px; font-size: 1rem; cursor: pointer; }
     table { border-collapse: collapse; width: 100%; margin-top: 16px; }
-    th, td { border: 1px solid #ddd; padding: 8px 10px; text-align: left; font-size: 0.85rem; }
+    th, td { border: 1px solid #ddd; padding: 8px 10px; text-align: left; font-size: 0.82rem; }
     th { background: #f5f5f5; }
     .paginacao { margin-top: 12px; }
     .paginacao a { margin-right: 12px; color: #0066cc; }
     .msg-err { color: red; margin-top: 10px; }
+    #versao-especifica { display: none; }
   </style>
 </head>
 <body>
-  <h1>SRCOff — Consulta de Movimento</h1>
+  <h1>SRCOff</h1>
+  <nav>
+    <a href="/operacao">Operação</a>
+    <a href="/consulta">Consulta</a>
+    <a href="/conciliacao">Conciliação</a>
+    <a href="/regras">Regras</a>
+  </nav>
 
   <section>
+    <h2>Consulta de Movimento Contábil</h2>
     <form method="GET" action="/consulta">
-      <label for="data">Data</label>
-      <input type="date" id="data" name="data" value="{{.Data}}" required>
-      <label for="tamanho" style="display:inline;margin-left:12px;">Registros por página</label>
-      <select id="tamanho" name="tamanho">
-        <option value="10" {{if eq .Tamanho 10}}selected{{end}}>10</option>
-        <option value="50" {{if eq .Tamanho 50}}selected{{end}}>50</option>
-        <option value="100" {{if eq .Tamanho 100}}selected{{end}}>100</option>
-      </select>
-      <button type="submit">Consultar</button>
+      <div class="filtros">
+        <label>
+          Data início
+          <input type="date" name="data_inicio" value="{{.DataInicio}}">
+        </label>
+        <label>
+          Data fim
+          <input type="date" name="data_fim" value="{{.DataFim}}">
+        </label>
+        <label>
+          Nº Boleto
+          <input type="text" name="boleto" value="{{.Boleto}}" placeholder="parcial ou completo">
+        </label>
+        <label>
+          Versão
+          <select name="versao_modo" id="versao_modo" onchange="toggleVersao(this.value)">
+            <option value="vigente"   {{if eq .VersaoModo "vigente"}}selected{{end}}>Vigente (maior)</option>
+            <option value="todas"     {{if eq .VersaoModo "todas"}}selected{{end}}>Todas</option>
+            <option value="especifica"{{if eq .VersaoModo "especifica"}}selected{{end}}>Específica</option>
+          </select>
+        </label>
+        <label id="versao-especifica">
+          Nº Versão
+          <input type="number" name="versao" value="{{.Versao}}" min="1">
+        </label>
+        <label>
+          Registros por página
+          <select name="tamanho">
+            <option value="10"  {{if eq .Tamanho 10}}selected{{end}}>10</option>
+            <option value="50"  {{if eq .Tamanho 50}}selected{{end}}>50</option>
+            <option value="100" {{if eq .Tamanho 100}}selected{{end}}>100</option>
+          </select>
+        </label>
+        <button type="submit">Consultar</button>
+      </div>
     </form>
 
     {{if .Erro}}
@@ -45,6 +83,7 @@
       <thead>
         <tr>
           <th>Data</th>
+          <th>Versão</th>
           <th>Boleto</th>
           <th>Conta Débito</th>
           <th>Conta Crédito</th>
@@ -58,6 +97,7 @@
         {{range .Resultado.Lancamentos}}
         <tr>
           <td>{{.DataLoteContabil.Format "2006-01-02"}}</td>
+          <td>{{.CodigoVersaoConteudo}}</td>
           <td>{{.CodigoIdentificadorBoleto}}</td>
           <td>{{.ContaDebito}}</td>
           <td>{{.ContaCredito}}</td>
@@ -70,10 +110,21 @@
       </tbody>
     </table>
     <div class="paginacao">
-      {{if .TemAnterior}}<a href="/consulta?data={{.Data}}&pagina={{.PaginaAnterior}}&tamanho={{.Tamanho}}">← Anterior</a>{{end}}
-      {{if .TemProxima}}<a href="/consulta?data={{.Data}}&pagina={{.ProximaPagina}}&tamanho={{.Tamanho}}">Próxima →</a>{{end}}
+      {{if .TemAnterior}}
+      <a href="/consulta?data_inicio={{.DataInicio}}&data_fim={{.DataFim}}&boleto={{.Boleto}}&versao_modo={{.VersaoModo}}&versao={{.Versao}}&pagina={{.PaginaAnterior}}&tamanho={{.Tamanho}}">← Anterior</a>
+      {{end}}
+      {{if .TemProxima}}
+      <a href="/consulta?data_inicio={{.DataInicio}}&data_fim={{.DataFim}}&boleto={{.Boleto}}&versao_modo={{.VersaoModo}}&versao={{.Versao}}&pagina={{.ProximaPagina}}&tamanho={{.Tamanho}}">Próxima →</a>
+      {{end}}
     </div>
     {{end}}
   </section>
+
+  <script>
+    function toggleVersao(val) {
+      document.getElementById('versao-especifica').style.display = val === 'especifica' ? 'flex' : 'none';
+    }
+    toggleVersao(document.getElementById('versao_modo').value);
+  </script>
 </body>
 </html>

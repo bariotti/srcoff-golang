@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"time"
 
 	"srcoff/internal/model"
@@ -17,27 +18,19 @@ func NewPosicaoCarteiraRepo(db *sql.DB) *PosicaoCarteiraRepo {
 }
 
 func (r *PosicaoCarteiraRepo) BuscarPorDataEVersaoMaxima(ctx context.Context, data time.Time) ([]model.PosicaoCarteira, error) {
-	query := `
-		SELECT
-			id,
-			data_posicao_carteira,
-			codigo_versao_conteudo,
-			codigo_identificador_boleto,
-			descricao_veiculo,
-			indicador_contraparte_afiliada,
-			valor_mtm,
-			principal_remanescente,
-			moeda_principal_remanescente
-		FROM posicao_carteira
-		WHERE data_posicao_carteira = @data
-		  AND codigo_versao_conteudo = (
-		      SELECT MAX(codigo_versao_conteudo)
-		      FROM posicao_carteira
-		      WHERE data_posicao_carteira = @data
-		  )
-	`
+	dataStr := data.Format("2006-01-02")
 
-	rows, err := r.db.QueryContext(ctx, query, sql.Named("data", data))
+	var maxVersao int
+	err := r.db.QueryRowContext(ctx,
+		"SELECT ISNULL(MAX(codigo_versao_conteudo), 0) FROM posicao_carteira WHERE data_posicao_carteira = '"+dataStr+"'",
+	).Scan(&maxVersao)
+	if err != nil {
+		return nil, err
+	}
+
+	rows, err := r.db.QueryContext(ctx,
+		"SELECT id, data_posicao_carteira, codigo_versao_conteudo, codigo_identificador_boleto, descricao_veiculo, indicador_contraparte_afiliada, valor_mtm, principal_remanescente, moeda_principal_remanescente FROM posicao_carteira WHERE data_posicao_carteira = '"+dataStr+"' AND codigo_versao_conteudo = "+fmt.Sprintf("%d", maxVersao),
+	)
 	if err != nil {
 		return nil, err
 	}
