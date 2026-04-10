@@ -107,7 +107,7 @@
     - Gerar lotes sequenciais para a mesma data; verificar incremento estrito
   - **Requisito:** 1.2, 3.1–3.11
 
-- [~] 5.5 Escrever testes de propriedade para estorno (P6, P7)
+- [x] 5.5 Escrever testes de propriedade para estorno (P6, P7)
   - P6: Tag `// Feature: srcoff-roteirizacao-contabil-offshore, Property 6: Invariantes do estorno — inversão de contas e indicador de reversão`
     - Gerar lançamentos de D-1 com divergência; verificar inversão de contas e indicador_reversao=true
   - P7: Tag `// Feature: srcoff-roteirizacao-contabil-offshore, Property 7: Estorno é gerado se e somente se há divergência ou ausência de correspondente`
