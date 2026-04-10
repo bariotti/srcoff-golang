@@ -181,7 +181,7 @@
   - Expressão de valor inválida → log de erro, demais registros processados
   - **Requisito:** 1.3, 2.4, 2.5, 5.8
 
-- [~] 9.3 Escrever testes de integração para o fluxo completo
+- [x] 9.3 Escrever testes de integração para o fluxo completo
   - Testar fluxo: inserir posição → gerar movimento → gerar estorno → consultar lote consolidado
   - Verificar que nova regra cadastrada é aplicada no próximo processamento sem redeploy
   - **Requisito:** 2.3, 6.1, 6.2
