@@ -174,7 +174,7 @@
   - Verificar contas, valores e moedas esperados para cada caso
   - **Requisito:** 4.1–4.4
 
-- [~] 9.2 Escrever testes unitários para casos de borda
+- [x] 9.2 Escrever testes unitários para casos de borda
   - Posição vazia para a data informada → sem lançamentos, resposta de ausência
   - Lote D-1 inexistente → sem estornos, resposta de ausência
   - Expressão booleana inválida → log de erro, demais registros processados
