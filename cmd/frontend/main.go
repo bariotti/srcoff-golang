@@ -1,0 +1,443 @@
+package main
+
+import (
+	"bytes"
+	"encoding/json"
+	"fmt"
+	"html/template"
+	"io"
+	"log"
+	"net/http"
+	"os"
+	"strconv"
+	"strings"
+	"time"
+)
+
+// ---------------------------------------------------------------------------
+// Template data structs
+// ---------------------------------------------------------------------------
+
+type operacaoData struct {
+	MensagemMovimento string
+	ErroMovimento     string
+	MensagemEstorno   string
+	ErroEstorno       string
+}
+
+type consultaData struct {
+	Data           string
+	Pagina         int
+	Tamanho        int
+	Resultado      *paginaLancamentosView
+	Erro           string
+	TemAnterior    bool
+	PaginaAnterior int
+	TemProxima     bool
+	ProximaPagina  int
+}
+
+type paginaLancamentosView struct {
+	Total       int
+	Pagina      int
+	Tamanho     int
+	Lancamentos []lancamentoView
+}
+
+type lancamentoView struct {
+	DataLoteContabil          time.Time
+	CodigoIdentificadorBoleto string
+	ContaDebito               string
+	ContaCredito              string
+	ValorLancamentoContabil   float64
+	MoedaLancamentoContabil   string
+	IndicadorReversao         bool
+	DescricaoRegraContabil    string
+}
+
+type regrasData struct {
+	Regras           []regraView
+	RegraSelecionada *regraView
+	Mensagem         string
+	Erro             string
+}
+
+type regraView struct {
+	ID                       int64
+	Descricao                string
+	CodigoProdutoCorporativo string
+	Condicoes                []condicaoView
+}
+
+type condicaoView struct {
+	ID           int64
+	IDRegra      int64
+	Condicao     string
+	ContaDebito  string
+	ContaCredito string
+	CampoValor   string
+	CampoMoeda   string
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+func proxyPost(client *http.Client, url string, body interface{}) (map[string]interface{}, error) {
+	data, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := client.Post(url, "application/json", bytes.NewReader(data))
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	raw, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+	var result map[string]interface{}
+	if err := json.Unmarshal(raw, &result); err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
+func proxyPut(client *http.Client, url string, body interface{}) error {
+	data, err := json.Marshal(body)
+	if err != nil {
+		return err
+	}
+	req, err := http.NewRequest(http.MethodPut, url, bytes.NewReader(data))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	return nil
+}
+
+func renderTemplate(tmpl *template.Template, w http.ResponseWriter, name string, data interface{}) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	if err := tmpl.ExecuteTemplate(w, name, data); err != nil {
+		log.Printf("erro ao renderizar template %s: %v", name, err)
+		http.Error(w, "Erro interno ao renderizar página", http.StatusInternalServerError)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// main
+// ---------------------------------------------------------------------------
+
+func main() {
+	tmpl := template.Must(template.ParseGlob("cmd/frontend/templates/*.html"))
+
+	apiURL := os.Getenv("API_URL")
+	if apiURL == "" {
+		apiURL = "http://localhost:8080"
+	}
+	frontendPort := os.Getenv("FRONTEND_PORT")
+	if frontendPort == "" {
+		frontendPort = "9090"
+	}
+
+	client := &http.Client{Timeout: 30 * time.Second}
+
+	// GET /operacao
+	http.HandleFunc("/operacao", func(w http.ResponseWriter, r *http.Request) {
+		renderTemplate(tmpl, w, "operacao.html", operacaoData{})
+	})
+
+	// POST /operacao/movimento
+	http.HandleFunc("/operacao/movimento", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Redirect(w, r, "/operacao", http.StatusSeeOther)
+			return
+		}
+		data := r.FormValue("data")
+		result, err := proxyPost(client, apiURL+"/api/v1/movimento-contabil", map[string]string{"data": data})
+		d := operacaoData{}
+		if err != nil {
+			d.ErroMovimento = fmt.Sprintf("Erro ao comunicar com a API: %v", err)
+		} else if errMsg, ok := result["erro"].(string); ok && errMsg != "" {
+			d.ErroMovimento = errMsg
+		} else if msg, ok := result["mensagem"].(string); ok {
+			d.MensagemMovimento = msg
+		} else {
+			d.MensagemMovimento = "Movimento gerado com sucesso."
+		}
+		renderTemplate(tmpl, w, "operacao.html", d)
+	})
+
+	// POST /operacao/estorno
+	http.HandleFunc("/operacao/estorno", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Redirect(w, r, "/operacao", http.StatusSeeOther)
+			return
+		}
+		data := r.FormValue("data")
+		result, err := proxyPost(client, apiURL+"/api/v1/estorno", map[string]string{"data": data})
+		d := operacaoData{}
+		if err != nil {
+			d.ErroEstorno = fmt.Sprintf("Erro ao comunicar com a API: %v", err)
+		} else if errMsg, ok := result["erro"].(string); ok && errMsg != "" {
+			d.ErroEstorno = errMsg
+		} else if msg, ok := result["mensagem"].(string); ok {
+			d.MensagemEstorno = msg
+		} else {
+			d.MensagemEstorno = "Estorno gerado com sucesso."
+		}
+		renderTemplate(tmpl, w, "operacao.html", d)
+	})
+
+	// GET /consulta
+	http.HandleFunc("/consulta", func(w http.ResponseWriter, r *http.Request) {
+		dataParam := r.URL.Query().Get("data")
+		paginaParam := r.URL.Query().Get("pagina")
+		tamanhoParam := r.URL.Query().Get("tamanho")
+
+		pagina := 1
+		if p, err := strconv.Atoi(paginaParam); err == nil && p > 0 {
+			pagina = p
+		}
+		tamanho := 100
+		if t, err := strconv.Atoi(tamanhoParam); err == nil && t > 0 {
+			tamanho = t
+		}
+
+		if dataParam == "" {
+			renderTemplate(tmpl, w, "consulta.html", consultaData{Tamanho: tamanho})
+			return
+		}
+
+		url := fmt.Sprintf("%s/api/v1/movimento-contabil?data=%s&pagina=%d&tamanho=%d", apiURL, dataParam, pagina, tamanho)
+		resp, err := client.Get(url)
+		d := consultaData{Data: dataParam, Pagina: pagina, Tamanho: tamanho}
+		if err != nil {
+			d.Erro = fmt.Sprintf("Erro ao comunicar com a API: %v", err)
+			renderTemplate(tmpl, w, "consulta.html", d)
+			return
+		}
+		defer resp.Body.Close()
+
+		var raw map[string]interface{}
+		if err := json.NewDecoder(resp.Body).Decode(&raw); err != nil {
+			d.Erro = fmt.Sprintf("Erro ao decodificar resposta: %v", err)
+			renderTemplate(tmpl, w, "consulta.html", d)
+			return
+		}
+
+		if errMsg, ok := raw["erro"].(string); ok && errMsg != "" {
+			d.Erro = errMsg
+			renderTemplate(tmpl, w, "consulta.html", d)
+			return
+		}
+
+		// Parse paginaLancamentosView from raw JSON
+		rawBytes, _ := json.Marshal(raw)
+		var view paginaLancamentosView
+		if err := json.Unmarshal(rawBytes, &view); err != nil {
+			d.Erro = fmt.Sprintf("Erro ao processar dados: %v", err)
+			renderTemplate(tmpl, w, "consulta.html", d)
+			return
+		}
+		d.Resultado = &view
+		if pagina > 1 {
+			d.TemAnterior = true
+			d.PaginaAnterior = pagina - 1
+		}
+		totalPages := (view.Total + tamanho - 1) / tamanho
+		if pagina < totalPages {
+			d.TemProxima = true
+			d.ProximaPagina = pagina + 1
+		}
+		renderTemplate(tmpl, w, "consulta.html", d)
+	})
+
+	// GET /regras/condicao/editar — must be before /regras/
+	http.HandleFunc("/regras/condicao/editar", func(w http.ResponseWriter, r *http.Request) {
+		idRegra := r.URL.Query().Get("idRegra")
+		http.Redirect(w, r, "/regras?id="+idRegra, http.StatusSeeOther)
+	})
+
+	// POST /regras/condicao/salvar
+	http.HandleFunc("/regras/condicao/salvar", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Redirect(w, r, "/regras", http.StatusSeeOther)
+			return
+		}
+		id := r.FormValue("id")
+		idRegra := r.FormValue("idRegra")
+		payload := map[string]string{
+			"condicao":     r.FormValue("condicao"),
+			"conta_debito": r.FormValue("conta_debito"),
+			"conta_credito": r.FormValue("conta_credito"),
+			"campo_valor":  r.FormValue("campo_valor"),
+			"campo_moeda":  r.FormValue("campo_moeda"),
+		}
+		if err := proxyPut(client, fmt.Sprintf("%s/api/v1/condicoes/%s", apiURL, id), payload); err != nil {
+			log.Printf("erro ao salvar condição: %v", err)
+		}
+		http.Redirect(w, r, "/regras?id="+idRegra, http.StatusSeeOther)
+	})
+
+	// POST /regras/nova — must be before /regras/
+	http.HandleFunc("/regras/nova", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Redirect(w, r, "/regras", http.StatusSeeOther)
+			return
+		}
+		payload := map[string]string{
+			"descricao":                 r.FormValue("descricao"),
+			"codigo_produto_corporativo": r.FormValue("codigo_produto_corporativo"),
+		}
+		result, err := proxyPost(client, apiURL+"/api/v1/regras", payload)
+		if err != nil {
+			renderTemplate(tmpl, w, "regras.html", regrasData{Erro: fmt.Sprintf("Erro ao comunicar com a API: %v", err)})
+			return
+		}
+		if errMsg, ok := result["erro"].(string); ok && errMsg != "" {
+			renderTemplate(tmpl, w, "regras.html", regrasData{Erro: errMsg})
+			return
+		}
+		http.Redirect(w, r, "/regras", http.StatusSeeOther)
+	})
+
+	// /regras/ — handles /regras/{id}/editar and /regras/{id}/condicao/nova
+	http.HandleFunc("/regras/", func(w http.ResponseWriter, r *http.Request) {
+		path := strings.TrimPrefix(r.URL.Path, "/regras/")
+		// /regras/{id}/editar
+		if strings.HasSuffix(path, "/editar") {
+			idStr := strings.TrimSuffix(path, "/editar")
+			payload := map[string]string{
+				"descricao":                 r.FormValue("descricao"),
+				"codigo_produto_corporativo": r.FormValue("codigo_produto_corporativo"),
+			}
+			if err := proxyPut(client, fmt.Sprintf("%s/api/v1/regras/%s", apiURL, idStr), payload); err != nil {
+				log.Printf("erro ao editar regra: %v", err)
+			}
+			http.Redirect(w, r, "/regras?id="+idStr, http.StatusSeeOther)
+			return
+		}
+		// /regras/{id}/condicao/nova
+		if strings.HasSuffix(path, "/condicao/nova") {
+			idStr := strings.TrimSuffix(path, "/condicao/nova")
+			payload := map[string]string{
+				"condicao":     r.FormValue("condicao"),
+				"conta_debito": r.FormValue("conta_debito"),
+				"conta_credito": r.FormValue("conta_credito"),
+				"campo_valor":  r.FormValue("campo_valor"),
+				"campo_moeda":  r.FormValue("campo_moeda"),
+			}
+			if _, err := proxyPost(client, fmt.Sprintf("%s/api/v1/regras/%s/condicoes", apiURL, idStr), payload); err != nil {
+				log.Printf("erro ao criar condição: %v", err)
+			}
+			http.Redirect(w, r, "/regras?id="+idStr, http.StatusSeeOther)
+			return
+		}
+		http.Redirect(w, r, "/regras", http.StatusSeeOther)
+	})
+
+	// GET /regras
+	http.HandleFunc("/regras", func(w http.ResponseWriter, r *http.Request) {
+		d := regrasData{}
+
+		// Fetch all rules
+		resp, err := client.Get(apiURL + "/api/v1/regras")
+		if err != nil {
+			d.Erro = fmt.Sprintf("Erro ao buscar regras: %v", err)
+			renderTemplate(tmpl, w, "regras.html", d)
+			return
+		}
+		defer resp.Body.Close()
+		var regrasRaw []map[string]interface{}
+		if err := json.NewDecoder(resp.Body).Decode(&regrasRaw); err != nil {
+			d.Erro = fmt.Sprintf("Erro ao decodificar regras: %v", err)
+			renderTemplate(tmpl, w, "regras.html", d)
+			return
+		}
+		for _, rr := range regrasRaw {
+			rv := regraView{
+				ID:                       int64(toFloat(rr["id"])),
+				Descricao:                toString(rr["descricao"]),
+				CodigoProdutoCorporativo: toString(rr["codigo_produto_corporativo"]),
+			}
+			d.Regras = append(d.Regras, rv)
+		}
+
+		// If id param is set, fetch conditions
+		idParam := r.URL.Query().Get("id")
+		if idParam != "" {
+			condResp, err := client.Get(fmt.Sprintf("%s/api/v1/regras/%s/condicoes", apiURL, idParam))
+		
+			if err != nil {
+				d.Erro = fmt.Sprintf("Erro ao buscar condições: %v", err)
+				renderTemplate(tmpl, w, "regras.html", d)
+				return
+			}
+			defer condResp.Body.Close()
+			var condsRaw []map[string]interface{}
+			if err := json.NewDecoder(condResp.Body).Decode(&condsRaw); err != nil {
+				d.Erro = fmt.Sprintf("Erro ao decodificar condições: %v", err)
+				renderTemplate(tmpl, w, "regras.html", d)
+				return
+			}
+			var condicoes []condicaoView
+			for _, cr := range condsRaw {
+				condicoes = append(condicoes, condicaoView{
+					ID:           int64(toFloat(cr["id"])),
+					IDRegra:      int64(toFloat(cr["id_regra"])),
+					Condicao:     toString(cr["condicao"]),
+					ContaDebito:  toString(cr["conta_debito"]),
+					ContaCredito: toString(cr["conta_credito"]),
+					CampoValor:   toString(cr["campo_valor"]),
+					CampoMoeda:   toString(cr["campo_moeda"]),
+				})
+			}
+			// Find the selected rule
+			idInt, _ := strconv.ParseInt(idParam, 10, 64)
+			for i, rv := range d.Regras {
+				if rv.ID == idInt {
+					d.Regras[i].Condicoes = condicoes
+					d.RegraSelecionada = &d.Regras[i]
+					break
+				}
+			}
+		}
+
+		renderTemplate(tmpl, w, "regras.html", d)
+	})
+
+	// Root redirect
+	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "/operacao", http.StatusFound)
+	})
+
+	log.Printf("Frontend SRCOff iniciado na porta %s", frontendPort)
+	if err := http.ListenAndServe(":"+frontendPort, nil); err != nil {
+		log.Fatalf("erro ao iniciar servidor frontend: %v", err)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Utility helpers for JSON map access
+// ---------------------------------------------------------------------------
+
+func toFloat(v interface{}) float64 {
+	if f, ok := v.(float64); ok {
+		return f
+	}
+	return 0
+}
+
+func toString(v interface{}) string {
+	if s, ok := v.(string); ok {
+		return s
+	}
+	return ""
+}

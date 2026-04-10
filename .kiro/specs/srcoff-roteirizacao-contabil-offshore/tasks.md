@@ -163,7 +163,7 @@
   - Implementar validação de campos obrigatórios no frontend (HTML5 `required` + mensagem de erro)
   - **Requisito:** 7.1–7.8
 
-- [~] 8.4 Implementar handlers e ponto de entrada do frontend
+- [x] 8.4 Implementar handlers e ponto de entrada do frontend
   - Criar `cmd/frontend/main.go` com servidor HTTP que serve os templates e faz proxy das chamadas à API
   - **Requisito:** 8.1–8.6
 
