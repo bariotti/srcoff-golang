@@ -169,7 +169,7 @@
 
 ## Fase 9: Testes Unitários e de Integração
 
-- [~] 9.1 Escrever testes unitários para as regras NDF (Requisito 4)
+- [x] 9.1 Escrever testes unitários para as regras NDF (Requisito 4)
   - Testar cada uma das 4 combinações (Nassau + afiliada/não-afiliada + MTM positivo/negativo) com valores concretos
   - Verificar contas, valores e moedas esperados para cada caso
   - **Requisito:** 4.1–4.4

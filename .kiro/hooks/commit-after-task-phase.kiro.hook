@@ -1,13 +1,15 @@
 {
   "enabled": true,
   "name": "Commit After Task Phase",
-  "description": "Após completar cada Fase da lista de tasks, comita automaticamente o código no repositório com uma mensagem descritiva",
+  "description": "Após completar cada Fase da lista de tasks, comita automaticamente o código no repositório com uma mensagem descritiva e publica no repositorio remoto",
   "version": "1",
   "when": {
     "type": "postTaskExecution"
   },
   "then": {
     "type": "runCommand",
-    "command": "git add . && git commit -m \"chore: fase concluída - task completada\""
-  }
+    "command": "git add . && git commit -m \"chore: fase concluída - task completada\" && git push origin main"
+  },
+  "workspaceFolderName": "srcoff-golang",
+  "shortName": "commit-after-task-phase"
 }
