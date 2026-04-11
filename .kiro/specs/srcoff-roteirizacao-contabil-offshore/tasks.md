@@ -257,3 +257,39 @@
   - WHEN `STORAGE_BACKEND=file`: instanciar repositórios do pacote `file` com diretório `FILE_STORAGE_DIR`
   - WHEN `STORAGE_BACKEND=sqlserver` (padrão): instanciar repositórios SQL Server existentes
   - **Requisito:** 16.1, 16.2, 16.4, 16.5
+
+## Fase 14: Carregamento Dinâmico de Campos da Posição
+
+- [x] 14.1 Implementar SELECT * com scan dinâmico via ColumnTypes
+  - Substituir SELECT com colunas explícitas por `SELECT *` em `posicao_carteira_repo.go`
+  - Usar `rows.ColumnTypes()` para alocar o tipo Go correto para cada coluna antes do scan
+  - Implementar `allocForType(dbType, nullable)` mapeando tipos SQL Server para tipos Go
+  - Implementar `deref(ptr)` para extrair valores dos ponteiros tipados
+  - Construir `PosicaoCarteira.Campos` com todas as colunas em snake_case
+  - **Requisito:** 17.1, 17.2
+
+- [x] 14.2 Atualizar avaliador para suporte a campos dinâmicos
+  - Remover `expr.Env(env)` da compilação de expressões para eliminar type-checking estático
+  - Implementar `sanitizeEnv` para substituir valores `nil` por `float64(0)` antes da avaliação
+  - Atualizar `PosicaoToEnv` para retornar `p.Campos` diretamente
+  - **Requisito:** 17.3, 17.4, 17.5
+
+## Fase 15: Manutenção da Posição de Carteira
+
+- [x] 15.1 Implementar operações de insert e delete no repositório de posição
+  - Adicionar `ListarPorData(ctx, data)`, `Inserir(ctx, p)` e `Deletar(ctx, id)` em `posicao_carteira_repo.go`
+  - Atualizar interface `PosicaoCarteiraRepository` em `interfaces.go`
+  - Implementar os mesmos métodos no backend de arquivo `internal/repository/file/posicao_carteira_repo.go`
+  - **Requisito:** 18.4
+
+- [x] 15.2 Implementar serviço e handler de posição
+  - Criar `internal/service/posicao_carteira_service.go` com validações de campos obrigatórios
+  - Criar `internal/handler/posicao_carteira_handler.go` com métodos `Listar`, `Inserir` e `Deletar`
+  - Registrar `GET/POST/DELETE /api/v1/posicao` em `cmd/api/main.go`
+  - **Requisito:** 18.4, 18.5, 18.6
+
+- [ ] 15.3 Implementar frontend de manutenção de posição
+  - Criar `cmd/frontend/templates/posicao.html` com formulário de inserção e grid com botão de exclusão
+  - Adicionar handler `/posicao` em `cmd/frontend/main.go`
+  - Adicionar link `/posicao` na nav de todas as páginas existentes
+  - **Requisito:** 18.1, 18.2, 18.3

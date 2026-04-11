@@ -1,8 +1,8 @@
 package model
 
 type PaginaLancamentos struct {
-	Total       int
-	Pagina      int
-	Tamanho     int
-	Lancamentos []LancamentoContabil
+	Total       int                  `json:"total"`
+	Pagina      int                  `json:"pagina"`
+	Tamanho     int                  `json:"tamanho"`
+	Lancamentos []LancamentoContabil `json:"lancamentos"`
 }

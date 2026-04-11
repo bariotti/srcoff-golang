@@ -1,0 +1,22 @@
+{
+  "version": "1.0.0",
+  "enabled": true,
+  "name": "Commit after changes",
+  "description": "Fazer commit e push para main do repositorio do GitHub após qualquer mudanças, seja no código fonte ou na documentação",
+  "when": {
+    "type": "fileEdited",
+    "patterns": [
+      "**/*.go",
+      "**/*.md",
+      "**/*.html",
+      "**/*.sql",
+      "**/*.json",
+      "go.mod",
+      "go.sum"
+    ]
+  },
+  "then": {
+    "type": "askAgent",
+    "prompt": "Fazer commit e push para main do repositorio do GitHub após qualquer mudanças, seja no código fonte ou na documentação"
+  }
+}

@@ -25,12 +25,15 @@ func New() *ExprEvaluator {
 
 // EvaluateCondition compila e executa uma expressão booleana sobre o env fornecido.
 func (e *ExprEvaluator) EvaluateCondition(expression string, env map[string]interface{}) (bool, error) {
-	program, err := expr.Compile(expression, expr.Env(env), expr.AsBool())
+	safeEnv := sanitizeEnv(env)
+	// Compila sem expr.Env para não fazer type-checking estático,
+	// permitindo que colunas dinâmicas da posição sejam usadas sem recompilação.
+	program, err := expr.Compile(expression, expr.AsBool())
 	if err != nil {
 		return false, fmt.Errorf("erro ao compilar expressão de condição %q: %w", expression, err)
 	}
 
-	result, err := expr.Run(program, env)
+	result, err := expr.Run(program, safeEnv)
 	if err != nil {
 		return false, fmt.Errorf("erro ao avaliar expressão de condição %q: %w", expression, err)
 	}
@@ -46,12 +49,13 @@ func (e *ExprEvaluator) EvaluateCondition(expression string, env map[string]inte
 // EvaluateValue compila e executa uma expressão aritmética sobre o env fornecido,
 // retornando o resultado como float64. Suporta resultados int e float64.
 func (e *ExprEvaluator) EvaluateValue(expression string, env map[string]interface{}) (float64, error) {
-	program, err := expr.Compile(expression, expr.Env(env))
+	safeEnv := sanitizeEnv(env)
+	program, err := expr.Compile(expression)
 	if err != nil {
 		return 0, fmt.Errorf("erro ao compilar expressão de valor %q: %w", expression, err)
 	}
 
-	result, err := expr.Run(program, env)
+	result, err := expr.Run(program, safeEnv)
 	if err != nil {
 		return 0, fmt.Errorf("erro ao avaliar expressão de valor %q: %w", expression, err)
 	}
@@ -72,6 +76,20 @@ func (e *ExprEvaluator) EvaluateValue(expression string, env map[string]interfac
 	}
 }
 
+// sanitizeEnv substitui valores nil por zero-values tipados (float64=0, string="", bool=false)
+// para evitar erros de tipo no avaliador de expressões quando colunas têm valor NULL no banco.
+func sanitizeEnv(env map[string]interface{}) map[string]interface{} {
+	safe := make(map[string]interface{}, len(env))
+	for k, v := range env {
+		if v == nil {
+			safe[k] = float64(0) // default numérico para colunas NULL
+		} else {
+			safe[k] = v
+		}
+	}
+	return safe
+}
+
 // LogEvalError registra um erro de avaliação de expressão com contexto completo:
 // data do lote, código identificador do boleto, expressão que falhou e mensagem de erro.
 // Deve ser chamado pela camada de serviço para que o processamento do lote não seja interrompido.
@@ -80,17 +98,10 @@ func LogEvalError(data time.Time, boleto string, expression string, err error) {
 		data.Format("2006-01-02"), boleto, expression, err)
 }
 
-// PosicaoToEnv converte um PosicaoCarteira para map[string]interface{} com chaves snake_case.
+// PosicaoToEnv retorna o mapa de campos da posição diretamente para o avaliador.
+// O mapa é construído dinamicamente pelo repositório a partir de SELECT *,
+// portanto qualquer coluna presente na tabela posicao_carteira fica disponível
+// nas expressões das regras sem necessidade de alteração de código.
 func PosicaoToEnv(p model.PosicaoCarteira) map[string]interface{} {
-	return map[string]interface{}{
-		"id":                              p.ID,
-		"data_posicao_carteira":           p.DataPosicaoCarteira,
-		"codigo_versao_conteudo":          p.CodigoVersaoConteudo,
-		"codigo_identificador_boleto":     p.CodigoIdentificadorBoleto,
-		"descricao_veiculo":               p.DescricaoVeiculo,
-		"indicador_contraparte_afiliada":  p.IndicadorContraparteAfiliada,
-		"valor_mtm":                       p.ValorMTM,
-		"principal_remanescente":          p.PrincipalRemanescente,
-		"moeda_principal_remanescente":    p.MoedaPrincipalRemanescente,
-	}
+	return p.Campos
 }

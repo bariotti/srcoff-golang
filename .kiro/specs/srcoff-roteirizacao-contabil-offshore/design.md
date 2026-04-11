@@ -157,6 +157,9 @@ Todas as operações de leitura/escrita são protegidas por `sync.Mutex` para se
 | POST | `/api/v1/estorno` | Gera o estorno do lote de D-1 para uma data |
 | GET | `/api/v1/movimento-contabil` | Consulta lançamentos paginados com filtros |
 | GET | `/api/v1/conciliacao` | Concilia posição de carteira com movimento contábil |
+| GET | `/api/v1/posicao` | Lista registros de posição por data |
+| POST | `/api/v1/posicao` | Insere novo registro de posição |
+| DELETE | `/api/v1/posicao?id={id}` | Exclui registro de posição pelo ID |
 | GET | `/api/v1/regras` | Lista regras contábeis |
 | POST | `/api/v1/regras` | Cria nova regra contábil |
 | PUT | `/api/v1/regras/{id}` | Edita regra contábil |
@@ -232,7 +235,9 @@ type Evaluator interface {
 }
 ```
 
-O `env` é construído a partir dos campos do registro `PosicaoCarteira` convertidos para `map[string]interface{}`.
+O `env` é construído dinamicamente pelo repositório a partir de `SELECT *` + `rows.ColumnTypes()`. Cada coluna é alocada com o tipo Go correto conforme o tipo SQL Server (`DECIMAL`→`float64`, `BIT`→`bool`, `DATE`→`time.Time`, etc.). Valores NULL são substituídos por zero-values antes da avaliação.
+
+As expressões são compiladas **sem** `expr.Env()` (sem type-checking estático), permitindo que qualquer coluna presente na tabela seja referenciada nas regras sem recompilação. A função `sanitizeEnv` garante que valores `nil` sejam convertidos para `float64(0)` antes de passar ao avaliador.
 
 ### Serviços
 
@@ -328,6 +333,8 @@ CREATE TABLE movimento_contabil (
 ### Structs Go (model)
 
 ```go
+// PosicaoCarteira mantém campos fixos para uso interno e um mapa dinâmico
+// com TODOS os campos da linha, construído via SELECT * + ColumnTypes().
 type PosicaoCarteira struct {
     ID                           int64
     DataPosicaoCarteira          time.Time
@@ -338,6 +345,9 @@ type PosicaoCarteira struct {
     ValorMTM                     float64
     PrincipalRemanescente        float64
     MoedaPrincipalRemanescente   string
+    // Campos contém todos os campos da linha com chaves snake_case,
+    // incluindo colunas adicionais não mapeadas nos campos fixos.
+    Campos map[string]interface{}
 }
 
 type RegraContabil struct {

@@ -10,6 +10,9 @@ import (
 // PosicaoCarteiraRepository define o contrato de acesso à posição de carteira.
 type PosicaoCarteiraRepository interface {
 	BuscarPorDataEVersaoMaxima(ctx context.Context, data time.Time) ([]model.PosicaoCarteira, error)
+	ListarPorData(ctx context.Context, data time.Time) ([]model.PosicaoCarteira, error)
+	Inserir(ctx context.Context, p model.PosicaoCarteira) (int64, error)
+	Deletar(ctx context.Context, id int64) error
 }
 
 // RegraContabilRepository define o contrato de acesso às regras contábeis.

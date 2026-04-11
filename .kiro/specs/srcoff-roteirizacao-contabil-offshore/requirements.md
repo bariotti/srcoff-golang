@@ -254,3 +254,32 @@ O Sistema de Roteirização Contábil Offshore (SRCOff) tem como objetivo gerar 
 5. A troca de backend SHALL ser feita exclusivamente via variável de ambiente, sem necessidade de recompilação.
 6. Ambos os backends SHALL implementar as mesmas interfaces de repositório, garantindo comportamento equivalente para todas as operações.
 7. WHEN `STORAGE_BACKEND=file`, os dados SHALL ser armazenados em três arquivos: `posicao_carteira.json`, `regras.json` e `movimento_contabil.json`.
+
+---
+
+### Requisito 17: Carregamento Dinâmico de Campos da Posição de Carteira
+
+**User Story:** Como analista contábil, quero que novas colunas adicionadas à tabela posicao_carteira sejam automaticamente disponibilizadas nas expressões das regras contábeis, sem necessidade de alteração de código.
+
+#### Critérios de Aceitação
+
+1. THE API SHALL carregar todos os campos da tabela posicao_carteira usando `SELECT *`, sem listar colunas explicitamente.
+2. THE API SHALL construir o ambiente de avaliação de expressões dinamicamente a partir dos tipos de coluna retornados pelo banco de dados, usando `ColumnTypes()`.
+3. WHEN uma coluna da tabela posicao_carteira possui valor NULL, THE Avaliador_Expressao SHALL substituir o valor por zero-value do tipo correspondente (0 para numéricos, "" para strings, false para booleanos) antes de avaliar a expressão.
+4. THE Avaliador_Expressao SHALL compilar expressões sem type-checking estático, permitindo que qualquer campo presente no ambiente seja referenciado nas expressões sem recompilação.
+5. WHEN uma nova coluna é adicionada à tabela posicao_carteira, THE API SHALL disponibilizá-la automaticamente nas expressões das regras contábeis sem necessidade de alteração de código ou redeploy.
+
+---
+
+### Requisito 18: Manutenção da Posição de Carteira pelo Frontend
+
+**User Story:** Como operador da Tesouraria, quero inserir e excluir registros da posição de carteira diretamente pelo frontend, para que eu possa gerenciar os dados de posição sem acesso direto ao banco de dados.
+
+#### Critérios de Aceitação
+
+1. THE Frontend SHALL disponibilizar uma página de manutenção de posição onde o usuário pode consultar registros por data.
+2. THE Frontend SHALL permitir ao usuário inserir um novo registro de posição informando os campos: data, versão, boleto, veículo, indicador de contraparte afiliada, valor MTM, principal remanescente e moeda.
+3. THE Frontend SHALL permitir ao usuário excluir um registro de posição pelo seu ID.
+4. THE API SHALL expor os endpoints `GET /api/v1/posicao`, `POST /api/v1/posicao` e `DELETE /api/v1/posicao?id={id}`.
+5. WHEN um registro é inserido sem `codigo_versao_conteudo`, THE API SHALL assumir versão 1 como padrão.
+6. IF `codigo_identificador_boleto` ou `data_posicao_carteira` não forem informados, THEN THE API SHALL retornar erro de validação.

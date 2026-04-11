@@ -54,11 +54,13 @@ func main() {
 	movimentoSvc := service.NewMovimentoContabilService(posicaoRepo, regraRepo, movimentoRepo, eval)
 	regraSvc := service.NewRegraContabilService(regraRepo)
 	conciliacaoSvc := service.NewConciliacaoService(posicaoRepo, movimentoRepo)
+	posicaoSvc := service.NewPosicaoCarteiraService(posicaoRepo)
 
 	// 4. Instanciar handlers
 	movimentoHandler := handler.NewMovimentoContabilHandler(movimentoSvc)
 	regraHandler := handler.NewRegraContabilHandler(regraSvc)
 	conciliacaoHandler := handler.NewConciliacaoHandler(conciliacaoSvc)
+	posicaoHandler := handler.NewPosicaoCarteiraHandler(posicaoSvc)
 
 	// 5. Registrar rotas
 	http.HandleFunc("/api/v1/movimento-contabil", func(w http.ResponseWriter, r *http.Request) {
@@ -94,6 +96,18 @@ func main() {
 
 	http.HandleFunc("/api/v1/condicoes/", regraHandler.EditarCondicao)
 	http.HandleFunc("/api/v1/conciliacao", conciliacaoHandler.Conciliar)
+	http.HandleFunc("/api/v1/posicao", func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodGet:
+			posicaoHandler.Listar(w, r)
+		case http.MethodPost:
+			posicaoHandler.Inserir(w, r)
+		case http.MethodDelete:
+			posicaoHandler.Deletar(w, r)
+		default:
+			w.WriteHeader(http.StatusMethodNotAllowed)
+		}
+	})
 
 	// 6. Ler porta
 	port := os.Getenv("API_PORT")

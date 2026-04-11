@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"log"
 	"time"
 
 	"srcoff/internal/evaluator"
@@ -162,53 +163,45 @@ func (s *MovimentoContabilService) GerarEstorno(ctx context.Context, data time.T
 		return fmt.Errorf("erro ao buscar lançamentos de D-1: %w", err)
 	}
 
+	log.Printf("[estorno] data=%s dMenos1=%s lancamentos_d1=%d", data.Format("2006-01-02"), dMenos1.Format("2006-01-02"), len(lancamentosD1))
+
 	// 2. Se D-1 vazio, retornar erro de ausência
 	if len(lancamentosD1) == 0 {
 		return fmt.Errorf("nenhum lote contábil encontrado para D-1 (%s)", dMenos1.Format("2006-01-02"))
 	}
 
-	// 3. Buscar lançamentos de D (indicador_reversao=false)
-	lancamentosD, err := s.movimentoRepo.BuscarPorDataEIndicador(ctx, data, false)
+	// 3. Buscar lançamentos de D (indicador_reversao=false) — mantido para referência futura
+	_, err = s.movimentoRepo.BuscarPorDataEIndicador(ctx, data, false)
 	if err != nil {
 		return fmt.Errorf("erro ao buscar lançamentos de D: %w", err)
 	}
 
-	// 4. Construir mapa de lançamentos de D por chave (boleto, idRegra)
-	type chave struct {
-		boleto  string
-		idRegra int64
-	}
-	mapaD := make(map[chave]model.LancamentoContabil, len(lancamentosD))
-	for _, l := range lancamentosD {
-		mapaD[chave{l.CodigoIdentificadorBoleto, l.IDRegraContabil}] = l
-	}
-
-	// 5. Para cada lançamento de D-1, verificar se estorno é necessário
+	// 4. Estornar todos os lançamentos de D-1:
+	//    - Regra 1: sempre estornar D-1 independente do valor de D0
+	//    - Regra 2: estornar D-1 quando não há correspondente em D0
+	//    Como a regra 1 engloba a regra 2, estornamos todos os lançamentos de D-1.
 	var estornos []model.LancamentoContabil
 	for _, l1 := range lancamentosD1 {
-		k := chave{l1.CodigoIdentificadorBoleto, l1.IDRegraContabil}
-		lD, exists := mapaD[k]
-
-		// Gerar estorno se: sem correspondente em D, ou valor divergente
-		if !exists || lD.ValorLancamentoContabil != l1.ValorLancamentoContabil {
-			estornos = append(estornos, model.LancamentoContabil{
-				DataLoteContabil:          data,
-				CodigoIdentificadorBoleto: l1.CodigoIdentificadorBoleto,
-				ValorLancamentoContabil:   l1.ValorLancamentoContabil,
-				MoedaLancamentoContabil:   l1.MoedaLancamentoContabil,
-				ContaDebito:               l1.ContaCredito, // contas invertidas
-				ContaCredito:              l1.ContaDebito,  // contas invertidas
-				IndicadorReversao:         true,
-				DescricaoRegraContabil:    l1.DescricaoRegraContabil,
-				DescricaoCondicaoContabil: l1.DescricaoCondicaoContabil,
-				IDRegraContabil:           l1.IDRegraContabil,
-			})
-		}
+		estornos = append(estornos, model.LancamentoContabil{
+			DataLoteContabil:          data,
+			CodigoIdentificadorBoleto: l1.CodigoIdentificadorBoleto,
+			ValorLancamentoContabil:   l1.ValorLancamentoContabil,
+			MoedaLancamentoContabil:   l1.MoedaLancamentoContabil,
+			ContaDebito:               l1.ContaCredito, // contas invertidas
+			ContaCredito:              l1.ContaDebito,  // contas invertidas
+			IndicadorReversao:         true,
+			DescricaoRegraContabil:    l1.DescricaoRegraContabil,
+			DescricaoCondicaoContabil: l1.DescricaoCondicaoContabil,
+			IDRegraContabil:           l1.IDRegraContabil,
+		})
 	}
 
 	if len(estornos) == 0 {
+		log.Printf("[estorno] nenhum estorno gerado para data=%s", data.Format("2006-01-02"))
 		return nil
 	}
+
+	log.Printf("[estorno] gerando %d estornos para data=%s", len(estornos), data.Format("2006-01-02"))
 
 	// 6. Obter versão atual para a data D (estorno usa a mesma versão do lote, não incrementa)
 	versao, err := s.movimentoRepo.ObterVersaoAtual(ctx, data)

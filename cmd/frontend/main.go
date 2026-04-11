@@ -42,22 +42,29 @@ type consultaData struct {
 }
 
 type paginaLancamentosView struct {
-	Total       int
-	Pagina      int
-	Tamanho     int
-	Lancamentos []lancamentoView
+	Total       int              `json:"total"`
+	Pagina      int              `json:"pagina"`
+	Tamanho     int              `json:"tamanho"`
+	Lancamentos []lancamentoView `json:"lancamentos"`
 }
 
 type lancamentoView struct {
-	DataLoteContabil          time.Time
-	CodigoVersaoConteudo      int
-	CodigoIdentificadorBoleto string
-	ContaDebito               string
-	ContaCredito              string
-	ValorLancamentoContabil   float64
-	MoedaLancamentoContabil   string
-	IndicadorReversao         bool
-	DescricaoRegraContabil    string
+	DataLoteContabil          time.Time `json:"data_lote_contabil"`
+	CodigoVersaoConteudo      int       `json:"codigo_versao_conteudo"`
+	CodigoIdentificadorBoleto string    `json:"codigo_identificador_boleto"`
+	ContaDebito               string    `json:"conta_debito"`
+	ContaCredito              string    `json:"conta_credito"`
+	ValorLancamentoContabil   float64   `json:"valor_lancamento_contabil"`
+	MoedaLancamentoContabil   string    `json:"moeda_lancamento_contabil"`
+	IndicadorReversao         bool      `json:"indicador_reversao"`
+	DescricaoRegraContabil    string    `json:"descricao_regra_contabil"`
+}
+
+type posicaoData struct {
+	Data      string
+	Posicoes  []map[string]interface{}
+	Mensagem  string
+	Erro      string
 }
 
 type conciliacaoData struct {
@@ -490,6 +497,103 @@ func main() {
 		}
 
 		renderTemplate(tmpl, w, "conciliacao.html", d)
+	})
+
+	// GET/POST/DELETE /posicao
+	http.HandleFunc("/posicao", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost {
+			// ParseForm uma única vez
+			if err := r.ParseForm(); err != nil {
+				renderTemplate(tmpl, w, "posicao.html", posicaoData{Erro: "Erro ao processar formulário."})
+				return
+			}
+
+			// DELETE via POST com _method=DELETE
+			if r.FormValue("_method") == "DELETE" {
+				id := r.FormValue("id")
+				req, _ := http.NewRequest(http.MethodDelete, fmt.Sprintf("%s/api/v1/posicao?id=%s", apiURL, id), nil)
+				resp, err := client.Do(req)
+				d := posicaoData{}
+				if err != nil {
+					d.Erro = fmt.Sprintf("Erro ao excluir: %v", err)
+				} else {
+					resp.Body.Close()
+					d.Mensagem = "Registro excluído com sucesso."
+				}
+				renderTemplate(tmpl, w, "posicao.html", d)
+				return
+			}
+
+			// POST = inserir novo registro
+			afiliada := r.FormValue("indicador_contraparte_afiliada") == "true"
+			versao, _ := strconv.Atoi(r.FormValue("codigo_versao_conteudo"))
+			if versao == 0 {
+				versao = 1
+			}
+			valorMTM, _ := strconv.ParseFloat(r.FormValue("valor_mtm"), 64)
+			principal, _ := strconv.ParseFloat(r.FormValue("principal_remanescente"), 64)
+
+			payload := map[string]interface{}{
+				"data_posicao_carteira":          r.FormValue("data_posicao_carteira"),
+				"codigo_versao_conteudo":         versao,
+				"codigo_identificador_boleto":    r.FormValue("codigo_identificador_boleto"),
+				"descricao_veiculo":              r.FormValue("descricao_veiculo"),
+				"indicador_contraparte_afiliada": afiliada,
+				"valor_mtm":                      valorMTM,
+				"principal_remanescente":         principal,
+				"moeda_principal_remanescente":   r.FormValue("moeda_principal_remanescente"),
+			}
+			body, _ := json.Marshal(payload)
+			resp, err := client.Post(apiURL+"/api/v1/posicao", "application/json", bytes.NewReader(body))
+			d := posicaoData{}
+			if err != nil {
+				d.Erro = fmt.Sprintf("Erro ao inserir: %v", err)
+			} else {
+				defer resp.Body.Close()
+				if resp.StatusCode >= 400 {
+					var errResp map[string]string
+					json.NewDecoder(resp.Body).Decode(&errResp)
+					d.Erro = fmt.Sprintf("Erro da API: %s", errResp["erro"])
+				} else {
+					d.Mensagem = "Registro inserido com sucesso."
+				}
+			}
+			renderTemplate(tmpl, w, "posicao.html", d)
+			return
+		}
+
+		// GET = consultar por data
+		dataParam := r.URL.Query().Get("data")
+		d := posicaoData{Data: dataParam}
+		if dataParam == "" {
+			renderTemplate(tmpl, w, "posicao.html", d)
+			return
+		}
+
+		resp, err := client.Get(fmt.Sprintf("%s/api/v1/posicao?data=%s", apiURL, dataParam))
+		if err != nil {
+			d.Erro = fmt.Sprintf("Erro ao buscar posições: %v", err)
+			renderTemplate(tmpl, w, "posicao.html", d)
+			return
+		}
+		defer resp.Body.Close()
+
+		var raw []map[string]interface{}
+		if err := json.NewDecoder(resp.Body).Decode(&raw); err != nil {
+			d.Erro = fmt.Sprintf("Erro ao decodificar resposta: %v", err)
+			renderTemplate(tmpl, w, "posicao.html", d)
+			return
+		}
+
+		// Flatten: usar o mapa Campos para exibição dinâmica
+		for _, item := range raw {
+			if campos, ok := item["Campos"].(map[string]interface{}); ok {
+				d.Posicoes = append(d.Posicoes, campos)
+			} else {
+				d.Posicoes = append(d.Posicoes, item)
+			}
+		}
+		renderTemplate(tmpl, w, "posicao.html", d)
 	})
 
 	// Root redirect
