@@ -64,10 +64,15 @@ func main() {
 
 	// 5. Registrar rotas
 	http.HandleFunc("/api/v1/movimento-contabil", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == http.MethodGet {
+		switch r.Method {
+		case http.MethodGet:
 			movimentoHandler.ConsultarMovimento(w, r)
-		} else {
+		case http.MethodPost:
 			movimentoHandler.GerarMovimento(w, r)
+		case http.MethodDelete:
+			movimentoHandler.ExcluirMovimento(w, r)
+		default:
+			w.WriteHeader(http.StatusMethodNotAllowed)
 		}
 	})
 

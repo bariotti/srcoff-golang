@@ -15,6 +15,7 @@ type movimentoContabilSvc interface {
 	GerarEstorno(ctx context.Context, data time.Time) error
 	ConsultarLancamentos(ctx context.Context, data time.Time, pagina, tamanho int) (*model.PaginaLancamentos, error)
 	ConsultarLancamentosFiltrado(ctx context.Context, dataInicio, dataFim time.Time, boleto string, versao int, versaoModo string, pagina, tamanho int) (*model.PaginaLancamentos, error)
+	ExcluirMovimento(ctx context.Context, data time.Time, versao int) error
 }
 
 // MovimentoContabilHandler expõe os endpoints de movimento contábil.
@@ -162,4 +163,23 @@ func (h *MovimentoContabilHandler) ConsultarMovimento(w http.ResponseWriter, r *
 		return
 	}
 	writeJSON(w, http.StatusOK, resultado)
+}
+
+// ExcluirMovimento trata DELETE /api/v1/movimento-contabil?data=...&versao=...
+func (h *MovimentoContabilHandler) ExcluirMovimento(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	data, err := time.Parse("2006-01-02", q.Get("data"))
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"erro": "data inválida: use YYYY-MM-DD"})
+		return
+	}
+	versao := 0
+	if v := q.Get("versao"); v != "" {
+		versao, _ = strconv.Atoi(v)
+	}
+	if err := h.svc.ExcluirMovimento(r.Context(), data, versao); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"erro": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"mensagem": "movimento excluído com sucesso"})
 }

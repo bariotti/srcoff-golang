@@ -26,19 +26,21 @@ type operacaoData struct {
 }
 
 type consultaData struct {
-	DataInicio     string
-	DataFim        string
-	Boleto         string
-	VersaoModo     string
-	Versao         string
-	Pagina         int
-	Tamanho        int
-	Resultado      *paginaLancamentosView
-	Erro           string
-	TemAnterior    bool
-	PaginaAnterior int
-	TemProxima     bool
-	ProximaPagina  int
+	DataInicio       string
+	DataFim          string
+	Boleto           string
+	VersaoModo       string
+	Versao           string
+	Pagina           int
+	Tamanho          int
+	Resultado        *paginaLancamentosView
+	Erro             string
+	ErroExclusao     string
+	MensagemExclusao string
+	TemAnterior      bool
+	PaginaAnterior   int
+	TemProxima       bool
+	ProximaPagina    int
 }
 
 type paginaLancamentosView struct {
@@ -221,6 +223,42 @@ func main() {
 			d.MensagemEstorno = "Estorno gerado com sucesso."
 		}
 		renderTemplate(tmpl, w, "operacao.html", d)
+	})
+
+	// POST /consulta/excluir
+	http.HandleFunc("/consulta/excluir", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Redirect(w, r, "/consulta", http.StatusSeeOther)
+			return
+		}
+		r.ParseForm()
+		dataStr := r.FormValue("data")
+		versaoStr := r.FormValue("versao")
+
+		url := fmt.Sprintf("%s/api/v1/movimento-contabil?data=%s", apiURL, dataStr)
+		if versaoStr != "" {
+			url += "&versao=" + versaoStr
+		}
+		req, _ := http.NewRequest(http.MethodDelete, url, nil)
+		resp, err := client.Do(req)
+		d := consultaData{}
+		if err != nil {
+			d.ErroExclusao = fmt.Sprintf("Erro ao excluir: %v", err)
+		} else {
+			defer resp.Body.Close()
+			if resp.StatusCode >= 400 {
+				var errResp map[string]string
+				json.NewDecoder(resp.Body).Decode(&errResp)
+				d.ErroExclusao = fmt.Sprintf("Erro da API: %s", errResp["erro"])
+			} else {
+				if versaoStr != "" {
+					d.MensagemExclusao = fmt.Sprintf("Movimento da data %s versão %s excluído com sucesso.", dataStr, versaoStr)
+				} else {
+					d.MensagemExclusao = fmt.Sprintf("Todos os movimentos da data %s excluídos com sucesso.", dataStr)
+				}
+			}
+		}
+		renderTemplate(tmpl, w, "consulta.html", d)
 	})
 
 	// GET /consulta

@@ -35,6 +35,25 @@
   </nav>
 
   <section>
+    <h2>Excluir Movimento Contábil</h2>
+    <form id="form-excluir" method="POST" action="/consulta/excluir">
+      <div class="filtros">
+        <label>
+          Data
+          <input type="date" name="data" required>
+        </label>
+        <label>
+          Versão (deixe em branco para excluir todas)
+          <input type="number" name="versao" min="1" placeholder="todas">
+        </label>
+        <button type="submit" style="background:#dc3545;color:white;border:none;border-radius:4px;cursor:pointer;padding:7px 18px" onclick="return confirm('Confirma a exclusão? Esta ação não pode ser desfeita.')">Excluir</button>
+      </div>
+    </form>
+    {{if .ErroExclusao}}<p style="color:red;margin-top:8px">{{.ErroExclusao}}</p>{{end}}
+    {{if .MensagemExclusao}}<p style="color:green;margin-top:8px">{{.MensagemExclusao}}</p>{{end}}
+  </section>
+
+  <section>
     <h2>Consulta de Movimento Contábil</h2>
     <form method="GET" action="/consulta">
       <div class="filtros">

@@ -25,6 +25,7 @@ type movimentoContabilRepo interface {
 	BuscarPorDataEIndicador(ctx context.Context, data time.Time, indicadorReversao bool) ([]model.LancamentoContabil, error)
 	ConsultarPaginado(ctx context.Context, data time.Time, pagina, tamanho int) (*model.PaginaLancamentos, error)
 	ConsultarPaginadoFiltrado(ctx context.Context, dataInicio, dataFim time.Time, boleto string, versao int, versaoModo string, pagina, tamanho int) (*model.PaginaLancamentos, error)
+	ExcluirPorDataEVersao(ctx context.Context, data time.Time, versao int) error
 }
 
 // MovimentoContabilService implementa a lógica de geração e consulta de movimentos contábeis.
@@ -150,6 +151,11 @@ func (s *MovimentoContabilService) ConsultarLancamentos(ctx context.Context, dat
 // ConsultarLancamentosFiltrado retorna lançamentos paginados por período, boleto e versão.
 func (s *MovimentoContabilService) ConsultarLancamentosFiltrado(ctx context.Context, dataInicio, dataFim time.Time, boleto string, versao int, versaoModo string, pagina, tamanho int) (*model.PaginaLancamentos, error) {
 	return s.movimentoRepo.ConsultarPaginadoFiltrado(ctx, dataInicio, dataFim, boleto, versao, versaoModo, pagina, tamanho)
+}
+
+// ExcluirMovimento exclui lançamentos de uma data e opcionalmente de uma versão específica.
+func (s *MovimentoContabilService) ExcluirMovimento(ctx context.Context, data time.Time, versao int) error {
+	return s.movimentoRepo.ExcluirPorDataEVersao(ctx, data, versao)
 }
 
 // GerarEstorno compara os lançamentos de D-1 com os de D e gera estornos para

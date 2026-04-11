@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"log"
 	"strings"
 	"time"
 
@@ -209,6 +210,12 @@ func (r *MovimentoContabilRepo) ExcluirPorDataEVersao(ctx context.Context, data 
 	if versao > 0 {
 		query += fmt.Sprintf(" AND codigo_versao_conteudo = %d", versao)
 	}
-	_, err := r.db.ExecContext(ctx, query)
-	return err
+	log.Printf("[excluir-movimento] query: %s", query)
+	result, err := r.db.ExecContext(ctx, query)
+	if err != nil {
+		return err
+	}
+	rows, _ := result.RowsAffected()
+	log.Printf("[excluir-movimento] rows affected: %d", rows)
+	return nil
 }
