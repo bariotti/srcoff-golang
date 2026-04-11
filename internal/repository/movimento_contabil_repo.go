@@ -135,12 +135,18 @@ func (r *MovimentoContabilRepo) ConsultarPaginado(ctx context.Context, data time
 }
 
 func (r *MovimentoContabilRepo) ConsultarPaginadoFiltrado(ctx context.Context, dataInicio, dataFim time.Time, boleto string, versao int, versaoModo string, pagina, tamanho int) (*model.PaginaLancamentos, error) {
+	return r.consultarFiltrado(ctx, dataInicio, dataFim, boleto, versao, versaoModo, pagina, tamanho, false)
+}
+
+func (r *MovimentoContabilRepo) ConsultarPaginadoFiltradoSemCancelados(ctx context.Context, dataInicio, dataFim time.Time, boleto string, versao int, versaoModo string, pagina, tamanho int) (*model.PaginaLancamentos, error) {
+	return r.consultarFiltrado(ctx, dataInicio, dataFim, boleto, versao, versaoModo, pagina, tamanho, true)
+}
+
+func (r *MovimentoContabilRepo) consultarFiltrado(ctx context.Context, dataInicio, dataFim time.Time, boleto string, versao int, versaoModo string, pagina, tamanho int, excluirSaldoZero bool) (*model.PaginaLancamentos, error) {
 	inicioStr := dataInicio.Format("2006-01-02")
 	fimStr := dataFim.Format("2006-01-02")
 
-	// Filtro base de período
 	where := "WHERE m.data_lote_contabil >= '" + inicioStr + "' AND m.data_lote_contabil <= '" + fimStr + "'"
-
 	if boleto != "" {
 		where += " AND m.codigo_identificador_boleto LIKE '%" + strings.ReplaceAll(boleto, "'", "''") + "%'"
 	}
@@ -151,23 +157,23 @@ func (r *MovimentoContabilRepo) ConsultarPaginadoFiltrado(ctx context.Context, d
 		where += " AND m.codigo_versao_conteudo = (SELECT MAX(m2.codigo_versao_conteudo) FROM movimento_contabil m2 WHERE m2.data_lote_contabil = m.data_lote_contabil)"
 	}
 
-	// Subquery que elimina grupos (boleto, valor, regra) cuja soma líquida é zero
-	// Reversão conta negativo, lançamento normal conta positivo
-	filtroSaldoZero := `AND (
-		SELECT SUM(CASE WHEN m2.indicador_reversao = 0
-		                THEN  m2.valor_lancamento_contabil
-		                ELSE -m2.valor_lancamento_contabil
-		           END)
-		FROM movimento_contabil m2
-		WHERE m2.data_lote_contabil         = m.data_lote_contabil
-		  AND m2.codigo_identificador_boleto = m.codigo_identificador_boleto
-		  AND m2.valor_lancamento_contabil   = m.valor_lancamento_contabil
-		  AND m2.id_regra_contabil           = m.id_regra_contabil
-	) <> 0`
+	filtroSaldoZero := ""
+	if excluirSaldoZero {
+		filtroSaldoZero = `AND (
+			SELECT SUM(CASE WHEN m2.indicador_reversao = 0
+			                THEN  m2.valor_lancamento_contabil
+			                ELSE -m2.valor_lancamento_contabil
+			           END)
+			FROM movimento_contabil m2
+			WHERE m2.data_lote_contabil         = m.data_lote_contabil
+			  AND m2.codigo_identificador_boleto = m.codigo_identificador_boleto
+			  AND m2.valor_lancamento_contabil   = m.valor_lancamento_contabil
+			  AND m2.id_regra_contabil           = m.id_regra_contabil
+		) <> 0`
+	}
 
-	countQuery := "SELECT COUNT(*) FROM movimento_contabil m " + where + " " + filtroSaldoZero
 	var total int
-	if err := r.db.QueryRowContext(ctx, countQuery).Scan(&total); err != nil {
+	if err := r.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM movimento_contabil m "+where+" "+filtroSaldoZero).Scan(&total); err != nil {
 		return nil, err
 	}
 

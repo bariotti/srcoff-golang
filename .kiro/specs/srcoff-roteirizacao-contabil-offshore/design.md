@@ -70,7 +70,7 @@ internal/
 
 3. **Trusted Connection**: A string de conexão utiliza `trusted_connection=yes` via driver `github.com/denisenkom/go-mssqldb`, sem necessidade de usuário/senha.
 
-4. **Frontend com templates Go**: O frontend utiliza `html/template` da stdlib do Go, servindo páginas HTML com dados renderizados no servidor.
+4. **Frontend com templates Go**: O frontend utiliza `html/template` da stdlib do Go, servindo páginas HTML com dados renderizados no servidor. Na exibição da posição de carteira, o frontend prioriza o mapa `Campos` de cada registro para renderização dinâmica das colunas; quando `Campos` não está disponível (fallback), os campos internos da struct (`ID`, `DataPosicaoCarteira`, `CodigoVersaoConteudo`, `CodigoIdentificadorBoleto`, `DescricaoVeiculo`, `IndicadorContraparteAfiliada`, `ValorMTM`, `PrincipalRemanescente`, `MoedaPrincipalRemanescente`) são removidos do mapa antes da exibição para evitar poluição visual no grid.
 
 5. **Versionamento de conteúdo**: O campo `codigo_versao_conteudo` é calculado no momento da inserção como `MAX(codigo_versao_conteudo) + 1` para a data do lote, garantindo unicidade de versão por data. Para estornos, utiliza-se a versão vigente (`MAX`) sem incremento.
 
@@ -130,6 +130,9 @@ type MovimentoContabilRepository interface {
     ObterVersaoAtual(ctx context.Context, data time.Time) (int, error)
     ConsultarPaginado(ctx context.Context, data time.Time, pagina, tamanho int) (*model.PaginaLancamentos, error)
     ConsultarPaginadoFiltrado(ctx context.Context, dataInicio, dataFim time.Time, boleto string, versao int, versaoModo string, pagina, tamanho int) (*model.PaginaLancamentos, error)
+    // ConsultarPaginadoFiltradoSemCancelados é idêntico a ConsultarPaginadoFiltrado, mas exclui
+    // grupos (boleto, valor, regra) cuja soma líquida de lançamentos é zero (cancelados entre si).
+    ConsultarPaginadoFiltradoSemCancelados(ctx context.Context, dataInicio, dataFim time.Time, boleto string, versao int, versaoModo string, pagina, tamanho int) (*model.PaginaLancamentos, error)
     // ExcluirPorDataEVersao remove lançamentos de uma data; se versao > 0, filtra pela versão específica.
     ExcluirPorDataEVersao(ctx context.Context, data time.Time, versao int) error
 }
