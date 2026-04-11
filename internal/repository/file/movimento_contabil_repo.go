@@ -142,3 +142,24 @@ func (r *MovimentoContabilRepo) ConsultarPaginadoFiltrado(_ context.Context, dat
 	}
 	return &model.PaginaLancamentos{Total: total, Pagina: pagina, Tamanho: tamanho, Lancamentos: filtered[offset:end]}, nil
 }
+
+func (r *MovimentoContabilRepo) ExcluirPorDataEVersao(_ context.Context, data time.Time, versao int) error {
+	all, err := r.st.load()
+	if err != nil {
+		return err
+	}
+	dataStr := data.Format("2006-01-02")
+	filtered := all[:0]
+	for _, l := range all {
+		if l.DataLoteContabil.Format("2006-01-02") == dataStr {
+			if versao > 0 && l.CodigoVersaoConteudo == versao {
+				continue // excluir
+			}
+			if versao == 0 {
+				continue // excluir todos da data
+			}
+		}
+		filtered = append(filtered, l)
+	}
+	return r.st.save(filtered)
+}

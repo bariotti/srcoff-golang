@@ -130,6 +130,8 @@ type MovimentoContabilRepository interface {
     ObterVersaoAtual(ctx context.Context, data time.Time) (int, error)
     ConsultarPaginado(ctx context.Context, data time.Time, pagina, tamanho int) (*model.PaginaLancamentos, error)
     ConsultarPaginadoFiltrado(ctx context.Context, dataInicio, dataFim time.Time, boleto string, versao int, versaoModo string, pagina, tamanho int) (*model.PaginaLancamentos, error)
+    // ExcluirPorDataEVersao remove lançamentos de uma data; se versao > 0, filtra pela versão específica.
+    ExcluirPorDataEVersao(ctx context.Context, data time.Time, versao int) error
 }
 ```
 

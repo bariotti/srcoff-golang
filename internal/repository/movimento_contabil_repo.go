@@ -202,3 +202,13 @@ func (r *MovimentoContabilRepo) ConsultarPaginadoFiltrado(ctx context.Context, d
 
 	return &model.PaginaLancamentos{Total: total, Pagina: pagina, Tamanho: tamanho, Lancamentos: lancamentos}, nil
 }
+
+func (r *MovimentoContabilRepo) ExcluirPorDataEVersao(ctx context.Context, data time.Time, versao int) error {
+	dataStr := data.Format("2006-01-02")
+	query := "DELETE FROM movimento_contabil WHERE data_lote_contabil = '" + dataStr + "'"
+	if versao > 0 {
+		query += fmt.Sprintf(" AND codigo_versao_conteudo = %d", versao)
+	}
+	_, err := r.db.ExecContext(ctx, query)
+	return err
+}
