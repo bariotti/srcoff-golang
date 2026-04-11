@@ -163,3 +163,45 @@ func (r *MovimentoContabilRepo) ExcluirPorDataEVersao(_ context.Context, data ti
 	}
 	return r.st.save(filtered)
 }
+
+func (r *MovimentoContabilRepo) ConsultarPaginadoFiltradoSemCancelados(ctx context.Context, dataInicio, dataFim time.Time, boleto string, versao int, versaoModo string, pagina, tamanho int) (*model.PaginaLancamentos, error) {
+	result, err := r.ConsultarPaginadoFiltrado(ctx, dataInicio, dataFim, boleto, versao, versaoModo, 1, 999999)
+	if err != nil {
+		return nil, err
+	}
+
+	// Calcular saldo líquido por (boleto, valor, regra) e filtrar os que totalizam zero
+	type chave struct {
+		boleto string
+		valor  float64
+		regra  int64
+	}
+	saldo := map[chave]float64{}
+	for _, l := range result.Lancamentos {
+		k := chave{l.CodigoIdentificadorBoleto, l.ValorLancamentoContabil, l.IDRegraContabil}
+		if l.IndicadorReversao {
+			saldo[k] -= l.ValorLancamentoContabil
+		} else {
+			saldo[k] += l.ValorLancamentoContabil
+		}
+	}
+
+	var filtered []model.LancamentoContabil
+	for _, l := range result.Lancamentos {
+		k := chave{l.CodigoIdentificadorBoleto, l.ValorLancamentoContabil, l.IDRegraContabil}
+		if saldo[k] != 0 {
+			filtered = append(filtered, l)
+		}
+	}
+
+	total := len(filtered)
+	offset := (pagina - 1) * tamanho
+	if offset >= total {
+		return &model.PaginaLancamentos{Total: total, Pagina: pagina, Tamanho: tamanho, Lancamentos: []model.LancamentoContabil{}}, nil
+	}
+	end := offset + tamanho
+	if end > total {
+		end = total
+	}
+	return &model.PaginaLancamentos{Total: total, Pagina: pagina, Tamanho: tamanho, Lancamentos: filtered[offset:end]}, nil
+}

@@ -293,3 +293,59 @@
   - Adicionar handler `/posicao` em `cmd/frontend/main.go`
   - Adicionar link `/posicao` na nav de todas as páginas existentes
   - **Requisito:** 18.1, 18.2, 18.3
+
+## Fase 16: Exportação CSV do Movimento Contábil
+
+- [x] 16.1 Implementar handler de exportação CSV
+  - Criar `internal/handler/export_handler.go` com `ExportHandler` e método `ExportMovimentoCSV`
+  - Aceitar filtros: `data_inicio`, `data_fim`, `boleto`, `versao_modo`, `versao`
+  - Retornar CSV com BOM UTF-8, separador `;`, colunas: Data Lote, Versão, Boleto, Conta Débito, Conta Crédito, Valor, Moeda, Reversão, Regra, Condição
+  - Registrar `GET /api/v1/movimento-contabil/export` em `cmd/api/main.go`
+  - **Requisito:** 19.1–19.7
+
+- [x] 16.2 Implementar frontend de exportação CSV
+  - Adicionar botão "⬇ Excel" ao lado do botão "Consultar" em `consulta.html`
+  - Script JavaScript atualiza URL do botão com os filtros atuais do formulário
+  - Adicionar handler `/consulta/export` em `cmd/frontend/main.go` como proxy para a API
+  - **Requisito:** 19.1–19.7
+
+## Fase 17: Exportação TXT do Movimento Contábil
+
+- [x] 17.1 Implementar handler de exportação TXT
+  - Adicionar método `ExportMovimentoTXT` em `internal/handler/export_handler.go`
+  - Aceitar parâmetro `data` (data única, não período)
+  - Formato do arquivo: cabeçalho `C;AAAAMMDD`, linhas de detalhe `D;conta;D/C;moeda;regra;boleto;reversao;valor`, totalizador `T;soma`
+  - Cada lançamento gera duas linhas: uma para conta débito (D) e uma para conta crédito (C)
+  - Retornar JSON `{"sem_dados": "..."}` quando não há lançamentos para a data
+  - Registrar `GET /api/v1/movimento-contabil/export-txt` em `cmd/api/main.go`
+  - **Requisito:** 20.1–20.8
+
+- [x] 17.2 Implementar frontend de exportação TXT
+  - Adicionar seção "Exportar Movimento Contábil (.txt)" em `consulta.html` com campo de data e botão roxo
+  - Exibir mensagem amarela quando não há dados para a data informada
+  - Adicionar handler `/consulta/export-txt` em `cmd/frontend/main.go` como proxy para a API
+  - **Requisito:** 20.1–20.8
+
+## Fase 18: Exclusão de Movimento Contábil
+
+- [x] 18.1 Implementar exclusão de movimento por data e versão
+  - Adicionar método `ExcluirPorDataEVersao(ctx, data, versao)` em `movimento_contabil_repo.go`
+  - Atualizar interface `MovimentoContabilRepository` em `interfaces.go`
+  - Implementar o mesmo método no backend de arquivo
+  - Adicionar `ExcluirMovimento` no serviço e handler
+  - Registrar `DELETE /api/v1/movimento-contabil` em `cmd/api/main.go`
+  - **Requisito:** 21.1–21.4
+
+- [x] 18.2 Implementar frontend de exclusão de movimento
+  - Adicionar seção "Excluir Movimento Contábil" em `consulta.html` com campos de data e versão opcional
+  - Adicionar handler `POST /consulta/excluir` em `cmd/frontend/main.go`
+  - **Requisito:** 21.1–21.4
+
+## Fase 19: Filtro de Lançamentos com Saldo Zero
+
+- [x] 19.1 Separar consulta com e sem filtro de saldo zero
+  - Renomear método existente para `ConsultarPaginadoFiltradoSemCancelados` (com filtro de saldo zero)
+  - Manter `ConsultarPaginadoFiltrado` sem filtro para uso interno (conciliação, estorno)
+  - Atualizar interface, serviço e implementação em arquivo
+  - `ConsultarLancamentosFiltrado` no serviço usa `SemCancelados` — apenas para o frontend
+  - **Requisito:** 22.1–22.3

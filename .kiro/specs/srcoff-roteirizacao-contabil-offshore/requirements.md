@@ -283,3 +283,123 @@ O Sistema de Roteirização Contábil Offshore (SRCOff) tem como objetivo gerar 
 4. THE API SHALL expor os endpoints `GET /api/v1/posicao`, `POST /api/v1/posicao` e `DELETE /api/v1/posicao?id={id}`.
 5. WHEN um registro é inserido sem `codigo_versao_conteudo`, THE API SHALL assumir versão 1 como padrão.
 6. IF `codigo_identificador_boleto` ou `data_posicao_carteira` não forem informados, THEN THE API SHALL retornar erro de validação.
+
+---
+
+### Requisito 19: Exportação do Movimento Contábil em CSV
+
+**User Story:** Como operador da Tesouraria, quero exportar os lançamentos do movimento contábil em formato CSV, para que eu possa importar os dados no Excel e realizar análises offline.
+
+#### Critérios de Aceitação
+
+1. THE API SHALL expor o endpoint `GET /api/v1/movimento-contabil/export` que retorna um arquivo CSV com os lançamentos filtrados.
+2. THE API SHALL aceitar os mesmos parâmetros de filtro do endpoint de consulta: `data_inicio`, `data_fim`, `boleto`, `versao_modo` e `versao`.
+3. THE API SHALL retornar o arquivo CSV com BOM UTF-8 (`EF BB BF`) para garantir a correta exibição de caracteres acentuados no Microsoft Excel.
+4. THE API SHALL utilizar ponto-e-vírgula (`;`) como separador de campos no CSV, conforme padrão do Excel em localidades pt-BR.
+5. THE CSV SHALL conter as colunas: Data Lote, Versão, Boleto, Conta Débito, Conta Crédito, Valor, Moeda, Reversão, Regra, Condição.
+6. THE API SHALL nomear o arquivo retornado como `movimento_contabil_{data_inicio}_{data_fim}.csv`.
+7. IF `data_inicio` não for informado, THE API SHALL assumir `2000-01-01` como padrão. IF `data_fim` não for informado, THE API SHALL assumir `2999-12-31` como padrão.
+
+---
+
+### Requisito 16: Backend de Persistência Configurável
+
+**User Story:** Como administrador do sistema, quero poder escolher entre SQL Server e arquivos JSON como backend de persistência, para que o sistema possa ser executado sem dependência de banco de dados.
+
+#### Critérios de Aceitação
+
+1. THE API SHALL ler a variável de ambiente `STORAGE_BACKEND` para determinar o backend (`sqlserver` ou `file`).
+2. WHEN `STORAGE_BACKEND=sqlserver` (padrão), THE API SHALL usar os repositórios SQL Server existentes.
+3. WHEN `STORAGE_BACKEND=file`, THE API SHALL usar repositórios baseados em arquivos JSON no diretório `FILE_STORAGE_DIR` (padrão: `./data`).
+4. Os arquivos JSON gerados são: `posicao_carteira.json`, `regras.json` e `movimento_contabil.json`.
+5. Todas as funcionalidades do sistema devem operar identicamente em ambos os backends.
+6. As interfaces de repositório devem ser definidas em `internal/repository/interfaces.go`.
+7. O backend de arquivo deve implementar todas as operações de filtragem em memória.
+
+---
+
+### Requisito 17: Carregamento Dinâmico de Campos da Posição de Carteira
+
+**User Story:** Como analista contábil, quero que novas colunas adicionadas à tabela `posicao_carteira` sejam automaticamente disponibilizadas nas expressões das regras contábeis, sem necessidade de alteração de código.
+
+#### Critérios de Aceitação
+
+1. THE API SHALL usar `SELECT *` ao consultar a tabela `posicao_carteira`, sem listar colunas explicitamente.
+2. THE API SHALL usar `rows.ColumnTypes()` para determinar o tipo de cada coluna e alocar o tipo Go correto antes do scan.
+3. THE API SHALL construir o mapa de variáveis do avaliador de expressões diretamente a partir das colunas retornadas pelo banco.
+4. WHEN uma coluna numérica retorna `NULL`, THE API SHALL substituir por `0.0` para evitar erros de tipo nas expressões.
+5. WHEN uma nova coluna é adicionada à tabela `posicao_carteira`, THE API SHALL disponibilizá-la automaticamente nas expressões das regras sem recompilação.
+
+---
+
+### Requisito 18: Manutenção da Posição de Carteira
+
+**User Story:** Como operador da Tesouraria, quero inserir e excluir registros da posição de carteira pelo frontend, para que eu possa gerenciar os dados de posição sem acesso direto ao banco de dados.
+
+#### Critérios de Aceitação
+
+1. THE Frontend SHALL disponibilizar uma página `/posicao` com formulário de inserção e grid de consulta por data.
+2. THE Frontend SHALL permitir consultar todos os registros de posição de uma data específica.
+3. THE Frontend SHALL exibir todas as colunas da posição dinamicamente no grid, incluindo colunas adicionais.
+4. THE API SHALL expor `POST /api/v1/posicao` para inserção de novos registros.
+5. THE API SHALL expor `DELETE /api/v1/posicao?id={id}` para exclusão de registros por ID.
+6. THE API SHALL expor `GET /api/v1/posicao?data={data}` para listagem de registros por data.
+7. THE Frontend SHALL exibir link para a página de posição na navegação de todas as páginas.
+
+---
+
+### Requisito 19: Exportação CSV do Movimento Contábil
+
+**User Story:** Como operador da Tesouraria, quero exportar o resultado da consulta de movimento contábil para um arquivo CSV compatível com Excel, para que eu possa analisar os dados em planilha.
+
+#### Critérios de Aceitação
+
+1. THE Frontend SHALL exibir um botão "⬇ Excel" ao lado do botão "Consultar" na página de consulta.
+2. WHEN o usuário clica no botão, THE Frontend SHALL gerar um download com os mesmos filtros aplicados na consulta.
+3. THE API SHALL expor `GET /api/v1/movimento-contabil/export` aceitando os mesmos parâmetros da consulta.
+4. O arquivo gerado SHALL ter extensão `.csv`, separador `;` e BOM UTF-8 para compatibilidade com Excel.
+5. O arquivo SHALL conter cabeçalho com colunas: Data Lote, Versão, Boleto, Conta Débito, Conta Crédito, Valor, Moeda, Reversão, Regra, Condição.
+6. O arquivo SHALL aplicar o mesmo filtro de eliminação de lançamentos com saldo zero da consulta do frontend.
+7. O nome do arquivo SHALL seguir o padrão `movimento_contabil_{data_inicio}_{data_fim}.csv`.
+
+---
+
+### Requisito 20: Exportação TXT do Movimento Contábil
+
+**User Story:** Como operador da Tesouraria, quero exportar o movimento contábil de um dia específico em formato TXT estruturado, para integração com sistemas legados.
+
+#### Critérios de Aceitação
+
+1. THE Frontend SHALL disponibilizar uma seção de exportação TXT na página de consulta com campo de data única.
+2. THE API SHALL expor `GET /api/v1/movimento-contabil/export-txt?data={data}`.
+3. A primeira linha do arquivo SHALL ser o cabeçalho no formato `C;AAAAMMDD`.
+4. A última linha SHALL ser o totalizador no formato `T;{soma_total}`.
+5. Cada lançamento SHALL gerar duas linhas de detalhe: uma para conta débito e uma para conta crédito.
+6. Cada linha de detalhe SHALL seguir o formato: `D;{conta};{D/C};{moeda};{regra};{boleto};{S/N};{valor}`.
+7. IF não houver lançamentos para a data, THE API SHALL retornar mensagem indicando ausência de dados.
+8. THE Frontend SHALL exibir mensagem de aviso quando não há dados para a data informada.
+
+---
+
+### Requisito 21: Exclusão de Movimento Contábil
+
+**User Story:** Como operador da Tesouraria, quero excluir lançamentos contábeis de uma data e/ou versão específica, para corrigir processamentos incorretos.
+
+#### Critérios de Aceitação
+
+1. THE Frontend SHALL disponibilizar uma seção de exclusão na página de consulta com campos de data e versão opcional.
+2. WHEN versão não é informada, THE API SHALL excluir todos os lançamentos da data.
+3. WHEN versão é informada, THE API SHALL excluir apenas os lançamentos da data e versão especificadas.
+4. THE API SHALL expor `DELETE /api/v1/movimento-contabil?data={data}&versao={versao}`.
+
+---
+
+### Requisito 22: Filtro de Lançamentos com Saldo Zero na Consulta
+
+**User Story:** Como operador da Tesouraria, quero que a consulta de movimento contábil exiba apenas lançamentos com saldo líquido diferente de zero, para que lançamentos já estornados não apareçam na visualização.
+
+#### Critérios de Aceitação
+
+1. WHEN consultando lançamentos pelo frontend, THE API SHALL eliminar grupos de lançamentos cujo saldo líquido (soma de normais menos soma de reversões) é zero para o mesmo boleto, valor e regra.
+2. Este filtro SHALL ser aplicado apenas na consulta do frontend e na exportação CSV/TXT.
+3. Funcionalidades internas como estorno e conciliação SHALL usar a consulta sem este filtro.

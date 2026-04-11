@@ -37,6 +37,7 @@ type consultaData struct {
 	Erro             string
 	ErroExclusao     string
 	MensagemExclusao string
+	MensagemTxt      string
 	TemAnterior      bool
 	PaginaAnterior   int
 	TemProxima       bool
@@ -225,6 +226,47 @@ func main() {
 		renderTemplate(tmpl, w, "operacao.html", d)
 	})
 
+	// GET /consulta/export — proxy para download CSV
+	http.HandleFunc("/consulta/export", func(w http.ResponseWriter, r *http.Request) {
+		apiURL2 := apiURL + "/api/v1/movimento-contabil/export?" + r.URL.RawQuery
+		resp, err := client.Get(apiURL2)
+		if err != nil {
+			http.Error(w, "Erro ao gerar export: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+		defer resp.Body.Close()
+		w.Header().Set("Content-Type", resp.Header.Get("Content-Type"))
+		w.Header().Set("Content-Disposition", resp.Header.Get("Content-Disposition"))
+		io.Copy(w, resp.Body)
+	})
+
+	// GET /consulta/export-txt — proxy para download TXT
+	http.HandleFunc("/consulta/export-txt", func(w http.ResponseWriter, r *http.Request) {
+		dataParam := r.URL.Query().Get("data")
+		apiURL2 := fmt.Sprintf("%s/api/v1/movimento-contabil/export-txt?data=%s", apiURL, dataParam)
+		resp, err := client.Get(apiURL2)
+		if err != nil {
+			http.Error(w, "Erro ao gerar export TXT: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+		defer resp.Body.Close()
+
+		// Verificar se é sem_dados
+		if resp.Header.Get("Content-Type") == "application/json" {
+			var result map[string]string
+			json.NewDecoder(resp.Body).Decode(&result)
+			if msg, ok := result["sem_dados"]; ok {
+				// Redirecionar para consulta com mensagem
+				http.Redirect(w, r, "/consulta?msg_txt="+msg, http.StatusSeeOther)
+				return
+			}
+		}
+
+		w.Header().Set("Content-Type", resp.Header.Get("Content-Type"))
+		w.Header().Set("Content-Disposition", resp.Header.Get("Content-Disposition"))
+		io.Copy(w, resp.Body)
+	})
+
 	// POST /consulta/excluir
 	http.HandleFunc("/consulta/excluir", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
@@ -284,7 +326,7 @@ func main() {
 			tamanho = t
 		}
 
-		d := consultaData{DataInicio: dataInicio, DataFim: dataFim, Boleto: boleto, VersaoModo: versaoModo, Versao: versao, Pagina: pagina, Tamanho: tamanho}
+		d := consultaData{DataInicio: dataInicio, DataFim: dataFim, Boleto: boleto, VersaoModo: versaoModo, Versao: versao, Pagina: pagina, Tamanho: tamanho, MensagemTxt: r.URL.Query().Get("msg_txt")}
 
 		if dataInicio == "" && dataFim == "" && boleto == "" {
 			renderTemplate(tmpl, w, "consulta.html", d)
@@ -623,11 +665,22 @@ func main() {
 			return
 		}
 
-		// Flatten: usar o mapa Campos para exibição dinâmica
+		// Usar o mapa Campos para exibição dinâmica, excluindo campos internos da struct
 		for _, item := range raw {
-			if campos, ok := item["Campos"].(map[string]interface{}); ok {
+			if campos, ok := item["campos"].(map[string]interface{}); ok {
 				d.Posicoes = append(d.Posicoes, campos)
 			} else {
+				// Fallback: remover chaves internas que não devem aparecer no grid
+				delete(item, "campos")
+				delete(item, "id")
+				delete(item, "data_posicao_carteira")
+				delete(item, "codigo_versao_conteudo")
+				delete(item, "codigo_identificador_boleto")
+				delete(item, "descricao_veiculo")
+				delete(item, "indicador_contraparte_afiliada")
+				delete(item, "valor_mtm")
+				delete(item, "principal_remanescente")
+				delete(item, "moeda_principal_remanescente")
 				d.Posicoes = append(d.Posicoes, item)
 			}
 		}

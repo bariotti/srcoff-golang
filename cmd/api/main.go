@@ -61,6 +61,7 @@ func main() {
 	regraHandler := handler.NewRegraContabilHandler(regraSvc)
 	conciliacaoHandler := handler.NewConciliacaoHandler(conciliacaoSvc)
 	posicaoHandler := handler.NewPosicaoCarteiraHandler(posicaoSvc)
+	exportHandler := handler.NewExportHandler(movimentoSvc)
 
 	// 5. Registrar rotas
 	http.HandleFunc("/api/v1/movimento-contabil", func(w http.ResponseWriter, r *http.Request) {
@@ -101,6 +102,8 @@ func main() {
 
 	http.HandleFunc("/api/v1/condicoes/", regraHandler.EditarCondicao)
 	http.HandleFunc("/api/v1/conciliacao", conciliacaoHandler.Conciliar)
+	http.HandleFunc("/api/v1/movimento-contabil/export", exportHandler.ExportMovimentoCSV)
+	http.HandleFunc("/api/v1/movimento-contabil/export-txt", exportHandler.ExportMovimentoTXT)
 	http.HandleFunc("/api/v1/posicao", func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case http.MethodGet:

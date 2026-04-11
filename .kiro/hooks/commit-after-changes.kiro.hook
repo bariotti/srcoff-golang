@@ -17,6 +17,8 @@
   },
   "then": {
     "type": "askAgent",
-    "prompt": "Fazer commit e push para main do repositorio do GitHub após qualquer mudanças, seja no código fonte ou na documentação"
-  }
+    "prompt": "Fazer commit e push para main do repositorio do GitHub após qualquer mudanças, seja no código fonte ou na documentação\nPara isso, executar os comandos abaixo, sequencialmente:\ngit add .\ngit commit -m  \"Descreva a funcionalidade implementada resumidamente\"\ngit push origin master"
+  },
+  "workspaceFolderName": "srcoff-golang",
+  "shortName": "commit-after-changes"
 }

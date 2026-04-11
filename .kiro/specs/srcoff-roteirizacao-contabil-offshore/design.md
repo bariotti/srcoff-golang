@@ -161,6 +161,7 @@ Todas as operações de leitura/escrita são protegidas por `sync.Mutex` para se
 | POST | `/api/v1/movimento-contabil` | Gera o movimento contábil para uma data |
 | POST | `/api/v1/estorno` | Gera o estorno do lote de D-1 para uma data |
 | GET | `/api/v1/movimento-contabil` | Consulta lançamentos paginados com filtros |
+| GET | `/api/v1/movimento-contabil/export` | Exporta lançamentos filtrados em CSV (UTF-8 BOM, separador `;`) |
 | GET | `/api/v1/conciliacao` | Concilia posição de carteira com movimento contábil |
 | GET | `/api/v1/posicao` | Lista registros de posição por data |
 | POST | `/api/v1/posicao` | Insere novo registro de posição |
@@ -193,6 +194,15 @@ Todas as operações de leitura/escrita são protegidas por `sync.Mutex` para se
 - `versao_modo`: `vigente` (padrão) | `todas` | `especifica`
 - `versao`: número da versão (obrigatório quando `versao_modo=especifica`)
 - `data`: compatibilidade com filtro por data única (legado)
+
+**GET /api/v1/movimento-contabil/export — exportação CSV**
+```
+?data_inicio=2024-01-01&data_fim=2024-01-31&boleto=BOL-001&versao_modo=vigente&versao=1
+```
+- Aceita os mesmos filtros do endpoint de consulta (exceto paginação)
+- Retorna arquivo CSV com BOM UTF-8 e separador `;` para compatibilidade com Excel
+- Nome do arquivo: `movimento_contabil_{data_inicio}_{data_fim}.csv`
+- Colunas: Data Lote, Versão, Boleto, Conta Débito, Conta Crédito, Valor, Moeda, Reversão, Regra, Condição
 
 **GET /api/v1/conciliacao**
 ```
@@ -546,3 +556,94 @@ Cada propriedade de corretude listada na seção anterior deve ser implementada 
 | P7 | Gera pares de lotes (D-1, D) aleatórios com combinações de igualdade/divergência/ausência; verifica que estornos são gerados se e somente se há divergência ou ausência |
 | P8 | Gera lotes completos com movimento e estorno; verifica que a consulta retorna exatamente lançamentos + estornos da data sem omissões ou duplicatas |
 | P9 | Gera lotes com N lançamentos aleatórios; itera todas as páginas e verifica que a união é igual ao total sem duplicatas e que o total retornado é consistente |
+
+---
+
+## Atualizações de Design — Funcionalidades Recentes
+
+### Backend de Persistência Configurável
+
+A API suporta dois backends via variável de ambiente `STORAGE_BACKEND`:
+
+| Valor | Backend | Descrição |
+|-------|---------|-----------|
+| `sqlserver` (padrão) | SQL Server | Usa `go-mssqldb` com queries concatenadas |
+| `file` | Arquivo JSON | Persiste em `./data/*.json`, operações em memória |
+
+**Variáveis de ambiente:**
+- `STORAGE_BACKEND` — `sqlserver` ou `file`
+- `FILE_STORAGE_DIR` — diretório dos arquivos JSON (padrão: `./data`)
+
+**Estrutura de arquivos JSON:**
+```
+data/
+  posicao_carteira.json   — registros de posição
+  regras.json             — regras e condições contábeis
+  movimento_contabil.json — lançamentos contábeis
+```
+
+### Carregamento Dinâmico de Campos da Posição
+
+O repositório de posição usa `SELECT *` + `rows.ColumnTypes()` para scan dinâmico:
+
+```go
+func allocForType(dbType string, nullable bool) interface{} {
+    // DECIMAL/NUMERIC/FLOAT → *float64 ou *sql.NullFloat64
+    // BIT → *bool ou *sql.NullBool
+    // DATE/DATETIME → *time.Time ou *sql.NullTime
+    // VARCHAR/NVARCHAR → *string ou *sql.NullString
+}
+```
+
+Valores `NULL` são convertidos para zero values (`0.0`, `false`, `""`) para compatibilidade com o avaliador de expressões.
+
+### Novos Endpoints da API
+
+| Método | Caminho | Descrição |
+|--------|---------|-----------|
+| GET | `/api/v1/posicao` | Lista posições por data |
+| POST | `/api/v1/posicao` | Insere novo registro de posição |
+| DELETE | `/api/v1/posicao?id={id}` | Exclui registro de posição |
+| DELETE | `/api/v1/movimento-contabil?data=...&versao=...` | Exclui lançamentos por data/versão |
+| GET | `/api/v1/movimento-contabil/export` | Exporta CSV com filtros |
+| GET | `/api/v1/movimento-contabil/export-txt?data=...` | Exporta TXT estruturado |
+
+### Formato do Arquivo TXT de Exportação
+
+```
+C;20260409                          ← Cabeçalho: C fixo + data AAAAMMDD
+D;111111111;D;USD;Regra NDF;BOL-001;N;101500.000000  ← Detalhe débito
+D;222222222;C;USD;Regra NDF;BOL-001;N;101500.000000  ← Detalhe crédito
+T;203000.000000                     ← Totalizador: T fixo + soma
+```
+
+Campos da linha de detalhe: `D;{conta};{D/C};{moeda};{regra};{boleto};{S/N};{valor}`
+
+### Filtro de Saldo Zero na Consulta
+
+A consulta do frontend usa subquery para eliminar pares cancelados:
+
+```sql
+AND (
+    SELECT SUM(CASE WHEN indicador_reversao = 0
+                    THEN  valor_lancamento_contabil
+                    ELSE -valor_lancamento_contabil END)
+    FROM movimento_contabil m2
+    WHERE m2.data_lote_contabil = m.data_lote_contabil
+      AND m2.codigo_identificador_boleto = m.codigo_identificador_boleto
+      AND m2.valor_lancamento_contabil = m.valor_lancamento_contabil
+      AND m2.id_regra_contabil = m.id_regra_contabil
+) <> 0
+```
+
+Este filtro é aplicado **apenas** em `ConsultarPaginadoFiltradoSemCancelados` — usado pelo frontend. Estorno e conciliação usam `ConsultarPaginadoFiltrado` sem este filtro.
+
+### Páginas do Frontend
+
+| Rota | Descrição |
+|------|-----------|
+| `/operacao` | Gerar movimento contábil e estorno |
+| `/consulta` | Consultar, exportar (CSV/TXT) e excluir movimento contábil |
+| `/posicao` | Inserir, consultar e excluir registros de posição |
+| `/conciliacao` | Conciliar posição × movimento contábil |
+| `/regras` | Cadastrar e manter regras e condições contábeis |
