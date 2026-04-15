@@ -1,0 +1,661 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SRCOff — Roteirização Contábil Offshore</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+  <style>
+    body { background: #f8f9fa; }
+    .sidebar { min-height: 100vh; background: #212529; }
+    .sidebar .nav-link { color: #adb5bd; border-radius: 6px; margin: 2px 8px; }
+    .sidebar .nav-link:hover, .sidebar .nav-link.active { background: #0d6efd; color: #fff; }
+    .sidebar .nav-link i { width: 20px; }
+    .sidebar-brand { color: #fff; font-size: 1.2rem; font-weight: 700; padding: 20px 16px 10px; }
+    .page { display: none; }
+    .page.active { display: block; overflow: hidden; }
+    .toast-container { position: fixed; top: 20px; right: 20px; z-index: 9999; }
+    .table-sm td, .table-sm th { font-size: 0.82rem; }
+    .spinner-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.3); z-index: 9998; align-items: center; justify-content: center; }
+    .spinner-overlay.show { display: flex; }
+  </style>
+</head>
+<body>
+<div class="spinner-overlay" id="spinner">
+  <div class="spinner-border text-light" style="width:3rem;height:3rem"></div>
+</div>
+<div class="toast-container" id="toastContainer"></div>
+
+<div class="container-fluid p-0">
+  <div class="row g-0">
+    <!-- Sidebar -->
+    <div class="col-auto sidebar d-flex flex-column" style="width:220px">
+      <div class="sidebar-brand"><i class="bi bi-bank me-2"></i>SRCOff</div>
+      <nav class="nav flex-column mt-2">
+        <a class="nav-link active" href="#" onclick="showPage('operacao')"><i class="bi bi-play-circle me-2"></i>Operação</a>
+        <a class="nav-link" href="#" onclick="showPage('consulta')"><i class="bi bi-search me-2"></i>Consulta</a>
+        <a class="nav-link" href="#" onclick="showPage('posicao')"><i class="bi bi-table me-2"></i>Posição</a>
+        <a class="nav-link" href="#" onclick="showPage('conciliacao')"><i class="bi bi-check2-circle me-2"></i>Conciliação</a>
+        <a class="nav-link" href="#" onclick="showPage('regras')"><i class="bi bi-gear me-2"></i>Regras</a>
+      </nav>
+    </div>
+
+    <!-- Main content -->
+    <div class="col p-4">
+
+      <!-- ==================== OPERAÇÃO ==================== -->
+      <div id="page-operacao" class="page active">
+        <h4 class="mb-4"><i class="bi bi-play-circle me-2"></i>Operação</h4>
+        <div class="row g-4">
+          <div class="col-md-6">
+            <div class="card shadow-sm">
+              <div class="card-header bg-primary text-white">Gerar Movimento Contábil</div>
+              <div class="card-body">
+                <div class="mb-3">
+                  <label class="form-label">Data</label>
+                  <input type="date" id="op-data-movimento" class="form-control">
+                </div>
+                <button class="btn btn-primary w-100" onclick="gerarMovimento()"><i class="bi bi-play me-1"></i>Processar</button>
+                <div id="op-msg-movimento" class="mt-3"></div>
+              </div>
+            </div>
+          </div>
+          <div class="col-md-6">
+            <div class="card shadow-sm">
+              <div class="card-header bg-warning text-dark">Gerar Estorno</div>
+              <div class="card-body">
+                <div class="mb-3">
+                  <label class="form-label">Data</label>
+                  <input type="date" id="op-data-estorno" class="form-control">
+                </div>
+                <button class="btn btn-warning w-100" onclick="gerarEstorno()"><i class="bi bi-arrow-counterclockwise me-1"></i>Estornar</button>
+                <div id="op-msg-estorno" class="mt-3"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ==================== CONSULTA ==================== -->
+      <div id="page-consulta" class="page">
+        <h4 class="mb-4"><i class="bi bi-search me-2"></i>Consulta de Movimento Contábil</h4>
+
+        <!-- Filtros -->
+        <div class="card shadow-sm mb-3">
+          <div class="card-body">
+            <div class="row g-2 align-items-end">
+              <div class="col-md-2">
+                <label class="form-label form-label-sm">Data início</label>
+                <input type="date" id="c-data-inicio" class="form-control form-control-sm">
+              </div>
+              <div class="col-md-2">
+                <label class="form-label form-label-sm">Data fim</label>
+                <input type="date" id="c-data-fim" class="form-control form-control-sm">
+              </div>
+              <div class="col-md-2">
+                <label class="form-label form-label-sm">Boleto</label>
+                <input type="text" id="c-boleto" class="form-control form-control-sm" placeholder="parcial">
+              </div>
+              <div class="col-md-2">
+                <label class="form-label form-label-sm">Versão</label>
+                <select id="c-versao-modo" class="form-select form-select-sm" onchange="toggleVersaoEspecifica()">
+                  <option value="vigente">Vigente</option>
+                  <option value="todas">Todas</option>
+                  <option value="especifica">Específica</option>
+                </select>
+              </div>
+              <div class="col-md-1" id="c-versao-num-col" style="display:none">
+                <label class="form-label form-label-sm">Nº</label>
+                <input type="number" id="c-versao-num" class="form-control form-control-sm" min="1">
+              </div>
+              <div class="col-md-1">
+                <label class="form-label form-label-sm">Por página</label>
+                <select id="c-tamanho" class="form-select form-select-sm">
+                  <option value="10">10</option>
+                  <option value="50">50</option>
+                  <option value="100" selected>100</option>
+                </select>
+              </div>
+              <div class="col-auto">
+                <button class="btn btn-primary btn-sm" onclick="consultarMovimento(1)"><i class="bi bi-search me-1"></i>Consultar</button>
+                <button class="btn btn-success btn-sm ms-1" onclick="exportarCSV()"><i class="bi bi-file-earmark-excel me-1"></i>Excel</button>
+                <button class="btn btn-purple btn-sm ms-1" style="background:#6f42c1;color:white" onclick="showExportTxt()"><i class="bi bi-file-earmark-text me-1"></i>TXT</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Export TXT inline -->
+        <div id="c-export-txt-panel" class="card shadow-sm mb-3 border-purple" style="display:none;border-color:#6f42c1">
+          <div class="card-body">
+            <div class="row g-2 align-items-end">
+              <div class="col-auto">
+                <label class="form-label form-label-sm">Data para exportar TXT</label>
+                <input type="date" id="c-txt-data" class="form-control form-control-sm">
+              </div>
+              <div class="col-auto">
+                <button class="btn btn-sm" style="background:#6f42c1;color:white" onclick="exportarTXT()"><i class="bi bi-download me-1"></i>Baixar TXT</button>
+                <button class="btn btn-sm btn-outline-secondary ms-1" onclick="document.getElementById('c-export-txt-panel').style.display='none'">Fechar</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Excluir -->
+        <div class="card shadow-sm mb-3 border-danger">
+          <div class="card-header text-danger bg-transparent border-danger py-2">
+            <a class="text-danger text-decoration-none" data-bs-toggle="collapse" href="#c-excluir-panel"><i class="bi bi-trash me-1"></i>Excluir Movimento</a>
+          </div>
+          <div class="collapse" id="c-excluir-panel">
+            <div class="card-body">
+              <div class="row g-2 align-items-end">
+                <div class="col-auto">
+                  <label class="form-label form-label-sm">Data</label>
+                  <input type="date" id="c-excluir-data" class="form-control form-control-sm">
+                </div>
+                <div class="col-auto">
+                  <label class="form-label form-label-sm">Versão (opcional)</label>
+                  <input type="number" id="c-excluir-versao" class="form-control form-control-sm" min="1" placeholder="todas">
+                </div>
+                <div class="col-auto">
+                  <button class="btn btn-danger btn-sm" onclick="excluirMovimento()"><i class="bi bi-trash me-1"></i>Excluir</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Resultado -->
+        <div id="c-resultado"></div>
+      </div>
+
+      <!-- ==================== POSIÇÃO ==================== -->
+      <div id="page-posicao" class="page">
+        <h4 class="mb-4"><i class="bi bi-table me-2"></i>Posição de Carteira</h4>
+
+        <!-- Consulta -->
+        <div class="card shadow-sm mb-3">
+          <div class="card-header">Consultar por Data</div>
+          <div class="card-body">
+            <div class="row g-2 align-items-end">
+              <div class="col-auto">
+                <input type="date" id="p-data" class="form-control form-control-sm">
+              </div>
+              <div class="col-auto">
+                <button class="btn btn-primary btn-sm" onclick="consultarPosicao()"><i class="bi bi-search me-1"></i>Consultar</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Resultado da consulta -->
+        <div id="p-resultado" class="mb-3"></div>
+
+        <!-- Inserção -->
+        <div class="card shadow-sm">
+          <div class="card-header bg-success text-white">Inserir Novo Registro</div>
+          <div class="card-body">
+            <div class="row g-2">
+              <div class="col-md-2"><label class="form-label form-label-sm">Data</label><input type="date" id="p-ins-data" class="form-control form-control-sm"></div>
+              <div class="col-md-1"><label class="form-label form-label-sm">Versão</label><input type="number" id="p-ins-versao" class="form-control form-control-sm" value="1" min="1"></div>
+              <div class="col-md-2"><label class="form-label form-label-sm">Boleto</label><input type="text" id="p-ins-boleto" class="form-control form-control-sm"></div>
+              <div class="col-md-2"><label class="form-label form-label-sm">Veículo</label><input type="text" id="p-ins-veiculo" class="form-control form-control-sm"></div>
+              <div class="col-md-1"><label class="form-label form-label-sm">Afiliada</label><select id="p-ins-afiliada" class="form-select form-select-sm"><option value="false">Não</option><option value="true">Sim</option></select></div>
+              <div class="col-md-1"><label class="form-label form-label-sm">MTM</label><input type="number" id="p-ins-mtm" class="form-control form-control-sm" step="0.000001" value="0"></div>
+              <div class="col-md-1"><label class="form-label form-label-sm">Principal</label><input type="number" id="p-ins-principal" class="form-control form-control-sm" step="0.000001" value="0"></div>
+              <div class="col-md-1"><label class="form-label form-label-sm">Moeda</label><input type="text" id="p-ins-moeda" class="form-control form-control-sm" value="BRL"></div>
+              <div class="col-md-1 d-flex align-items-end"><button class="btn btn-success btn-sm w-100" onclick="inserirPosicao()"><i class="bi bi-plus-circle me-1"></i>Inserir</button></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ==================== CONCILIAÇÃO ==================== -->
+      <div id="page-conciliacao" class="page">
+        <h4 class="mb-4"><i class="bi bi-check2-circle me-2"></i>Conciliação</h4>
+        <div class="card shadow-sm mb-3">
+          <div class="card-body">
+            <div class="row g-2 align-items-end">
+              <div class="col-auto">
+                <label class="form-label form-label-sm">Data</label>
+                <input type="date" id="conc-data" class="form-control form-control-sm">
+              </div>
+              <div class="col-auto">
+                <button class="btn btn-primary btn-sm" onclick="conciliar()"><i class="bi bi-check2-circle me-1"></i>Conciliar</button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div id="conc-resultado"></div>
+      </div>
+
+      <!-- ==================== REGRAS ==================== -->
+      <div id="page-regras" class="page">
+        <h4 class="mb-4"><i class="bi bi-gear me-2"></i>Regras Contábeis</h4>
+        <div class="card shadow-sm">
+          <div class="card-header d-flex justify-content-between align-items-center">
+            Regras Cadastradas
+            <button class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#modalNovaRegra"><i class="bi bi-plus me-1"></i>Nova Regra</button>
+          </div>
+          <div class="card-body p-0">
+            <div id="r-lista"></div>
+          </div>
+        </div>
+      </div>
+
+    </div><!-- /col -->
+  </div><!-- /row -->
+</div><!-- /container -->
+
+<!-- Modal Condições da Regra -->
+<div class="modal fade" id="modalCondicoes" tabindex="-1">
+  <div class="modal-dialog modal-xl">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="bi bi-list-check me-2"></i><span id="modal-cond-titulo"></span></h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div id="modal-cond-body"></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-success btn-sm" onclick="showNovaCondicaoModal()"><i class="bi bi-plus me-1"></i>Nova Condição</button>
+        <button class="btn btn-secondary" data-bs-dismiss="modal">Fechar</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Nova Regra -->
+<div class="modal fade" id="modalNovaRegra" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header"><h5 class="modal-title">Nova Regra</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+      <div class="modal-body">
+        <div class="mb-3"><label class="form-label">Descrição</label><input type="text" id="r-nova-desc" class="form-control"></div>
+        <div class="mb-3"><label class="form-label">Código Produto</label><input type="text" id="r-nova-codigo" class="form-control"></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+        <button class="btn btn-primary" onclick="criarRegra()">Criar</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Nova Condição -->
+<div class="modal fade" id="modalNovaCondicao" tabindex="-1">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header"><h5 class="modal-title">Nova Condição</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+      <div class="modal-body">
+        <div class="row g-2">
+          <div class="col-12"><label class="form-label">Condição (expressão booleana)</label><input type="text" id="r-cond-expr" class="form-control" placeholder='ex: valor_mtm > 0 && descricao_veiculo == "NASSAU"'></div>
+          <div class="col-md-6"><label class="form-label">Conta Débito</label><input type="text" id="r-cond-debito" class="form-control"></div>
+          <div class="col-md-6"><label class="form-label">Conta Crédito</label><input type="text" id="r-cond-credito" class="form-control"></div>
+          <div class="col-md-6"><label class="form-label">Campo Valor</label><input type="text" id="r-cond-valor" class="form-control" placeholder="ex: principal_remanescente + valor_mtm"></div>
+          <div class="col-md-6"><label class="form-label">Campo Moeda</label><input type="text" id="r-cond-moeda" class="form-control" placeholder="ex: moeda_principal_remanescente"></div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+        <button class="btn btn-success" onclick="criarCondicao()">Adicionar</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+const API = '';  // mesmo host, proxy pelo frontend Go
+
+let currentPage = 'operacao';
+let consultaPagina = 1;
+let regraAtualId = null;
+
+// ── Navegação ──────────────────────────────────────────────
+function showPage(name) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-link').forEach(l => l.classList.remove('active'));
+  document.getElementById('page-' + name).classList.add('active');
+  document.querySelectorAll('.nav-link').forEach(l => {
+    if (l.getAttribute('onclick') && l.getAttribute('onclick').includes("'" + name + "'")) l.classList.add('active');
+  });
+  currentPage = name;
+  if (name === 'regras') carregarRegras();
+}
+
+// ── Toast ──────────────────────────────────────────────────
+function toast(msg, type = 'success') {
+  const id = 'toast-' + Date.now();
+  const html = `<div id="${id}" class="toast align-items-center text-bg-${type} border-0 show mb-2" role="alert">
+    <div class="d-flex"><div class="toast-body">${msg}</div>
+    <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button></div></div>`;
+  document.getElementById('toastContainer').insertAdjacentHTML('beforeend', html);
+  setTimeout(() => document.getElementById(id)?.remove(), 4000);
+}
+
+function spin(show) {
+  document.getElementById('spinner').classList.toggle('show', show);
+}
+
+// ── API helpers ────────────────────────────────────────────
+async function api(method, path, body) {
+  spin(true);
+  try {
+    const opts = { method, headers: { 'Content-Type': 'application/json' } };
+    if (body) opts.body = JSON.stringify(body);
+    const r = await fetch('/api' + path, opts);
+    const data = await r.json();
+    return data;
+  } catch(e) {
+    toast('Erro de comunicação: ' + e.message, 'danger');
+    return null;
+  } finally {
+    spin(false);
+  }
+}
+
+// ── OPERAÇÃO ───────────────────────────────────────────────
+async function gerarMovimento() {
+  const data = document.getElementById('op-data-movimento').value;
+  if (!data) { toast('Informe a data', 'warning'); return; }
+  const r = await api('POST', '/v1/movimento-contabil', { data });
+  const el = document.getElementById('op-msg-movimento');
+  if (r?.mensagem) { el.innerHTML = `<div class="alert alert-success">${r.mensagem}</div>`; }
+  else if (r?.erro) { el.innerHTML = `<div class="alert alert-danger">${r.erro}</div>`; }
+}
+
+async function gerarEstorno() {
+  const data = document.getElementById('op-data-estorno').value;
+  if (!data) { toast('Informe a data', 'warning'); return; }
+  const r = await api('POST', '/v1/estorno', { data });
+  const el = document.getElementById('op-msg-estorno');
+  if (r?.mensagem) { el.innerHTML = `<div class="alert alert-success">${r.mensagem}</div>`; }
+  else if (r?.erro) { el.innerHTML = `<div class="alert alert-danger">${r.erro}</div>`; }
+}
+
+// ── CONSULTA ───────────────────────────────────────────────
+function toggleVersaoEspecifica() {
+  const v = document.getElementById('c-versao-modo').value;
+  document.getElementById('c-versao-num-col').style.display = v === 'especifica' ? '' : 'none';
+}
+
+function buildConsultaParams(pagina) {
+  const di = document.getElementById('c-data-inicio').value;
+  const df = document.getElementById('c-data-fim').value;
+  const boleto = document.getElementById('c-boleto').value;
+  const modo = document.getElementById('c-versao-modo').value;
+  const versao = document.getElementById('c-versao-num').value;
+  const tamanho = document.getElementById('c-tamanho').value;
+  let p = `?pagina=${pagina}&tamanho=${tamanho}&versao_modo=${modo}`;
+  if (di) p += `&data_inicio=${di}`;
+  if (df) p += `&data_fim=${df}`;
+  if (boleto) p += `&boleto=${encodeURIComponent(boleto)}`;
+  if (modo === 'especifica' && versao) p += `&versao=${versao}`;
+  return p;
+}
+
+async function consultarMovimento(pagina) {
+  consultaPagina = pagina;
+  const params = buildConsultaParams(pagina);
+  const r = await api('GET', '/v1/movimento-contabil' + params);
+  const el = document.getElementById('c-resultado');
+  if (!r || r.erro) { el.innerHTML = `<div class="alert alert-danger">${r?.erro || 'Erro'}</div>`; return; }
+  if (!r.lancamentos || r.lancamentos.length === 0) { el.innerHTML = `<div class="alert alert-info">Nenhum lançamento encontrado.</div>`; return; }
+
+  const tamanho = parseInt(document.getElementById('c-tamanho').value);
+  const totalPages = Math.ceil(r.total / tamanho);
+
+  let rows = r.lancamentos.map(l => `<tr>
+    <td>${l.data_lote_contabil?.substring(0,10) || ''}</td>
+    <td>${l.codigo_versao_conteudo}</td>
+    <td>${l.codigo_identificador_boleto}</td>
+    <td>${l.conta_debito}</td>
+    <td>${l.conta_credito}</td>
+    <td class="text-end">${Number(l.valor_lancamento_contabil).toFixed(2)}</td>
+    <td>${l.moeda_lancamento_contabil}</td>
+    <td>${l.indicador_reversao ? '<span class="badge bg-warning text-dark">Sim</span>' : '<span class="badge bg-secondary">Não</span>'}</td>
+    <td>${l.descricao_regra_contabil}</td>
+  </tr>`).join('');
+
+  let pag = '';
+  if (totalPages > 1) {
+    pag = `<nav><ul class="pagination pagination-sm mt-2">
+      ${pagina > 1 ? `<li class="page-item"><a class="page-link" href="#" onclick="consultarMovimento(${pagina-1})">«</a></li>` : ''}
+      <li class="page-item disabled"><a class="page-link">${pagina} / ${totalPages} (${r.total} registros)</a></li>
+      ${pagina < totalPages ? `<li class="page-item"><a class="page-link" href="#" onclick="consultarMovimento(${pagina+1})">»</a></li>` : ''}
+    </ul></nav>`;
+  } else {
+    pag = `<small class="text-muted">${r.total} registro(s)</small>`;
+  }
+
+  el.innerHTML = `<div class="card shadow-sm"><div class="card-body p-0">
+    <div class="table-responsive"><table class="table table-sm table-hover table-striped mb-0">
+      <thead class="table-dark"><tr><th>Data</th><th>Versão</th><th>Boleto</th><th>Débito</th><th>Crédito</th><th>Valor</th><th>Moeda</th><th>Reversão</th><th>Regra</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table></div>
+    <div class="px-3 py-2">${pag}</div>
+  </div></div>`;
+}
+
+function exportarCSV() {
+  const params = buildConsultaParams(1).replace('pagina=1&', '');
+  window.open('/consulta/export' + params, '_blank');
+}
+
+function showExportTxt() {
+  const p = document.getElementById('c-export-txt-panel');
+  p.style.display = p.style.display === 'none' ? '' : 'none';
+}
+
+function exportarTXT() {
+  const data = document.getElementById('c-txt-data').value;
+  if (!data) { toast('Informe a data', 'warning'); return; }
+  window.open('/consulta/export-txt?data=' + data, '_blank');
+}
+
+async function excluirMovimento() {
+  const data = document.getElementById('c-excluir-data').value;
+  const versao = document.getElementById('c-excluir-versao').value;
+  if (!data) { toast('Informe a data', 'warning'); return; }
+  if (!confirm(`Confirma exclusão dos movimentos de ${data}${versao ? ' versão ' + versao : ''}?`)) return;
+  let url = `/v1/movimento-contabil?data=${data}`;
+  if (versao) url += `&versao=${versao}`;
+  const r = await api('DELETE', url);
+  if (r?.mensagem) toast(r.mensagem);
+  else if (r?.erro) toast(r.erro, 'danger');
+}
+
+// ── POSIÇÃO ────────────────────────────────────────────────
+async function consultarPosicao() {
+  const data = document.getElementById('p-data').value;
+  if (!data) { toast('Informe a data', 'warning'); return; }
+  const r = await api('GET', '/v1/posicao?data=' + data);
+  const el = document.getElementById('p-resultado');
+  if (!r) { el.innerHTML = ''; return; }
+  if (r.erro) { el.innerHTML = `<div class="alert alert-danger">${r.erro}</div>`; return; }
+
+  // API pode retornar null quando não há registros
+  const lista = Array.isArray(r) ? r : [];
+  if (lista.length === 0) {
+    el.innerHTML = `<div class="alert alert-info"><i class="bi bi-info-circle me-2"></i>Nenhum registro de posição encontrado para ${data}.</div>`;
+    return;
+  }
+
+  const campos = lista[0].campos || {};
+  const cols = Object.keys(campos);
+
+  const headers = cols.map(c => `<th class="text-nowrap">${c}</th>`).join('') + '<th style="width:50px"></th>';
+  const rows = lista.map(item => {
+    const c = item.campos || {};
+    const cells = cols.map(col => {
+      const v = c[col];
+      return `<td class="text-nowrap">${v !== null && v !== undefined ? v : ''}</td>`;
+    }).join('');
+    return `<tr>${cells}<td><button class="btn btn-danger btn-sm py-0 px-1" onclick="deletarPosicao(${item.id})"><i class="bi bi-trash"></i></button></td></tr>`;
+  }).join('');
+
+  el.innerHTML = `<div class="card shadow-sm" style="max-width:100%;overflow:hidden">
+    <div class="card-header"><span>Resultado — ${lista.length} registro(s)</span></div>
+    <div style="overflow-x:auto;width:100%">
+      <table class="table table-sm table-hover table-striped mb-0">
+        <thead class="table-dark"><tr>${headers}</tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>
+  </div>`;
+}
+
+async function deletarPosicao(id) {
+  if (!confirm('Excluir este registro?')) return;
+  const r = await api('DELETE', '/v1/posicao?id=' + id);
+  if (r?.mensagem) { toast(r.mensagem); consultarPosicao(); }
+  else if (r?.erro) toast(r.erro, 'danger');
+}
+
+async function inserirPosicao() {
+  const data = document.getElementById('p-ins-data').value;
+  if (!data) { toast('Informe a data', 'warning'); return; }
+  const payload = {
+    data_posicao_carteira: data,
+    codigo_versao_conteudo: parseInt(document.getElementById('p-ins-versao').value) || 1,
+    codigo_identificador_boleto: document.getElementById('p-ins-boleto').value,
+    descricao_veiculo: document.getElementById('p-ins-veiculo').value,
+    indicador_contraparte_afiliada: document.getElementById('p-ins-afiliada').value === 'true',
+    valor_mtm: parseFloat(document.getElementById('p-ins-mtm').value) || 0,
+    principal_remanescente: parseFloat(document.getElementById('p-ins-principal').value) || 0,
+    moeda_principal_remanescente: document.getElementById('p-ins-moeda').value,
+  };
+  const r = await api('POST', '/v1/posicao', payload);
+  if (r?.id) { toast('Registro inserido com sucesso!'); consultarPosicao(); }
+  else if (r?.erro) toast(r.erro, 'danger');
+}
+
+// ── CONCILIAÇÃO ────────────────────────────────────────────
+async function conciliar() {
+  const data = document.getElementById('conc-data').value;
+  if (!data) { toast('Informe a data', 'warning'); return; }
+  const r = await api('GET', '/v1/conciliacao?data=' + data);
+  const el = document.getElementById('conc-resultado');
+  if (!r || r.erro) { el.innerHTML = `<div class="alert alert-danger">${r?.erro || 'Erro'}</div>`; return; }
+
+  const inc = r.Inconsistencias || [];
+  const resumo = `<div class="row g-3 mb-3">
+    <div class="col-auto"><div class="card text-center px-4 py-2"><div class="fw-bold fs-4">${r.TotalPosicoes}</div><small>Posições</small></div></div>
+    <div class="col-auto"><div class="card text-center px-4 py-2"><div class="fw-bold fs-4">${r.TotalMovimentos}</div><small>Movimentos</small></div></div>
+    <div class="col-auto"><div class="card text-center px-4 py-2 ${inc.length ? 'border-warning' : 'border-success'}">
+      <div class="fw-bold fs-4 ${inc.length ? 'text-warning' : 'text-success'}">${inc.length}</div><small>Inconsistências</small></div></div>
+  </div>`;
+
+  if (inc.length === 0) {
+    el.innerHTML = resumo + `<div class="alert alert-success"><i class="bi bi-check-circle me-2"></i>Posição e movimento contábil estão conciliados para ${data}.</div>`;
+    return;
+  }
+
+  const rows = inc.map(i => `<tr>
+    <td>${i.Tipo === 'POSICAO_SEM_MOVIMENTO' ? '<span class="badge bg-danger">Sem movimento</span>' : '<span class="badge bg-warning text-dark">Duplicidade</span>'}</td>
+    <td>${i.CodigoIdentificadorBoleto}</td>
+    <td>${i.DescricaoRegra || '—'}</td>
+    <td>${i.IndicadorReversao ? 'Sim' : '—'}</td>
+    <td>${i.Detalhe}</td>
+  </tr>`).join('');
+
+  el.innerHTML = resumo + `<div class="card shadow-sm"><div class="card-body p-0">
+    <div class="table-responsive"><table class="table table-sm table-hover mb-0">
+      <thead class="table-dark"><tr><th>Tipo</th><th>Boleto</th><th>Regra</th><th>Reversão</th><th>Detalhe</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table></div>
+  </div></div>`;
+}
+
+// ── REGRAS ─────────────────────────────────────────────────
+async function carregarRegras() {
+  const r = await api('GET', '/v1/regras');
+  if (!r || r.erro) return;
+  const el = document.getElementById('r-lista');
+  if (!r.length) { el.innerHTML = '<div class="p-3 text-muted">Nenhuma regra cadastrada.</div>'; return; }
+
+  const rows = r.map(reg => `<tr>
+    <td>${reg.id}</td>
+    <td><strong>${reg.descricao}</strong></td>
+    <td>${reg.codigo_produto_corporativo}</td>
+    <td>
+      <button class="btn btn-sm btn-outline-primary" onclick="selecionarRegra(${reg.id}, '${reg.descricao.replace(/'/g,"\\'")}')">
+        <i class="bi bi-list-check me-1"></i>Ver Condições
+      </button>
+    </td>
+  </tr>`).join('');
+
+  el.innerHTML = `<div class="table-responsive"><table class="table table-sm table-hover mb-0">
+    <thead class="table-dark"><tr><th>ID</th><th>Descrição</th><th>Produto</th><th></th></tr></thead>
+    <tbody>${rows}</tbody>
+  </table></div>`;
+}
+
+async function selecionarRegra(id, nome) {
+  regraAtualId = id;
+  document.getElementById('modal-cond-titulo').textContent = nome;
+
+  const r = await api('GET', `/v1/regras/${id}/condicoes`);
+  const el = document.getElementById('modal-cond-body');
+
+  if (!r || r.erro || !r.length) {
+    el.innerHTML = `<div class="alert alert-info">Nenhuma condição cadastrada para esta regra.</div>`;
+  } else {
+    const rows = r.map(c => `<tr>
+      <td><code>${c.condicao}</code></td>
+      <td>${c.conta_debito}</td>
+      <td>${c.conta_credito}</td>
+      <td><code>${c.campo_valor}</code></td>
+      <td>${c.campo_moeda}</td>
+    </tr>`).join('');
+    el.innerHTML = `<div class="table-responsive"><table class="table table-sm table-hover mb-0">
+      <thead class="table-light"><tr><th>Condição</th><th>Débito</th><th>Crédito</th><th>Campo Valor</th><th>Campo Moeda</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table></div>`;
+  }
+
+  new bootstrap.Modal(document.getElementById('modalCondicoes')).show();
+}
+
+function showNovaCondicaoModal() {
+  bootstrap.Modal.getInstance(document.getElementById('modalCondicoes')).hide();
+  setTimeout(() => new bootstrap.Modal(document.getElementById('modalNovaCondicao')).show(), 300);
+}
+
+async function criarRegra() {
+  const desc = document.getElementById('r-nova-desc').value;
+  const cod = document.getElementById('r-nova-codigo').value;
+  if (!desc) { toast('Informe a descrição', 'warning'); return; }
+  const r = await api('POST', '/v1/regras', { descricao: desc, codigo_produto_corporativo: cod });
+  if (r?.id) {
+    toast('Regra criada!');
+    bootstrap.Modal.getInstance(document.getElementById('modalNovaRegra')).hide();
+    document.getElementById('r-nova-desc').value = '';
+    document.getElementById('r-nova-codigo').value = '';
+    carregarRegras();
+  } else if (r?.erro) toast(r.erro, 'danger');
+}
+
+async function criarCondicao() {
+  if (!regraAtualId) return;
+  const payload = {
+    condicao: document.getElementById('r-cond-expr').value,
+    conta_debito: document.getElementById('r-cond-debito').value,
+    conta_credito: document.getElementById('r-cond-credito').value,
+    campo_valor: document.getElementById('r-cond-valor').value,
+    campo_moeda: document.getElementById('r-cond-moeda').value,
+  };
+  const r = await api('POST', `/v1/regras/${regraAtualId}/condicoes`, payload);
+  if (r?.id) {
+    toast('Condição adicionada!');
+    bootstrap.Modal.getInstance(document.getElementById('modalNovaCondicao')).hide();
+    const nome = document.getElementById('modal-cond-titulo').textContent;
+    setTimeout(() => selecionarRegra(regraAtualId, nome), 300);
+  } else if (r?.erro) toast(r.erro, 'danger');
+}
+</script>
+</body>
+</html>
