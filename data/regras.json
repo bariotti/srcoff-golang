@@ -1,0 +1,74 @@
+[
+  {
+    "regras": [
+      {
+        "id": 1,
+        "descricao": "Registro de Notional",
+        "codigo_produto_corporativo": "NDF",
+        "ativo": true,
+        "condicoes": null
+      },
+      {
+        "id": 2,
+        "descricao": "Registro de Agio",
+        "codigo_produto_corporativo": "SWAP",
+        "ativo": true,
+        "condicoes": null
+      }
+    ],
+    "condicoes": [
+      {
+        "id": 1,
+        "id_regra": 1,
+        "condicao": "descricao_veiculo == \"NASSAU\"",
+        "conta_debito": "1111111111",
+        "conta_credito": "2222222222",
+        "campo_valor": "principal_remanescente",
+        "campo_moeda": "moeda_principal_remanescente",
+        "ativo": true
+      },
+      {
+        "id": 2,
+        "id_regra": 1,
+        "condicao": "descricao_veiculo == \"LICANIA\"",
+        "conta_debito": "3333333333",
+        "conta_credito": "4444444444",
+        "campo_valor": "principal_remanescente",
+        "campo_moeda": "moeda_principal_remanescente",
+        "ativo": true
+      },
+      {
+        "id": 3,
+        "id_regra": 2,
+        "condicao": "agio \u003e 0",
+        "conta_debito": "5555555555",
+        "conta_credito": "6666666666",
+        "campo_valor": "agio",
+        "campo_moeda": "moeda_principal_remanescente",
+        "ativo": true
+      },
+      {
+        "id": 4,
+        "id_regra": 2,
+        "condicao": "desagio \u003e 0",
+        "conta_debito": "7777777777",
+        "conta_credito": "8888888888",
+        "campo_valor": "desagio",
+        "campo_moeda": "moeda_principal_remanescente",
+        "ativo": false
+      },
+      {
+        "id": 5,
+        "id_regra": 2,
+        "condicao": "desagio \u003e 0",
+        "conta_debito": "7777777777",
+        "conta_credito": "8888888888",
+        "campo_valor": "desagio",
+        "campo_moeda": "moeda_desagio",
+        "ativo": true
+      }
+    ],
+    "next_regra": 3,
+    "next_cond": 6
+  }
+]

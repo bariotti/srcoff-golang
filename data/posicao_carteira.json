@@ -1,0 +1,71 @@
+[
+  {
+    "id": 1,
+    "data_posicao_carteira": "2026-04-10T00:00:00Z",
+    "codigo_versao_conteudo": 1,
+    "codigo_identificador_boleto": "BOL1",
+    "descricao_veiculo": "NASSAU",
+    "indicador_contraparte_afiliada": false,
+    "valor_mtm": 100,
+    "principal_remanescente": 1000,
+    "moeda_principal_remanescente": "BRL",
+    "codigo_produto_corporativo" : "NDF"
+  },
+  {
+    "id": 2,
+    "data_posicao_carteira": "2026-04-11T00:00:00Z",
+    "codigo_versao_conteudo": 1,
+    "codigo_identificador_boleto": "BOL1",
+    "descricao_veiculo": "NASSAU",
+    "indicador_contraparte_afiliada": false,
+    "valor_mtm": 100,
+    "principal_remanescente": 1000,
+    "moeda_principal_remanescente": "BRL",
+    "codigo_produto_corporativo" : "NDF"
+  },
+  {
+    "id": 3,
+    "data_posicao_carteira": "2026-04-12T00:00:00Z",
+    "codigo_versao_conteudo": 1,
+    "codigo_identificador_boleto": "BOL1",
+    "descricao_veiculo": "NASSAU",
+    "indicador_contraparte_afiliada": false,
+    "valor_mtm": 100,
+    "principal_remanescente": 700,
+    "moeda_principal_remanescente": "BRL",
+    "codigo_produto_corporativo" : "NDF"
+  },
+  {
+    "id": 4,
+    "data_posicao_carteira": "2026-04-13T00:00:00Z",
+    "codigo_versao_conteudo": 1,
+    "codigo_identificador_boleto": "BOL1",
+    "descricao_veiculo": "NASSAU",
+    "indicador_contraparte_afiliada": false,
+    "valor_mtm": 100,
+    "principal_remanescente": 700,
+    "moeda_principal_remanescente": "BRL",
+    "codigo_produto_corporativo" : "NDF"
+  },
+  {
+    "id": 5,
+    "data_posicao_carteira": "2026-04-14T00:00:00Z",
+    "codigo_versao_conteudo": 1,
+    "codigo_identificador_boleto": "BOL2",
+    "descricao_veiculo": "NASSAU",
+    "moeda_principal_remanescente": "BRL",
+    "codigo_produto_corporativo" : "SWAP",
+    "agio" : 100.55
+  },
+  {
+    "id": 5,
+    "data_posicao_carteira": "2026-04-15T00:00:00Z",
+    "codigo_versao_conteudo": 1,
+    "codigo_identificador_boleto": "BOL2",
+    "descricao_veiculo": "NASSAU",
+    "moeda_principal_remanescente": "BRL",
+    "codigo_produto_corporativo" : "SWAP",
+    "desagio" : 500.76,
+    "moeda_desagio" : "CNY"
+  }
+]
