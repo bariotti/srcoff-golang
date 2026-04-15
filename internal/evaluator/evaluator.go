@@ -71,6 +71,8 @@ func (e *ExprEvaluator) EvaluateValue(expression string, env map[string]interfac
 		return float64(v), nil
 	case int32:
 		return float64(v), nil
+	case nil:
+		return 0, nil // campo NULL tratado como zero
 	default:
 		return 0, fmt.Errorf("expressão de valor %q retornou tipo inesperado %T", expression, result)
 	}

@@ -16,5 +16,6 @@ type PosicaoCarteira struct {
 	ValorMTM                     float64                `json:"valor_mtm"`
 	PrincipalRemanescente        float64                `json:"principal_remanescente"`
 	MoedaPrincipalRemanescente   string                 `json:"moeda_principal_remanescente"`
+	Produto                      string                 `json:"produto"`
 	Campos                       map[string]interface{} `json:"campos,omitempty"`
 }

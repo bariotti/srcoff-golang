@@ -97,3 +97,12 @@ IF NOT EXISTS (
 BEGIN
     CREATE INDEX IX_movimento_data_reversao ON movimento_contabil (data_lote_contabil, indicador_reversao);
 END;
+
+-- Adicionar coluna produto na posicao_carteira (idempotente)
+IF NOT EXISTS (
+    SELECT 1 FROM sys.columns
+    WHERE object_id = OBJECT_ID('posicao_carteira') AND name = 'produto'
+)
+BEGIN
+    ALTER TABLE posicao_carteira ADD produto VARCHAR(50) NULL;
+END;

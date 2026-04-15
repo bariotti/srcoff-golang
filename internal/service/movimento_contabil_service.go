@@ -53,38 +53,38 @@ func NewMovimentoContabilService(
 }
 
 // GerarMovimento processa a posição de carteira para a data informada, avalia as regras
-// contábeis ativas e persiste os lançamentos resultantes em lote.
+// contábeis ativas, gera os estornos de D-1 em memória e persiste tudo em um único BulkInsert.
 func (s *MovimentoContabilService) GerarMovimento(ctx context.Context, data time.Time) error {
 	// 1. Buscar posição com versão máxima para a data
 	posicoes, err := s.posicaoRepo.BuscarPorDataEVersaoMaxima(ctx, data)
 	if err != nil {
 		return fmt.Errorf("erro ao buscar posicao_carteira: %w", err)
 	}
-
-	// 2. Retornar erro de ausência de dados se posição vazia
 	if len(posicoes) == 0 {
 		return fmt.Errorf("nenhum registro de posicao_carteira encontrado para a data %s", data.Format("2006-01-02"))
 	}
 
-	// 3. Carregar todas as regras e condições ativas
+	// 2. Carregar todas as regras e condições ativas
 	regras, err := s.regraRepo.ListarRegrasAtivas(ctx)
 	if err != nil {
 		return fmt.Errorf("erro ao carregar regras contábeis: %w", err)
 	}
 
-	// 4. Para cada posição × regra × condição: avaliar e montar lançamentos
+	// 3. Gerar lançamentos de D em memória
 	var lancamentos []model.LancamentoContabil
-
 	for _, posicao := range posicoes {
 		env := evaluator.PosicaoToEnv(posicao)
-
 		for _, regra := range regras {
+			// Filtrar pelo produto: só aplica a regra se o produto coincidir.
+			// Se posição ou regra não tiver produto definido, aplica para todos (retrocompatibilidade).
+			if regra.CodigoProdutoCorporativo != "" && posicao.Produto != "" &&
+				regra.CodigoProdutoCorporativo != posicao.Produto {
+				continue
+			}
 			for _, condicao := range regra.Condicoes {
 				if !condicao.Ativo {
 					continue
 				}
-
-				// Avaliar expressão booleana
 				ok, err := s.evaluator.EvaluateCondition(condicao.Condicao, env)
 				if err != nil {
 					evaluator.LogEvalError(data, posicao.CodigoIdentificadorBoleto, condicao.Condicao, err)
@@ -93,22 +93,17 @@ func (s *MovimentoContabilService) GerarMovimento(ctx context.Context, data time
 				if !ok {
 					continue
 				}
-
-				// Avaliar expressão de valor
 				valor, err := s.evaluator.EvaluateValue(condicao.CampoValor, env)
 				if err != nil {
 					evaluator.LogEvalError(data, posicao.CodigoIdentificadorBoleto, condicao.CampoValor, err)
 					continue
 				}
-
-				// Obter moeda do env
 				moeda := ""
 				if v, found := env[condicao.CampoMoeda]; found {
 					if s, ok := v.(string); ok {
 						moeda = s
 					}
 				}
-
 				lancamentos = append(lancamentos, model.LancamentoContabil{
 					DataLoteContabil:          data,
 					CodigoIdentificadorBoleto: posicao.CodigoIdentificadorBoleto,
@@ -125,22 +120,54 @@ func (s *MovimentoContabilService) GerarMovimento(ctx context.Context, data time
 		}
 	}
 
-	// 5. Calcular código_versao_conteudo como próxima versão
+	// 4. Calcular próxima versão para D
 	versao, err := s.movimentoRepo.ObterProximaVersao(ctx, data)
 	if err != nil {
 		return fmt.Errorf("erro ao obter próxima versão: %w", err)
 	}
-
-	// 6. Definir versão em todos os lançamentos
 	for i := range lancamentos {
 		lancamentos[i].CodigoVersaoConteudo = versao
 	}
 
-	// 7. Bulk insert de todos os lançamentos
-	if err := s.movimentoRepo.BulkInsert(ctx, lancamentos); err != nil {
+	// 5. Gerar estornos de D-1 em memória, considerando os lançamentos de D recém-gerados
+	dMenos1 := data.AddDate(0, 0, -1)
+	lancamentosD1, err := s.movimentoRepo.BuscarPorDataEIndicador(ctx, dMenos1, false)
+	if err != nil {
+		return fmt.Errorf("erro ao buscar lançamentos de D-1: %w", err)
+	}
+
+	var estornos []model.LancamentoContabil
+	if len(lancamentosD1) > 0 {
+		log.Printf("[movimento+estorno] gerando %d estornos de D-1 (%s) para D (%s)",
+			len(lancamentosD1), dMenos1.Format("2006-01-02"), data.Format("2006-01-02"))
+
+		for _, l1 := range lancamentosD1 {
+			estornos = append(estornos, model.LancamentoContabil{
+				DataLoteContabil:          data,
+				CodigoVersaoConteudo:      versao, // mesma versão do movimento de D
+				CodigoIdentificadorBoleto: l1.CodigoIdentificadorBoleto,
+				ValorLancamentoContabil:   l1.ValorLancamentoContabil,
+				MoedaLancamentoContabil:   l1.MoedaLancamentoContabil,
+				ContaDebito:               l1.ContaCredito, // contas invertidas
+				ContaCredito:              l1.ContaDebito,
+				IndicadorReversao:         true,
+				DescricaoRegraContabil:    l1.DescricaoRegraContabil,
+				DescricaoCondicaoContabil: l1.DescricaoCondicaoContabil,
+				IDRegraContabil:           l1.IDRegraContabil,
+			})
+		}
+	} else {
+		log.Printf("[movimento+estorno] sem lançamentos em D-1 (%s), estorno não gerado", dMenos1.Format("2006-01-02"))
+	}
+
+	// 6. Persistir movimento + estornos em um único BulkInsert
+	todos := append(lancamentos, estornos...)
+	if err := s.movimentoRepo.BulkInsert(ctx, todos); err != nil {
 		return fmt.Errorf("erro ao persistir lançamentos: %w", err)
 	}
 
+	log.Printf("[movimento+estorno] persistidos %d lançamentos e %d estornos para %s versão %d",
+		len(lancamentos), len(estornos), data.Format("2006-01-02"), versao)
 	return nil
 }
 
@@ -160,9 +187,13 @@ func (s *MovimentoContabilService) ExcluirMovimento(ctx context.Context, data ti
 	return s.movimentoRepo.ExcluirPorDataEVersao(ctx, data, versao)
 }
 
-// GerarEstorno compara os lançamentos de D-1 com os de D e gera estornos para
-// lançamentos com valor divergente ou sem correspondente em D.
+// GerarEstorno é o endpoint público — pode ser chamado manualmente pelo operador.
 func (s *MovimentoContabilService) GerarEstorno(ctx context.Context, data time.Time) error {
+	return s.gerarEstornoInterno(ctx, data)
+}
+
+// gerarEstornoInterno busca lançamentos de D-1 (versão vigente) e gera estornos para D.
+func (s *MovimentoContabilService) gerarEstornoInterno(ctx context.Context, data time.Time) error {
 	dMenos1 := data.AddDate(0, 0, -1)
 
 	// 1. Buscar lançamentos de D-1 (indicador_reversao=false)
@@ -211,10 +242,10 @@ func (s *MovimentoContabilService) GerarEstorno(ctx context.Context, data time.T
 
 	log.Printf("[estorno] gerando %d estornos para data=%s", len(estornos), data.Format("2006-01-02"))
 
-	// 6. Obter versão atual para a data D (estorno usa a mesma versão do lote, não incrementa)
-	versao, err := s.movimentoRepo.ObterVersaoAtual(ctx, data)
+	// 6. Obter próxima versão para a data D — garante que reprocessamentos não sobrescrevem versões anteriores
+	versao, err := s.movimentoRepo.ObterProximaVersao(ctx, data)
 	if err != nil {
-		return fmt.Errorf("erro ao obter versão atual para estorno: %w", err)
+		return fmt.Errorf("erro ao obter próxima versão para estorno: %w", err)
 	}
 	for i := range estornos {
 		estornos[i].CodigoVersaoConteudo = versao

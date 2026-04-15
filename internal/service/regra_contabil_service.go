@@ -14,6 +14,7 @@ type regraContabilRepoFull interface {
 	ListarCondicoes(ctx context.Context, idRegra int64) ([]model.CondicaoRegra, error)
 	CriarCondicao(ctx context.Context, condicao model.CondicaoRegra) (int64, error)
 	EditarCondicao(ctx context.Context, condicao model.CondicaoRegra) error
+	ExcluirCondicao(ctx context.Context, id int64) error
 }
 
 type RegraContabilService struct {
@@ -94,4 +95,11 @@ func (s *RegraContabilService) EditarCondicao(ctx context.Context, condicao mode
 		return fmt.Errorf("campo obrigatório ausente: campo_moeda")
 	}
 	return s.repo.EditarCondicao(ctx, condicao)
+}
+
+func (s *RegraContabilService) ExcluirCondicao(ctx context.Context, id int64) error {
+	if id == 0 {
+		return fmt.Errorf("id da condição é obrigatório")
+	}
+	return s.repo.ExcluirCondicao(ctx, id)
 }

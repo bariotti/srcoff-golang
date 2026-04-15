@@ -35,7 +35,6 @@
       <nav class="nav flex-column mt-2">
         <a class="nav-link active" href="#" onclick="showPage('operacao')"><i class="bi bi-play-circle me-2"></i>Operação</a>
         <a class="nav-link" href="#" onclick="showPage('consulta')"><i class="bi bi-search me-2"></i>Consulta</a>
-        <a class="nav-link" href="#" onclick="showPage('posicao')"><i class="bi bi-table me-2"></i>Posição</a>
         <a class="nav-link" href="#" onclick="showPage('conciliacao')"><i class="bi bi-check2-circle me-2"></i>Conciliação</a>
         <a class="nav-link" href="#" onclick="showPage('regras')"><i class="bi bi-gear me-2"></i>Regras</a>
       </nav>
@@ -56,21 +55,9 @@
                   <label class="form-label">Data</label>
                   <input type="date" id="op-data-movimento" class="form-control">
                 </div>
+                <p class="text-muted small">O estorno de D-1 será gerado automaticamente junto com o movimento.</p>
                 <button class="btn btn-primary w-100" onclick="gerarMovimento()"><i class="bi bi-play me-1"></i>Processar</button>
                 <div id="op-msg-movimento" class="mt-3"></div>
-              </div>
-            </div>
-          </div>
-          <div class="col-md-6">
-            <div class="card shadow-sm">
-              <div class="card-header bg-warning text-dark">Gerar Estorno</div>
-              <div class="card-body">
-                <div class="mb-3">
-                  <label class="form-label">Data</label>
-                  <input type="date" id="op-data-estorno" class="form-control">
-                </div>
-                <button class="btn btn-warning w-100" onclick="gerarEstorno()"><i class="bi bi-arrow-counterclockwise me-1"></i>Estornar</button>
-                <div id="op-msg-estorno" class="mt-3"></div>
               </div>
             </div>
           </div>
@@ -205,6 +192,7 @@
               <div class="col-md-1"><label class="form-label form-label-sm">MTM</label><input type="number" id="p-ins-mtm" class="form-control form-control-sm" step="0.000001" value="0"></div>
               <div class="col-md-1"><label class="form-label form-label-sm">Principal</label><input type="number" id="p-ins-principal" class="form-control form-control-sm" step="0.000001" value="0"></div>
               <div class="col-md-1"><label class="form-label form-label-sm">Moeda</label><input type="text" id="p-ins-moeda" class="form-control form-control-sm" value="BRL"></div>
+              <div class="col-md-1"><label class="form-label form-label-sm">Produto</label><input type="text" id="p-ins-produto" class="form-control form-control-sm" placeholder="ex: NDF"></div>
               <div class="col-md-1 d-flex align-items-end"><button class="btn btn-success btn-sm w-100" onclick="inserirPosicao()"><i class="bi bi-plus-circle me-1"></i>Inserir</button></div>
             </div>
           </div>
@@ -228,6 +216,23 @@
           </div>
         </div>
         <div id="conc-resultado"></div>
+      </div>
+
+      <!-- ==================== CONSULTA IA ==================== -->
+      <div id="page-nlquery" class="page">
+        <h4 class="mb-4"><i class="bi bi-chat-dots me-2"></i>Consulta em Linguagem Natural</h4>
+        <div class="card shadow-sm mb-3">
+          <div class="card-body">
+            <p class="text-muted mb-3">Faça uma pergunta em português sobre os dados do sistema. O Gemini irá converter para SQL e executar automaticamente.</p>
+            <div class="mb-3">
+              <label class="form-label">Sua pergunta</label>
+              <textarea id="nl-pergunta" class="form-control" rows="3"
+                placeholder="Ex: Some todos os valores da conta de débito 111111111&#10;Ex: Quantos lançamentos existem para a data 09/04/2026?&#10;Ex: Quais boletos têm mais de um lançamento?"></textarea>
+            </div>
+            <button class="btn btn-primary" onclick="consultarIA()"><i class="bi bi-send me-1"></i>Perguntar</button>
+          </div>
+        </div>
+        <div id="nl-resultado"></div>
       </div>
 
       <!-- ==================== REGRAS ==================== -->
@@ -527,6 +532,7 @@ async function inserirPosicao() {
     valor_mtm: parseFloat(document.getElementById('p-ins-mtm').value) || 0,
     principal_remanescente: parseFloat(document.getElementById('p-ins-principal').value) || 0,
     moeda_principal_remanescente: document.getElementById('p-ins-moeda').value,
+    produto: document.getElementById('p-ins-produto').value,
   };
   const r = await api('POST', '/v1/posicao', payload);
   if (r?.id) { toast('Registro inserido com sucesso!'); consultarPosicao(); }
@@ -570,6 +576,47 @@ async function conciliar() {
   </div></div>`;
 }
 
+// ── CONSULTA IA ────────────────────────────────────────────
+async function consultarIA() {
+  const pergunta = document.getElementById('nl-pergunta').value.trim();
+  if (!pergunta) { toast('Informe sua pergunta', 'warning'); return; }
+  const el = document.getElementById('nl-resultado');
+  el.innerHTML = '<div class="text-muted"><i class="bi bi-hourglass-split me-1"></i>Gerando SQL e consultando...</div>';
+
+  const r = await api('POST', '/v1/nlquery', { pergunta });
+  if (!r) { el.innerHTML = ''; return; }
+  if (r.erro) {
+    el.innerHTML = `<div class="alert alert-danger">${r.erro}${r.sql ? `<br><small><code>${r.sql}</code></small>` : ''}</div>`;
+    return;
+  }
+
+  const sqlBox = `<div class="card shadow-sm mb-3 border-info">
+    <div class="card-header bg-info bg-opacity-10 text-info py-2"><i class="bi bi-code-slash me-1"></i>SQL gerado</div>
+    <div class="card-body py-2"><code>${r.sql}</code></div>
+  </div>`;
+
+  if (!r.resultado || r.resultado.length === 0) {
+    el.innerHTML = sqlBox + `<div class="alert alert-info">Nenhum resultado encontrado.</div>`;
+    return;
+  }
+
+  const cols = Object.keys(r.resultado[0]);
+  const headers = cols.map(c => `<th>${c}</th>`).join('');
+  const rows = r.resultado.map(row =>
+    `<tr>${cols.map(c => `<td>${row[c] !== null && row[c] !== undefined ? row[c] : ''}</td>`).join('')}</tr>`
+  ).join('');
+
+  el.innerHTML = sqlBox + `<div class="card shadow-sm">
+    <div class="card-header py-2">${r.total} resultado(s)</div>
+    <div style="overflow-x:auto">
+      <table class="table table-sm table-hover table-striped mb-0">
+        <thead class="table-dark"><tr>${headers}</tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>
+  </div>`;
+}
+
 // ── REGRAS ─────────────────────────────────────────────────
 async function carregarRegras() {
   const r = await api('GET', '/v1/regras');
@@ -610,9 +657,10 @@ async function selecionarRegra(id, nome) {
       <td>${c.conta_credito}</td>
       <td><code>${c.campo_valor}</code></td>
       <td>${c.campo_moeda}</td>
+      <td><button class="btn btn-danger btn-sm py-0 px-1" onclick="excluirCondicao(${c.id}, '${nome.replace(/'/g,"\\'")}')"><i class="bi bi-trash"></i></button></td>
     </tr>`).join('');
     el.innerHTML = `<div class="table-responsive"><table class="table table-sm table-hover mb-0">
-      <thead class="table-light"><tr><th>Condição</th><th>Débito</th><th>Crédito</th><th>Campo Valor</th><th>Campo Moeda</th></tr></thead>
+      <thead class="table-light"><tr><th>Condição</th><th>Débito</th><th>Crédito</th><th>Campo Valor</th><th>Campo Moeda</th><th></th></tr></thead>
       <tbody>${rows}</tbody>
     </table></div>`;
   }
@@ -623,6 +671,17 @@ async function selecionarRegra(id, nome) {
 function showNovaCondicaoModal() {
   bootstrap.Modal.getInstance(document.getElementById('modalCondicoes')).hide();
   setTimeout(() => new bootstrap.Modal(document.getElementById('modalNovaCondicao')).show(), 300);
+}
+
+async function excluirCondicao(id, nomeRegra) {
+  if (!confirm('Excluir esta condição?')) return;
+  const r = await api('DELETE', `/v1/condicoes/${id}`);
+  if (r?.mensagem) {
+    toast(r.mensagem);
+    selecionarRegra(regraAtualId, nomeRegra);
+  } else if (r?.erro) {
+    toast(r.erro, 'danger');
+  }
 }
 
 async function criarRegra() {

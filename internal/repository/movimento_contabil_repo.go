@@ -60,7 +60,8 @@ func (r *MovimentoContabilRepo) BuscarPorDataEIndicador(ctx context.Context, dat
 	if indicadorReversao {
 		ind = 1
 	}
-	query := "SELECT id, data_lote_contabil, codigo_versao_conteudo, codigo_identificador_boleto, valor_lancamento_contabil, moeda_lancamento_contabil, conta_debito, conta_credito, indicador_reversao, descricao_regra_contabil, descricao_condicao_contabil, id_regra_contabil FROM movimento_contabil WHERE data_lote_contabil = '" + dataStr + "' AND indicador_reversao = " + fmt.Sprintf("%d", ind)
+	// Sempre usa a versão vigente (MAX) para o estorno
+	query := "SELECT id, data_lote_contabil, codigo_versao_conteudo, codigo_identificador_boleto, valor_lancamento_contabil, moeda_lancamento_contabil, conta_debito, conta_credito, indicador_reversao, descricao_regra_contabil, descricao_condicao_contabil, id_regra_contabil FROM movimento_contabil WHERE data_lote_contabil = '" + dataStr + "' AND indicador_reversao = " + fmt.Sprintf("%d", ind) + " AND codigo_versao_conteudo = (SELECT MAX(codigo_versao_conteudo) FROM movimento_contabil WHERE data_lote_contabil = '" + dataStr + "')"
 
 	rows, err := r.db.QueryContext(ctx, query)
 	if err != nil {
@@ -159,6 +160,8 @@ func (r *MovimentoContabilRepo) consultarFiltrado(ctx context.Context, dataInici
 
 	filtroSaldoZero := ""
 	if excluirSaldoZero {
+		// A comparação de saldo zero sempre usa a versão vigente (MAX) de cada data,
+		// independente do filtro de versão selecionado pelo usuário.
 		filtroSaldoZero = `AND (
 			SELECT SUM(CASE WHEN m2.indicador_reversao = 0
 			                THEN  m2.valor_lancamento_contabil
@@ -169,6 +172,7 @@ func (r *MovimentoContabilRepo) consultarFiltrado(ctx context.Context, dataInici
 			  AND m2.codigo_identificador_boleto = m.codigo_identificador_boleto
 			  AND m2.valor_lancamento_contabil   = m.valor_lancamento_contabil
 			  AND m2.id_regra_contabil           = m.id_regra_contabil
+			  AND m2.codigo_versao_conteudo      = (SELECT MAX(m3.codigo_versao_conteudo) FROM movimento_contabil m3 WHERE m3.data_lote_contabil = m.data_lote_contabil)
 		) <> 0`
 	}
 

@@ -50,6 +50,7 @@ func (h *PosicaoCarteiraHandler) Inserir(w http.ResponseWriter, r *http.Request)
 		ValorMTM                     float64 `json:"valor_mtm"`
 		PrincipalRemanescente        float64 `json:"principal_remanescente"`
 		MoedaPrincipalRemanescente   string  `json:"moeda_principal_remanescente"`
+		Produto                      string  `json:"produto"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&dto); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"erro": err.Error()})
@@ -69,6 +70,7 @@ func (h *PosicaoCarteiraHandler) Inserir(w http.ResponseWriter, r *http.Request)
 		ValorMTM:                     dto.ValorMTM,
 		PrincipalRemanescente:        dto.PrincipalRemanescente,
 		MoedaPrincipalRemanescente:   dto.MoedaPrincipalRemanescente,
+		Produto:                      dto.Produto,
 	}
 	id, err := h.svc.Inserir(r.Context(), p)
 	if err != nil {

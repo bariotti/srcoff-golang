@@ -1,6 +1,7 @@
 package main
 
 import (
+	"database/sql"
 	"log"
 	"net/http"
 	"os"
@@ -18,7 +19,7 @@ func main() {
 	// 1. Selecionar backend de armazenamento via STORAGE_BACKEND (sqlserver | file)
 	backend := os.Getenv("STORAGE_BACKEND")
 	if backend == "" {
-		backend = "sqlserver"
+		backend = "file"
 	}
 
 	var (
@@ -26,6 +27,8 @@ func main() {
 		regraRepo     repository.RegraContabilRepository
 		movimentoRepo repository.MovimentoContabilRepository
 	)
+
+	var rawSQLDB *sql.DB
 
 	switch backend {
 	case "file":
@@ -39,12 +42,12 @@ func main() {
 		movimentoRepo = filerepo.NewMovimentoContabilRepo(dir)
 
 	default: // sqlserver
-		sqlDB := db.Connect()
-		defer sqlDB.Close()
+		rawSQLDB = db.Connect()
+		defer rawSQLDB.Close()
 		log.Printf("Backend: SQL Server")
-		posicaoRepo = repository.NewPosicaoCarteiraRepo(sqlDB)
-		regraRepo = repository.NewRegraContabilRepo(sqlDB)
-		movimentoRepo = repository.NewMovimentoContabilRepo(sqlDB)
+		posicaoRepo = repository.NewPosicaoCarteiraRepo(rawSQLDB)
+		regraRepo = repository.NewRegraContabilRepo(rawSQLDB)
+		movimentoRepo = repository.NewMovimentoContabilRepo(rawSQLDB)
 	}
 
 	// 2. Instanciar avaliador de expressões
@@ -62,6 +65,7 @@ func main() {
 	conciliacaoHandler := handler.NewConciliacaoHandler(conciliacaoSvc)
 	posicaoHandler := handler.NewPosicaoCarteiraHandler(posicaoSvc)
 	exportHandler := handler.NewExportHandler(movimentoSvc)
+	nlQueryHandler := handler.NewNLQueryHandler(rawSQLDB)
 
 	// 5. Registrar rotas
 	http.HandleFunc("/api/v1/movimento-contabil", func(w http.ResponseWriter, r *http.Request) {
@@ -100,8 +104,15 @@ func main() {
 		}
 	})
 
-	http.HandleFunc("/api/v1/condicoes/", regraHandler.EditarCondicao)
+	http.HandleFunc("/api/v1/condicoes/", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodDelete {
+			regraHandler.ExcluirCondicao(w, r)
+		} else {
+			regraHandler.EditarCondicao(w, r)
+		}
+	})
 	http.HandleFunc("/api/v1/conciliacao", conciliacaoHandler.Conciliar)
+	http.HandleFunc("/api/v1/nlquery", nlQueryHandler.Query)
 	http.HandleFunc("/api/v1/movimento-contabil/export", exportHandler.ExportMovimentoCSV)
 	http.HandleFunc("/api/v1/movimento-contabil/export-txt", exportHandler.ExportMovimentoTXT)
 	http.HandleFunc("/api/v1/posicao", func(w http.ResponseWriter, r *http.Request) {

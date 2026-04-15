@@ -23,6 +23,7 @@ type RegraContabilRepository interface {
 	ListarCondicoes(ctx context.Context, idRegra int64) ([]model.CondicaoRegra, error)
 	CriarCondicao(ctx context.Context, condicao model.CondicaoRegra) (int64, error)
 	EditarCondicao(ctx context.Context, condicao model.CondicaoRegra) error
+	ExcluirCondicao(ctx context.Context, id int64) error
 }
 
 // MovimentoContabilRepository define o contrato de acesso ao movimento contábil.

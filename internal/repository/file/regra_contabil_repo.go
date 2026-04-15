@@ -132,3 +132,17 @@ func (r *RegraContabilRepo) EditarCondicao(_ context.Context, condicao model.Con
 	}
 	return fmt.Errorf("condição %d não encontrada", condicao.ID)
 }
+
+func (r *RegraContabilRepo) ExcluirCondicao(_ context.Context, id int64) error {
+	s, err := r.load()
+	if err != nil {
+		return err
+	}
+	for i, c := range s.Condicoes {
+		if c.ID == id {
+			s.Condicoes[i].Ativo = false
+			return r.save(s)
+		}
+	}
+	return fmt.Errorf("condição %d não encontrada", id)
+}

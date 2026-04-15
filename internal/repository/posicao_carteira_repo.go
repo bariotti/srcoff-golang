@@ -58,7 +58,7 @@ func (r *PosicaoCarteiraRepo) Inserir(ctx context.Context, p model.PosicaoCartei
 		afiliada = 1
 	}
 	query := fmt.Sprintf(
-		"INSERT INTO posicao_carteira (data_posicao_carteira, codigo_versao_conteudo, codigo_identificador_boleto, descricao_veiculo, indicador_contraparte_afiliada, valor_mtm, principal_remanescente, moeda_principal_remanescente) VALUES ('%s', %d, '%s', '%s', %d, %f, %f, '%s'); SELECT SCOPE_IDENTITY()",
+		"INSERT INTO posicao_carteira (data_posicao_carteira, codigo_versao_conteudo, codigo_identificador_boleto, descricao_veiculo, indicador_contraparte_afiliada, valor_mtm, principal_remanescente, moeda_principal_remanescente, produto) VALUES ('%s', %d, '%s', '%s', %d, %f, %f, '%s', '%s'); SELECT SCOPE_IDENTITY()",
 		p.DataPosicaoCarteira.Format("2006-01-02"),
 		p.CodigoVersaoConteudo,
 		strings.ReplaceAll(p.CodigoIdentificadorBoleto, "'", "''"),
@@ -67,6 +67,7 @@ func (r *PosicaoCarteiraRepo) Inserir(ctx context.Context, p model.PosicaoCartei
 		p.ValorMTM,
 		p.PrincipalRemanescente,
 		strings.ReplaceAll(p.MoedaPrincipalRemanescente, "'", "''"),
+		strings.ReplaceAll(p.Produto, "'", "''"),
 	)
 	var id int64
 	err := r.db.QueryRowContext(ctx, query).Scan(&id)
@@ -115,6 +116,7 @@ func scanPosicoes(rows *sql.Rows) ([]model.PosicaoCarteira, error) {
 		p.ValorMTM = toFloat64(campos["valor_mtm"])
 		p.PrincipalRemanescente = toFloat64(campos["principal_remanescente"])
 		p.MoedaPrincipalRemanescente = toStr(campos["moeda_principal_remanescente"])
+		p.Produto = toStr(campos["produto"])
 		if t, ok := campos["data_posicao_carteira"].(time.Time); ok {
 			p.DataPosicaoCarteira = t
 		}

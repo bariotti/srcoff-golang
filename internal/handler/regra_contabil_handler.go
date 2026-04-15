@@ -17,6 +17,7 @@ type regraContabilSvc interface {
 	ListarCondicoes(ctx context.Context, idRegra int64) ([]model.CondicaoRegra, error)
 	CriarCondicao(ctx context.Context, condicao model.CondicaoRegra) (int64, error)
 	EditarCondicao(ctx context.Context, condicao model.CondicaoRegra) error
+	ExcluirCondicao(ctx context.Context, id int64) error
 }
 
 // RegraContabilHandler expõe os endpoints de regras contábeis.
@@ -178,4 +179,23 @@ func (h *RegraContabilHandler) EditarCondicao(w http.ResponseWriter, r *http.Req
 	}
 
 	writeJSON(w, http.StatusOK, map[string]string{"mensagem": "condição atualizada com sucesso"})
+}
+
+// ExcluirCondicao trata DELETE /api/v1/condicoes/{id}.
+func (h *RegraContabilHandler) ExcluirCondicao(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodDelete {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	idStr := strings.TrimPrefix(r.URL.Path, "/api/v1/condicoes/")
+	id, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil || id == 0 {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"erro": "id inválido"})
+		return
+	}
+	if err := h.svc.ExcluirCondicao(r.Context(), id); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"erro": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"mensagem": "condição excluída com sucesso"})
 }

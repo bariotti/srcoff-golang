@@ -121,3 +121,10 @@ func (r *RegraContabilRepo) EditarCondicao(ctx context.Context, condicao model.C
 	)
 	return err
 }
+
+func (r *RegraContabilRepo) ExcluirCondicao(ctx context.Context, id int64) error {
+	_, err := r.db.ExecContext(ctx,
+		fmt.Sprintf("UPDATE condicao_regra SET ativo = 0 WHERE id = %d", id),
+	)
+	return err
+}
