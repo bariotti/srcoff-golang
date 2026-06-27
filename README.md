@@ -488,3 +488,41 @@ Para restaurar:
 ```bash
 git checkout <tag>
 ```
+## Telas do Sistema
+
+### Consulta e Cadastro de Regras/Condições
+
+<img width="2557" height="419" alt="image" src="https://github.com/user-attachments/assets/6c25ec2b-a086-4f1c-a987-ca6825ced747" />
+
+<img width="1140" height="228" alt="image" src="https://github.com/user-attachments/assets/7c82b558-3bad-49ac-93ab-39b2c12d867e" />
+
+<img width="501" height="408" alt="image" src="https://github.com/user-attachments/assets/67277ea5-c363-495a-967b-7d9c5c9208ff" />
+
+<img width="805" height="398" alt="image" src="https://github.com/user-attachments/assets/0eb4d187-3a99-408f-aa67-cb396d49eb47" />
+
+### Execução do Movimeto Contábil
+
+<img width="1479" height="476" alt="image" src="https://github.com/user-attachments/assets/2d187d7f-ee5f-457c-9f0b-20bb9630a18d" />
+
+### Consulta do Movimento Contábil
+
+<img width="2559" height="461" alt="image" src="https://github.com/user-attachments/assets/c9cf4935-5eda-48c9-9e8b-c8fba810cfe4" />
+
+### Extrações em .txt e .csv do Movimento Contábil
+
+<img width="590" height="172" alt="image" src="https://github.com/user-attachments/assets/177ace33-4660-434f-9c7c-fc3da78eb151" />
+
+<img width="1035" height="180" alt="image" src="https://github.com/user-attachments/assets/ba4be7e3-1789-4db9-9244-3f53bfa2f955" />
+
+<img width="2129" height="531" alt="image" src="https://github.com/user-attachments/assets/8ff269f8-fd1a-44aa-84da-9728b3d30b4f" />
+
+### Conciliação Movimento x Carteira
+
+<img width="2553" height="687" alt="image" src="https://github.com/user-attachments/assets/323acce0-1c12-4b90-b40f-28819015d329" />
+
+### Consulta e Cadastro de Posição
+
+Essa tela não faz parte da feature de roteirização contábil, porém foi adicinada para facilitar os testes da POC
+
+<img width="2560" height="621" alt="image" src="https://github.com/user-attachments/assets/ba61323c-02b4-4d48-a788-5ea0dd3f3b5b" />
+
