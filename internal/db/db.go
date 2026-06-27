@@ -14,7 +14,7 @@ import (
 func Connect() *sql.DB {
 	dbServer := os.Getenv("DB_SERVER")
 	if dbServer == "" {
-		dbServer = `DESKTOP-B1QQIIN\SQLEXPRESS`
+		dbServer = `LOCALHOST\SQLEXPRESS`
 	}
 	dbName := os.Getenv("DB_NAME")
 	if dbName == "" {

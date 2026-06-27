@@ -307,24 +307,24 @@ Página para cadastrar e manter as regras de roteamento contábil.
 
 ## API REST
 
-| Método | Endpoint | Descrição |
-|--------|----------|-----------|
-| POST | `/api/v1/movimento-contabil` | Gera movimento contábil |
-| GET | `/api/v1/movimento-contabil` | Consulta lançamentos paginados |
-| DELETE | `/api/v1/movimento-contabil` | Exclui lançamentos por data/versão |
-| GET | `/api/v1/movimento-contabil/export` | Exporta CSV |
-| GET | `/api/v1/movimento-contabil/export-txt` | Exporta TXT estruturado |
-| POST | `/api/v1/estorno` | Gera estorno |
-| GET | `/api/v1/conciliacao` | Executa conciliação |
-| GET | `/api/v1/posicao` | Lista posições por data |
-| POST | `/api/v1/posicao` | Insere posição |
-| DELETE | `/api/v1/posicao` | Exclui posição por ID |
-| GET | `/api/v1/regras` | Lista regras |
-| POST | `/api/v1/regras` | Cria regra |
-| PUT | `/api/v1/regras/{id}` | Edita regra |
-| GET | `/api/v1/regras/{id}/condicoes` | Lista condições |
-| POST | `/api/v1/regras/{id}/condicoes` | Cria condição |
-| PUT | `/api/v1/condicoes/{id}` | Edita condição |
+| Método | Endpoint                                | Descrição                          |
+| --------| -----------------------------------------| ------------------------------------|
+| POST   | `/api/v1/movimento-contabil`            | Gera movimento contábil            |
+| GET    | `/api/v1/movimento-contabil`            | Consulta lançamentos paginados     |
+| DELETE | `/api/v1/movimento-contabil`            | Exclui lançamentos por data/versão |
+| GET    | `/api/v1/movimento-contabil/export`     | Exporta CSV                        |
+| GET    | `/api/v1/movimento-contabil/export-txt` | Exporta TXT estruturado            |
+| POST   | `/api/v1/estorno`                       | Gera estorno                       |
+| GET    | `/api/v1/conciliacao`                   | Executa conciliação                |
+| GET    | `/api/v1/posicao`                       | Lista posições por data            |
+| POST   | `/api/v1/posicao`                       | Insere posição                     |
+| DELETE | `/api/v1/posicao`                       | Exclui posição por ID              |
+| GET    | `/api/v1/regras`                        | Lista regras                       |
+| POST   | `/api/v1/regras`                        | Cria regra                         |
+| PUT    | `/api/v1/regras/{id}`                   | Edita regra                        |
+| GET    | `/api/v1/regras/{id}/condicoes`         | Lista condições                    |
+| POST   | `/api/v1/regras/{id}/condicoes`         | Cria condição                      |
+| PUT    | `/api/v1/condicoes/{id}`                | Edita condição                     |
 
 ---
 
@@ -398,4 +398,93 @@ sqlcmd -S localhost\SQLEXPRESS -d srcoff -i migrations/seed_regras_condicoes.sql
 
 # Inserir massa de teste de posição (09/04/2026)
 sqlcmd -S localhost\SQLEXPRESS -d srcoff -i migrations/seed_posicao_carteira_20260409.sql
+```
+
+
+---
+
+## Atualizações Recentes
+
+### Flag Posta/Reverte nas Regras Contábeis
+
+Ao cadastrar uma regra contábil, é possível marcar se ela é **Posta/Reverte**:
+
+- **Marcada (padrão):** os lançamentos gerados por essa regra serão estornados normalmente no processo de estorno de D-1
+- **Desmarcada:** os lançamentos **não serão estornados**, útil para regras de lançamentos definitivos (ex: tarifas, ajustes permanentes)
+
+Para SQL Server, execute o migration:
+```sql
+ALTER TABLE regra_contabil ADD posta_reverte BIT NOT NULL DEFAULT 1;
+```
+
+---
+
+### Campo Produto na Posição de Carteira
+
+Cada registro de posição pode ter um campo `produto` (ex: `NDF`, `SWAP`). As regras contábeis só são aplicadas às posições cujo produto coincide com o `codigo_produto_corporativo` da regra.
+
+- Se a posição não tiver produto → regra se aplica a todas
+- Se a regra não tiver produto → aplica a todas as posições
+
+Para SQL Server:
+```sql
+ALTER TABLE posicao_carteira ADD produto VARCHAR(50) NULL;
+```
+
+---
+
+### Conciliação Inteligente com IA (Gemini)
+
+Nova seção na página de **Conciliação** que permite descrever em linguagem natural o que deseja verificar. O sistema analisa a posição e o movimento contábil da data e retorna:
+
+1. **Diagnóstico** — explicação sobre a coerência entre posição e movimento
+2. **Sugestão de ajuste** — lançamentos contábeis recomendados (se houver inconsistência)
+3. **Confirmação** — o usuário decide se aplica ou descarta os ajustes sugeridos
+
+**Configuração necessária:**
+```bash
+# Windows CMD
+set GEMINI_API_KEY=SUA_CHAVE_AQUI
+
+# PowerShell
+$env:GEMINI_API_KEY="SUA_CHAVE_AQUI"
+```
+
+Obtenha sua chave em [aistudio.google.com](https://aistudio.google.com).
+
+**Exemplo de pergunta:**
+> "As contas 111111111 e 222222222 são contas de Principal para o produto NDF. O saldo de principal_remanescente na posição está coerente com os saldos dessas contas no movimento?"
+
+---
+
+### Estrutura de Navegação (Frontend SPA)
+
+O frontend foi reescrito como SPA (Single Page Application) com Bootstrap 5:
+
+| Página | Rota | Descrição |
+|--------|------|-----------|
+| Operação | `/` | Gerar movimento contábil (estorno automático incluso) |
+| Consulta | `/consulta` | Consultar, exportar (CSV/TXT) e excluir movimentos |
+| Posição | `/posicao` | Inserir, consultar e excluir registros de posição |
+| Conciliação | `/conciliacao` | Conciliação simples e inteligente com IA |
+| Regras | `/regras` | Cadastrar e manter regras e condições contábeis |
+
+> Para desfazer o redesign Bootstrap e voltar ao frontend anterior:
+> ```bash
+> git checkout v1.0-pre-bootstrap -- cmd/frontend/main.go cmd/frontend/templates/
+> go build -o frontend.exe ./cmd/frontend
+> ```
+
+---
+
+### Pontos de Restore (Git Tags)
+
+| Tag | Descrição |
+|-----|-----------|
+| `v1.0-pre-bootstrap` | Antes do redesign frontend com Bootstrap |
+| `v1.1-pre-conciliacao-ia` | Antes da conciliação inteligente com Gemini |
+
+Para restaurar:
+```bash
+git checkout <tag>
 ```

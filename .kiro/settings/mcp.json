@@ -4,7 +4,7 @@
       "command": "npx",
       "args": ["-y", "mssql-mcp"],
       "env": {
-        "MSSQL_CONNECTION_STRING": "Server=DESKTOP-B1QQIIN\\SQLEXPRESS;Database=srcoff;Trusted_Connection=True;TrustServerCertificate=True"
+        "MSSQL_CONNECTION_STRING": "Server=LOCALHOST\\SQLEXPRESS;Database=srcoff;Trusted_Connection=True;TrustServerCertificate=True"
       },
       "disabled": false,
       "autoApprove": ["query", "execute_query", "list_tables", "describe_table"]
