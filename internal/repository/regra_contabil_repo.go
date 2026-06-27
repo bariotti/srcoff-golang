@@ -18,7 +18,7 @@ func NewRegraContabilRepo(db *sql.DB) *RegraContabilRepo {
 }
 
 func (r *RegraContabilRepo) ListarRegrasAtivas(ctx context.Context) ([]model.RegraContabil, error) {
-	rows, err := r.db.QueryContext(ctx, "SELECT id, descricao, codigo_produto_corporativo, ativo FROM regra_contabil WHERE ativo = 1")
+	rows, err := r.db.QueryContext(ctx, "SELECT id, descricao, codigo_produto_corporativo, ativo, ISNULL(posta_reverte, 1) FROM regra_contabil WHERE ativo = 1")
 	if err != nil {
 		return nil, err
 	}
@@ -27,7 +27,7 @@ func (r *RegraContabilRepo) ListarRegrasAtivas(ctx context.Context) ([]model.Reg
 	var regras []model.RegraContabil
 	for rows.Next() {
 		var reg model.RegraContabil
-		if err := rows.Scan(&reg.ID, &reg.Descricao, &reg.CodigoProdutoCorporativo, &reg.Ativo); err != nil {
+		if err := rows.Scan(&reg.ID, &reg.Descricao, &reg.CodigoProdutoCorporativo, &reg.Ativo, &reg.PostaReverte); err != nil {
 			return nil, err
 		}
 		regras = append(regras, reg)
@@ -53,8 +53,12 @@ func esc(s string) string {
 
 func (r *RegraContabilRepo) CriarRegra(ctx context.Context, regra model.RegraContabil) (int64, error) {
 	var id int64
+	postaReverte := 1
+	if !regra.PostaReverte {
+		postaReverte = 0
+	}
 	err := r.db.QueryRowContext(ctx,
-		"INSERT INTO regra_contabil (descricao, codigo_produto_corporativo, ativo) VALUES ('"+esc(regra.Descricao)+"', '"+esc(regra.CodigoProdutoCorporativo)+"', 1); SELECT SCOPE_IDENTITY()",
+		"INSERT INTO regra_contabil (descricao, codigo_produto_corporativo, ativo, posta_reverte) VALUES ('"+esc(regra.Descricao)+"', '"+esc(regra.CodigoProdutoCorporativo)+"', 1, "+fmt.Sprintf("%d", postaReverte)+"); SELECT SCOPE_IDENTITY()",
 	).Scan(&id)
 	if err != nil {
 		return 0, err
@@ -67,9 +71,13 @@ func (r *RegraContabilRepo) EditarRegra(ctx context.Context, regra model.RegraCo
 	if regra.Ativo {
 		ativo = 1
 	}
+	postaReverte := 0
+	if regra.PostaReverte {
+		postaReverte = 1
+	}
 	_, err := r.db.ExecContext(ctx,
-		fmt.Sprintf("UPDATE regra_contabil SET descricao = '%s', codigo_produto_corporativo = '%s', ativo = %d WHERE id = %d",
-			esc(regra.Descricao), esc(regra.CodigoProdutoCorporativo), ativo, regra.ID),
+		fmt.Sprintf("UPDATE regra_contabil SET descricao = '%s', codigo_produto_corporativo = '%s', ativo = %d, posta_reverte = %d WHERE id = %d",
+			esc(regra.Descricao), esc(regra.CodigoProdutoCorporativo), ativo, postaReverte, regra.ID),
 	)
 	return err
 }

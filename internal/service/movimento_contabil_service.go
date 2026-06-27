@@ -138,17 +138,34 @@ func (s *MovimentoContabilService) GerarMovimento(ctx context.Context, data time
 
 	var estornos []model.LancamentoContabil
 	if len(lancamentosD1) > 0 {
-		log.Printf("[movimento+estorno] gerando %d estornos de D-1 (%s) para D (%s)",
-			len(lancamentosD1), dMenos1.Format("2006-01-02"), data.Format("2006-01-02"))
+		// Carregar regras para verificar flag posta_reverte
+		regras, err := s.regraRepo.ListarRegrasAtivas(ctx)
+		if err != nil {
+			return fmt.Errorf("erro ao carregar regras para estorno: %w", err)
+		}
+		// Montar mapa de id_regra → posta_reverte
+		regraPostaReverte := make(map[int64]bool, len(regras))
+		for _, reg := range regras {
+			regraPostaReverte[reg.ID] = reg.PostaReverte
+		}
+
+		log.Printf("[movimento+estorno] gerando estornos de D-1 (%s) para D (%s) — total D-1: %d",
+			dMenos1.Format("2006-01-02"), data.Format("2006-01-02"), len(lancamentosD1))
 
 		for _, l1 := range lancamentosD1 {
+			// Só estorna se a regra for posta_reverte=true (ou se não encontrada, estorna por padrão)
+			if pr, found := regraPostaReverte[l1.IDRegraContabil]; found && !pr {
+				log.Printf("[movimento+estorno] lançamento boleto=%s regra_id=%d ignorado (posta_reverte=false)",
+					l1.CodigoIdentificadorBoleto, l1.IDRegraContabil)
+				continue
+			}
 			estornos = append(estornos, model.LancamentoContabil{
 				DataLoteContabil:          data,
-				CodigoVersaoConteudo:      versao, // mesma versão do movimento de D
+				CodigoVersaoConteudo:      versao,
 				CodigoIdentificadorBoleto: l1.CodigoIdentificadorBoleto,
 				ValorLancamentoContabil:   l1.ValorLancamentoContabil,
 				MoedaLancamentoContabil:   l1.MoedaLancamentoContabil,
-				ContaDebito:               l1.ContaCredito, // contas invertidas
+				ContaDebito:               l1.ContaCredito,
 				ContaCredito:              l1.ContaDebito,
 				IndicadorReversao:         true,
 				DescricaoRegraContabil:    l1.DescricaoRegraContabil,
@@ -257,4 +274,21 @@ func (s *MovimentoContabilService) gerarEstornoInterno(ctx context.Context, data
 	}
 
 	return nil
+}
+
+// BulkInsertAjuste persiste lançamentos de ajuste gerados pela conciliação IA.
+// Usa a próxima versão disponível para a data.
+func (s *MovimentoContabilService) BulkInsertAjuste(ctx context.Context, lancamentos []model.LancamentoContabil) error {
+	if len(lancamentos) == 0 {
+		return nil
+	}
+	// Determinar versão pela data do primeiro lançamento
+	versao, err := s.movimentoRepo.ObterProximaVersao(ctx, lancamentos[0].DataLoteContabil)
+	if err != nil {
+		return fmt.Errorf("erro ao obter versão: %w", err)
+	}
+	for i := range lancamentos {
+		lancamentos[i].CodigoVersaoConteudo = versao
+	}
+	return s.movimentoRepo.BulkInsert(ctx, lancamentos)
 }

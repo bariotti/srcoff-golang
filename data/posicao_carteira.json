@@ -1,71 +1,51 @@
 [
   {
+    "codigo_identificador_boleto": "BOL-123",
+    "codigo_versao_conteudo": 1,
+    "data_posicao_carteira": "2026-06-27",
+    "descricao_veiculo": "NASSAU",
     "id": 1,
-    "data_posicao_carteira": "2026-04-10T00:00:00Z",
-    "codigo_versao_conteudo": 1,
-    "codigo_identificador_boleto": "BOL1",
-    "descricao_veiculo": "NASSAU",
     "indicador_contraparte_afiliada": false,
-    "valor_mtm": 100,
-    "principal_remanescente": 1000,
     "moeda_principal_remanescente": "BRL",
-    "codigo_produto_corporativo" : "NDF"
+    "principal_remanescente": 1000,
+    "produto": "SWAP",
+    "valor_mtm": 100
   },
   {
+    "codigo_identificador_boleto": "BOL-123",
+    "codigo_versao_conteudo": 1,
+    "data_posicao_carteira": "2026-06-28",
+    "descricao_veiculo": "NASSAU",
     "id": 2,
-    "data_posicao_carteira": "2026-04-11T00:00:00Z",
-    "codigo_versao_conteudo": 1,
-    "codigo_identificador_boleto": "BOL1",
-    "descricao_veiculo": "NASSAU",
     "indicador_contraparte_afiliada": false,
-    "valor_mtm": 100,
+    "moeda_principal_remanescente": "BRL",
     "principal_remanescente": 1000,
-    "moeda_principal_remanescente": "BRL",
-    "codigo_produto_corporativo" : "NDF"
+    "produto": "SWAP",
+    "valor_mtm": 100
   },
   {
+    "codigo_identificador_boleto": "BOL-123",
+    "codigo_versao_conteudo": 1,
+    "data_posicao_carteira": "2026-06-29",
+    "descricao_veiculo": "NASSAU",
     "id": 3,
-    "data_posicao_carteira": "2026-04-12T00:00:00Z",
-    "codigo_versao_conteudo": 1,
-    "codigo_identificador_boleto": "BOL1",
-    "descricao_veiculo": "NASSAU",
     "indicador_contraparte_afiliada": false,
-    "valor_mtm": 100,
-    "principal_remanescente": 700,
     "moeda_principal_remanescente": "BRL",
-    "codigo_produto_corporativo" : "NDF"
+    "principal_remanescente": 1500,
+    "produto": "SWAP",
+    "valor_mtm": 100
   },
   {
+    "codigo_identificador_boleto": "LIQ-001",
+    "codigo_versao_conteudo": 1,
+    "data_posicao_carteira": "2026-06-27",
+    "descricao_veiculo": "NASSAU",
     "id": 4,
-    "data_posicao_carteira": "2026-04-13T00:00:00Z",
-    "codigo_versao_conteudo": 1,
-    "codigo_identificador_boleto": "BOL1",
-    "descricao_veiculo": "NASSAU",
     "indicador_contraparte_afiliada": false,
-    "valor_mtm": 100,
-    "principal_remanescente": 700,
     "moeda_principal_remanescente": "BRL",
-    "codigo_produto_corporativo" : "NDF"
-  },
-  {
-    "id": 5,
-    "data_posicao_carteira": "2026-04-14T00:00:00Z",
-    "codigo_versao_conteudo": 1,
-    "codigo_identificador_boleto": "BOL2",
-    "descricao_veiculo": "NASSAU",
-    "moeda_principal_remanescente": "BRL",
-    "codigo_produto_corporativo" : "SWAP",
-    "agio" : 100.55
-  },
-  {
-    "id": 5,
-    "data_posicao_carteira": "2026-04-15T00:00:00Z",
-    "codigo_versao_conteudo": 1,
-    "codigo_identificador_boleto": "BOL2",
-    "descricao_veiculo": "NASSAU",
-    "moeda_principal_remanescente": "BRL",
-    "codigo_produto_corporativo" : "SWAP",
-    "desagio" : 500.76,
-    "moeda_desagio" : "CNY"
+    "principal_remanescente": 5000,
+    "produto": "SWAP",
+    "valor_mtm": 0,
+    "data_liquidacao": "2026-06-27"
   }
 ]

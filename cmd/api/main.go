@@ -63,6 +63,7 @@ func main() {
 	movimentoHandler := handler.NewMovimentoContabilHandler(movimentoSvc)
 	regraHandler := handler.NewRegraContabilHandler(regraSvc)
 	conciliacaoHandler := handler.NewConciliacaoHandler(conciliacaoSvc)
+	conciliacaoIAHandler := handler.NewConciliacaoIAHandler(movimentoSvc, posicaoSvc)
 	posicaoHandler := handler.NewPosicaoCarteiraHandler(posicaoSvc)
 	exportHandler := handler.NewExportHandler(movimentoSvc)
 	nlQueryHandler := handler.NewNLQueryHandler(rawSQLDB)
@@ -112,6 +113,8 @@ func main() {
 		}
 	})
 	http.HandleFunc("/api/v1/conciliacao", conciliacaoHandler.Conciliar)
+	http.HandleFunc("/api/v1/conciliacao-ia", conciliacaoIAHandler.Analisar)
+	http.HandleFunc("/api/v1/conciliacao-ia/ajuste", conciliacaoIAHandler.AplicarAjuste)
 	http.HandleFunc("/api/v1/nlquery", nlQueryHandler.Query)
 	http.HandleFunc("/api/v1/movimento-contabil/export", exportHandler.ExportMovimentoCSV)
 	http.HandleFunc("/api/v1/movimento-contabil/export-txt", exportHandler.ExportMovimentoTXT)

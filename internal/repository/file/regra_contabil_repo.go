@@ -67,6 +67,9 @@ func (r *RegraContabilRepo) CriarRegra(_ context.Context, regra model.RegraConta
 	}
 	regra.ID = s.NextRegra
 	regra.Ativo = true
+	if !regra.PostaReverte {
+		regra.PostaReverte = false
+	}
 	s.NextRegra++
 	s.Regras = append(s.Regras, regra)
 	return regra.ID, r.save(s)

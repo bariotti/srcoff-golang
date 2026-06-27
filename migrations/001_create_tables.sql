@@ -106,3 +106,12 @@ IF NOT EXISTS (
 BEGIN
     ALTER TABLE posicao_carteira ADD produto VARCHAR(50) NULL;
 END;
+
+-- Adicionar coluna posta_reverte na regra_contabil (idempotente)
+IF NOT EXISTS (
+    SELECT 1 FROM sys.columns
+    WHERE object_id = OBJECT_ID('regra_contabil') AND name = 'posta_reverte'
+)
+BEGIN
+    ALTER TABLE regra_contabil ADD posta_reverte BIT NOT NULL DEFAULT 1;
+END;

@@ -403,3 +403,46 @@ O Sistema de Roteirização Contábil Offshore (SRCOff) tem como objetivo gerar 
 1. WHEN consultando lançamentos pelo frontend, THE API SHALL eliminar grupos de lançamentos cujo saldo líquido (soma de normais menos soma de reversões) é zero para o mesmo boleto, valor e regra.
 2. Este filtro SHALL ser aplicado apenas na consulta do frontend e na exportação CSV/TXT.
 3. Funcionalidades internas como estorno e conciliação SHALL usar a consulta sem este filtro.
+
+---
+
+### Requisito 23: Flag Posta/Reverte nas Regras Contábeis
+
+**User Story:** Como analista contábil, quero marcar uma regra contábil como "posta/reverte" ou não, para que lançamentos de regras que não revertam sejam excluídos do processo de estorno automático.
+
+#### Critérios de Aceitação
+
+1. THE Frontend SHALL exibir um checkbox "Posta/Reverte" no formulário de criação de regra contábil, marcado por padrão.
+2. WHEN `posta_reverte = false`, THE API SHALL ignorar os lançamentos gerados por essa regra ao processar o estorno de D-1.
+3. WHEN `posta_reverte = true` (padrão), THE API SHALL estornar os lançamentos normalmente.
+4. THE API SHALL persistir o campo `posta_reverte` na tabela `regra_contabil`.
+5. Regras existentes sem o campo preenchido SHALL ser tratadas como `posta_reverte = true` (retrocompatibilidade).
+
+---
+
+### Requisito 24: Campo Produto na Posição de Carteira
+
+**User Story:** Como operador da Tesouraria, quero associar um produto a cada registro de posição, para que as regras contábeis sejam aplicadas apenas às posições do produto correspondente.
+
+#### Critérios de Aceitação
+
+1. THE API SHALL aceitar o campo `produto` ao inserir registros de posição de carteira.
+2. WHEN uma regra contábil tem `codigo_produto_corporativo` preenchido e a posição tem `produto` preenchido, THE API SHALL aplicar a regra apenas às posições cujo `produto` seja igual ao `codigo_produto_corporativo` da regra.
+3. IF a posição ou a regra não tiver produto definido, THE API SHALL aplicar a regra a todas as posições (retrocompatibilidade).
+4. THE Frontend SHALL exibir o campo `produto` no formulário de inserção de posição.
+
+---
+
+### Requisito 25: Conciliação Inteligente com IA (Gemini)
+
+**User Story:** Como operador da Tesouraria, quero descrever em linguagem natural o que desejo conciliar e receber um diagnóstico automático com sugestão de ajustes contábeis.
+
+#### Critérios de Aceitação
+
+1. THE Frontend SHALL disponibilizar uma seção de "Conciliação Inteligente" na página de conciliação com campos de data e pergunta em linguagem natural.
+2. WHEN o usuário aciona a análise, THE API SHALL enviar a posição e o movimento contábil da data para o Gemini junto com a pergunta.
+3. THE API SHALL retornar um diagnóstico em texto e, se houver inconsistência, uma sugestão de lançamentos de ajuste.
+4. THE Frontend SHALL exibir a sugestão em grid e apresentar botões "Confirmar e Aplicar Ajuste" e "Descartar".
+5. WHEN o usuário confirma, THE API SHALL persistir os lançamentos de ajuste com a próxima versão disponível.
+6. Os lançamentos de ajuste NÃO devem ser persistidos sem confirmação explícita do usuário.
+7. THE API SHALL ler a chave do Gemini da variável de ambiente `GEMINI_API_KEY`.

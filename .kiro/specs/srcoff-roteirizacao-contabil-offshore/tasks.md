@@ -349,3 +349,65 @@
   - Atualizar interface, serviço e implementação em arquivo
   - `ConsultarLancamentosFiltrado` no serviço usa `SemCancelados` — apenas para o frontend
   - **Requisito:** 22.1–22.3
+
+## Fase 20: Flag Posta/Reverte nas Regras Contábeis
+
+- [x] 20.1 Adicionar campo `posta_reverte` no banco e model
+  - DDL: `ALTER TABLE regra_contabil ADD posta_reverte BIT NOT NULL DEFAULT 1`
+  - Atualizar `internal/model/regra_contabil.go` com campo `PostaReverte bool`
+  - **Requisito:** 23.1–23.5
+
+- [x] 20.2 Atualizar repositórios SQL e FILE
+  - `regra_contabil_repo.go`: incluir `posta_reverte` em SELECT, INSERT e UPDATE
+  - `file/regra_contabil_repo.go`: persistir campo no JSON
+  - **Requisito:** 23.4
+
+- [x] 20.3 Filtrar estorno por posta_reverte no serviço
+  - Em `GerarMovimento`, carregar regras e verificar flag antes de gerar estorno de D-1
+  - Lançamentos de regras com `posta_reverte=false` são ignorados no estorno
+  - **Requisito:** 23.2, 23.3
+
+- [x] 20.4 Atualizar frontend
+  - Adicionar checkbox "Posta/Reverte" no modal de criação de regra
+  - Enviar campo `posta_reverte` no payload de criação
+  - **Requisito:** 23.1
+
+## Fase 21: Campo Produto na Posição de Carteira
+
+- [x] 21.1 Adicionar campo `produto` no banco e model
+  - DDL: `ALTER TABLE posicao_carteira ADD produto VARCHAR(50) NULL`
+  - Atualizar `internal/model/posicao_carteira.go` com campo `Produto string`
+  - **Requisito:** 24.1–24.4
+
+- [x] 21.2 Atualizar repositórios SQL e FILE
+  - `posicao_carteira_repo.go`: popular `Produto` no scan e incluir no INSERT
+  - `file/posicao_carteira_repo.go`: popular no `mapToPosicao` e `Inserir`
+  - **Requisito:** 24.1
+
+- [x] 21.3 Filtrar posições por produto da regra no serviço
+  - Em `GerarMovimento`, comparar `regra.CodigoProdutoCorporativo` com `posicao.Produto`
+  - Retrocompatibilidade: se um dos dois for vazio, aplica para todos
+  - **Requisito:** 24.2, 24.3
+
+- [x] 21.4 Atualizar frontend e handler
+  - Adicionar campo `produto` no formulário de inserção de posição
+  - Handler recebe e passa `produto` para o serviço
+  - **Requisito:** 24.4
+
+## Fase 22: Conciliação Inteligente com IA (Gemini)
+
+- [x] 22.1 Implementar handler de conciliação IA
+  - Criar `internal/handler/conciliacao_ia_handler.go`
+  - Endpoint `POST /api/v1/conciliacao-ia`: busca posição + movimento, envia para Gemini, retorna diagnóstico + sugestão
+  - Endpoint `POST /api/v1/conciliacao-ia/ajuste`: persiste lançamentos confirmados
+  - **Requisito:** 25.1–25.7
+
+- [x] 22.2 Adicionar `BulkInsertAjuste` no serviço de movimento
+  - Persiste lançamentos de ajuste com próxima versão disponível
+  - **Requisito:** 25.5
+
+- [x] 22.3 Implementar frontend de conciliação IA
+  - Seção "Conciliação Inteligente (IA)" na página de conciliação
+  - Grid de sugestão com botões "Confirmar e Aplicar" e "Descartar"
+  - Função `analisarIA()` e `aplicarAjusteIA()`
+  - **Requisito:** 25.1–25.6

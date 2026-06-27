@@ -647,3 +647,85 @@ Este filtro é aplicado **apenas** em `ConsultarPaginadoFiltradoSemCancelados` �
 | `/posicao` | Inserir, consultar e excluir registros de posição |
 | `/conciliacao` | Conciliar posição × movimento contábil |
 | `/regras` | Cadastrar e manter regras e condições contábeis |
+
+---
+
+## Atualizações de Design — Funcionalidades Recentes (Continuação)
+
+### Flag Posta/Reverte na Regra Contábil
+
+Campo `posta_reverte BIT NOT NULL DEFAULT 1` adicionado à tabela `regra_contabil`.
+
+Impacto no estorno:
+```go
+// No GerarMovimento, antes de gerar estornos:
+for _, l1 := range lancamentosD1 {
+    if pr, found := regraPostaReverte[l1.IDRegraContabil]; found && !pr {
+        continue // ignora lançamentos de regras não-reversíveis
+    }
+    estornos = append(estornos, ...)
+}
+```
+
+### Campo Produto na Posição de Carteira
+
+Campo `produto VARCHAR(50) NULL` adicionado à tabela `posicao_carteira`.
+
+Filtro no serviço de movimento:
+```go
+// Só aplica regra se produto coincidir (ou se um dos dois estiver vazio)
+if regra.CodigoProdutoCorporativo != "" && posicao.Produto != "" &&
+    regra.CodigoProdutoCorporativo != posicao.Produto {
+    continue
+}
+```
+
+### Conciliação Inteligente com Gemini
+
+Novos endpoints:
+
+| Método | Caminho | Descrição |
+|--------|---------|-----------|
+| POST | `/api/v1/conciliacao-ia` | Analisa pergunta em linguagem natural e retorna diagnóstico + sugestão |
+| POST | `/api/v1/conciliacao-ia/ajuste` | Persiste lançamentos de ajuste confirmados pelo usuário |
+
+Fluxo:
+```
+Usuário → pergunta + data
+    ↓
+API busca posição + movimento da data
+    ↓
+Envia para Gemini com schema e contexto
+    ↓
+Gemini retorna JSON: { diagnostico, sugestao: { descricao, lancamentos[] } }
+    ↓
+Frontend exibe diagnóstico + grid de lançamentos sugeridos
+    ↓
+Usuário confirma → POST /conciliacao-ia/ajuste → BulkInsert com próxima versão
+```
+
+Variável de ambiente necessária: `GEMINI_API_KEY`
+Modelo usado: `gemini-2.0-flash`
+
+### Modelo `RegraContabil` atualizado
+
+```go
+type RegraContabil struct {
+    ID                       int64
+    Descricao                string
+    CodigoProdutoCorporativo string
+    Ativo                    bool
+    PostaReverte             bool   // novo: true=estorna, false=não estorna
+    Condicoes                []CondicaoRegra
+}
+```
+
+### Modelo `PosicaoCarteira` atualizado
+
+```go
+type PosicaoCarteira struct {
+    // ... campos existentes ...
+    Produto string // novo: filtra quais regras se aplicam
+    Campos  map[string]interface{} // dinâmico via SELECT *
+}
+```

@@ -35,6 +35,7 @@
       <nav class="nav flex-column mt-2">
         <a class="nav-link active" href="#" onclick="showPage('operacao')"><i class="bi bi-play-circle me-2"></i>Operação</a>
         <a class="nav-link" href="#" onclick="showPage('consulta')"><i class="bi bi-search me-2"></i>Consulta</a>
+        <a class="nav-link" href="#" onclick="showPage('posicao')"><i class="bi bi-table me-2"></i>Posição</a>
         <a class="nav-link" href="#" onclick="showPage('conciliacao')"><i class="bi bi-check2-circle me-2"></i>Conciliação</a>
         <a class="nav-link" href="#" onclick="showPage('regras')"><i class="bi bi-gear me-2"></i>Regras</a>
       </nav>
@@ -202,7 +203,32 @@
       <!-- ==================== CONCILIAÇÃO ==================== -->
       <div id="page-conciliacao" class="page">
         <h4 class="mb-4"><i class="bi bi-check2-circle me-2"></i>Conciliação</h4>
+
+        <!-- Conciliação Inteligente com IA -->
+        <div class="card shadow-sm mb-3 border-primary">
+          <div class="card-header bg-primary text-white"><i class="bi bi-robot me-2"></i>Conciliação Inteligente (IA)</div>
+          <div class="card-body">
+            <p class="text-muted small mb-3">Descreva o que deseja conciliar em linguagem natural. O sistema analisará a posição e o movimento contábil e sugerirá ajustes se necessário.</p>
+            <div class="row g-2 mb-3">
+              <div class="col-md-3">
+                <label class="form-label form-label-sm">Data</label>
+                <input type="date" id="cia-data" class="form-control form-control-sm">
+              </div>
+              <div class="col-md-9">
+                <label class="form-label form-label-sm">Pergunta</label>
+                <input type="text" id="cia-pergunta" class="form-control form-control-sm"
+                  placeholder='Ex: As contas 111111111 e 222222222 são de Principal NDF. O saldo está coerente com a posição?'>
+              </div>
+            </div>
+            <button class="btn btn-primary btn-sm" onclick="analisarIA()"><i class="bi bi-send me-1"></i>Analisar</button>
+          </div>
+        </div>
+
+        <div id="cia-resultado"></div>
+
+        <!-- Conciliação Simples -->
         <div class="card shadow-sm mb-3">
+          <div class="card-header"><i class="bi bi-check2-circle me-2"></i>Conciliação Simples</div>
           <div class="card-body">
             <div class="row g-2 align-items-end">
               <div class="col-auto">
@@ -280,6 +306,10 @@
       <div class="modal-body">
         <div class="mb-3"><label class="form-label">Descrição</label><input type="text" id="r-nova-desc" class="form-control"></div>
         <div class="mb-3"><label class="form-label">Código Produto</label><input type="text" id="r-nova-codigo" class="form-control"></div>
+        <div class="mb-3 form-check">
+          <input type="checkbox" class="form-check-input" id="r-nova-posta-reverte" checked>
+          <label class="form-check-label" for="r-nova-posta-reverte">Posta/Reverte <small class="text-muted">(se desmarcado, os lançamentos desta regra não serão estornados)</small></label>
+        </div>
       </div>
       <div class="modal-footer">
         <button class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
@@ -539,6 +569,67 @@ async function inserirPosicao() {
   else if (r?.erro) toast(r.erro, 'danger');
 }
 
+// ── CONCILIAÇÃO IA ─────────────────────────────────────────
+async function analisarIA() {
+  const data = document.getElementById('cia-data').value;
+  const pergunta = document.getElementById('cia-pergunta').value.trim();
+  if (!data || !pergunta) { toast('Informe a data e a pergunta', 'warning'); return; }
+
+  const el = document.getElementById('cia-resultado');
+  el.innerHTML = '<div class="text-muted p-3"><i class="bi bi-hourglass-split me-1"></i>Analisando com IA...</div>';
+
+  const r = await api('POST', '/v1/conciliacao-ia', { data, pergunta });
+  if (!r || r.erro) { el.innerHTML = `<div class="alert alert-danger">${r?.erro || 'Erro'}</div>`; return; }
+
+  let html = `<div class="card shadow-sm mb-3">
+    <div class="card-header bg-info bg-opacity-10"><i class="bi bi-robot me-1"></i>Diagnóstico da IA</div>
+    <div class="card-body"><p class="mb-0">${r.diagnostico}</p></div>
+  </div>`;
+
+  if (r.sugestao && r.sugestao.lancamentos && r.sugestao.lancamentos.length > 0) {
+    const rows = r.sugestao.lancamentos.map(l => `<tr>
+      <td>${l.CodigoIdentificadorBoleto}</td>
+      <td>${l.ContaDebito}</td><td>${l.ContaCredito}</td>
+      <td class="text-end">${Number(l.ValorLancamentoContabil).toFixed(2)}</td>
+      <td>${l.MoedaLancamentoContabil}</td>
+      <td>${l.DescricaoRegraContabil}</td>
+    </tr>`).join('');
+
+    html += `<div class="card shadow-sm border-warning">
+      <div class="card-header bg-warning bg-opacity-10"><i class="bi bi-lightbulb me-1"></i>Sugestão de Ajuste: ${r.sugestao.descricao}</div>
+      <div class="card-body p-0">
+        <div style="overflow-x:auto">
+          <table class="table table-sm table-hover mb-0">
+            <thead class="table-light"><tr><th>Boleto</th><th>Débito</th><th>Crédito</th><th>Valor</th><th>Moeda</th><th>Descrição</th></tr></thead>
+            <tbody>${rows}</tbody>
+          </table>
+        </div>
+      </div>
+      <div class="card-footer d-flex gap-2">
+        <button class="btn btn-success btn-sm" onclick="aplicarAjusteIA('${data}', ${JSON.stringify(r.sugestao.lancamentos).replace(/'/g, "\\'")})">
+          <i class="bi bi-check-circle me-1"></i>Confirmar e Aplicar Ajuste
+        </button>
+        <button class="btn btn-outline-secondary btn-sm" onclick="document.getElementById('cia-resultado').innerHTML=''">
+          <i class="bi bi-x me-1"></i>Descartar
+        </button>
+      </div>
+    </div>`;
+  }
+
+  el.innerHTML = html;
+}
+
+async function aplicarAjusteIA(data, lancamentos) {
+  if (!confirm(`Confirma a aplicação de ${lancamentos.length} lançamento(s) de ajuste para ${data}?`)) return;
+  const r = await api('POST', '/v1/conciliacao-ia/ajuste', { data, lancamentos });
+  if (r?.mensagem) {
+    toast(r.mensagem);
+    document.getElementById('cia-resultado').innerHTML = `<div class="alert alert-success"><i class="bi bi-check-circle me-2"></i>${r.mensagem}</div>`;
+  } else if (r?.erro) {
+    toast(r.erro, 'danger');
+  }
+}
+
 // ── CONCILIAÇÃO ────────────────────────────────────────────
 async function conciliar() {
   const data = document.getElementById('conc-data').value;
@@ -687,8 +778,9 @@ async function excluirCondicao(id, nomeRegra) {
 async function criarRegra() {
   const desc = document.getElementById('r-nova-desc').value;
   const cod = document.getElementById('r-nova-codigo').value;
+  const postaReverte = document.getElementById('r-nova-posta-reverte').checked;
   if (!desc) { toast('Informe a descrição', 'warning'); return; }
-  const r = await api('POST', '/v1/regras', { descricao: desc, codigo_produto_corporativo: cod });
+  const r = await api('POST', '/v1/regras', { descricao: desc, codigo_produto_corporativo: cod, posta_reverte: postaReverte });
   if (r?.id) {
     toast('Regra criada!');
     bootstrap.Modal.getInstance(document.getElementById('modalNovaRegra')).hide();

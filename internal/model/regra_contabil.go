@@ -5,6 +5,7 @@ type RegraContabil struct {
 	Descricao                string          `json:"descricao"`
 	CodigoProdutoCorporativo string          `json:"codigo_produto_corporativo"`
 	Ativo                    bool            `json:"ativo"`
+	PostaReverte             bool            `json:"posta_reverte"`
 	Condicoes                []CondicaoRegra `json:"condicoes"`
 }
 
