@@ -82,7 +82,7 @@ srcoff/
 | Variável | Padrão | Descrição |
 |----------|--------|-----------|
 | `STORAGE_BACKEND` | `sqlserver` | Backend de persistência: `sqlserver` ou `file` |
-| `DB_SERVER` | `DESKTOP-B1QQIIN\SQLEXPRESS` | Servidor SQL Server |
+| `DB_SERVER` | `LOCALHOST\SQLEXPRESS` | Servidor SQL Server |
 | `DB_NAME` | `srcoff` | Nome do banco de dados |
 | `API_PORT` | `8080` | Porta da API |
 | `FRONTEND_PORT` | `9090` | Porta do Frontend |
