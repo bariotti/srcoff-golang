@@ -1,0 +1,15 @@
+[
+  {
+    "codigo_identificador_boleto": "BOL1",
+    "codigo_versao_conteudo": 1,
+    "data_posicao_carteira": "2026-07-08",
+    "descricao_veiculo": "NASSAU",
+    "id": 1,
+    "indicador_contraparte_afiliada": false,
+    "moeda_principal_remanescente": "BRL",
+    "principal_remanescente": 5000,
+    "produto": "NDF",
+    "valor_mtm": 1000,
+    "moeda_mtm": "USD"
+  }
+]

@@ -1,0 +1,176 @@
+[
+  {
+    "regras": [
+      {
+        "id": 1,
+        "descricao": "Registro de Notional",
+        "codigo_produto_corporativo": "NDF",
+        "ativo": true,
+        "posta_reverte": true,
+        "condicoes": null
+      },
+      {
+        "id": 2,
+        "descricao": "Registro MTM",
+        "codigo_produto_corporativo": "NDF",
+        "ativo": true,
+        "posta_reverte": true,
+        "condicoes": null
+      }
+    ],
+    "condicoes": [
+      {
+        "id": 1,
+        "id_regra": 1,
+        "condicao": "valor_mtm \u003e= 0 \u0026\u0026 descricao_veiculo == \"NASSAU\" \u0026\u0026 indicador_contraparte_afiliada==TRUE",
+        "conta_debito": "328101015334",
+        "conta_credito": "928100000133",
+        "campo_valor": "principal_remanescente",
+        "campo_moeda": "moeda_principal_remanescente",
+        "ativo": false
+      },
+      {
+        "id": 2,
+        "id_regra": 1,
+        "condicao": "valor_mtm \u003e= 0 \u0026\u0026 descricao_veiculo == \"NASSAU\" \u0026\u0026 indicador_contraparte_afiliada==FALSE",
+        "conta_debito": "328101015393",
+        "conta_credito": "928100000435",
+        "campo_valor": "principal_remanescente",
+        "campo_moeda": "moeda_principal_remanescente",
+        "ativo": false
+      },
+      {
+        "id": 3,
+        "id_regra": 1,
+        "condicao": "valor_mtm \u003c 0 \u0026\u0026 descricao_veiculo == \"NASSAU\" \u0026\u0026 indicador_contraparte_afiliada==FALSE",
+        "conta_debito": "328200001781",
+        "conta_credito": "928201015683",
+        "campo_valor": "principal_remanescente",
+        "campo_moeda": "moeda_principal_remanescente",
+        "ativo": false
+      },
+      {
+        "id": 4,
+        "id_regra": 1,
+        "condicao": "valor_mtm \u003c 0 \u0026\u0026 descricao_veiculo == \"NASSAU\" \u0026\u0026 indicador_contraparte_afiliada==TRUE",
+        "conta_debito": "328200001730",
+        "conta_credito": "928201015683",
+        "campo_valor": "principal_remanescente",
+        "campo_moeda": "moeda_principal_remanescente",
+        "ativo": false
+      },
+      {
+        "id": 5,
+        "id_regra": 1,
+        "condicao": "valor_mtm \u003c 0 \u0026\u0026 descricao_veiculo == \"NASSAU\" \u0026\u0026 indicador_contraparte_afiliada==TRUE",
+        "conta_debito": "328200001730",
+        "conta_credito": "928201015632",
+        "campo_valor": "principal_remanescente",
+        "campo_moeda": "moeda_principal_remanescente",
+        "ativo": false
+      },
+      {
+        "id": 6,
+        "id_regra": 1,
+        "condicao": "valor_mtm \u003e= 0 \u0026\u0026 descricao_veiculo == \"NASSAU\" \u0026\u0026 indicador_contraparte_afiliada == false",
+        "conta_debito": "328101015393",
+        "conta_credito": "928100000435",
+        "campo_valor": "principal_remanescente",
+        "campo_moeda": "moeda_principal_remanescente",
+        "ativo": true
+      },
+      {
+        "id": 7,
+        "id_regra": 1,
+        "condicao": "valor_mtm \u003e= 0 \u0026\u0026 descricao_veiculo == \"NASSAU\" \u0026\u0026 indicador_contraparte_afiliada==true",
+        "conta_debito": "328101015334",
+        "conta_credito": "928100000133",
+        "campo_valor": "principal_remanescente",
+        "campo_moeda": "moeda_principal_remanescente",
+        "ativo": true
+      },
+      {
+        "id": 8,
+        "id_regra": 1,
+        "condicao": "valor_mtm \u003e= 0 \u0026\u0026 descricao_veiculo == \"NASSAU\" \u0026\u0026 indicador_contraparte_afiliada==true",
+        "conta_debito": "328101015334",
+        "conta_credito": "928100000133",
+        "campo_valor": "principal_remanescente",
+        "campo_moeda": "moeda_principal_remanescent",
+        "ativo": false
+      },
+      {
+        "id": 9,
+        "id_regra": 1,
+        "condicao": "valor_mtm \u003c 0 \u0026\u0026 descricao_veiculo == \"NASSAU\" \u0026\u0026 indicador_contraparte_afiliada==true",
+        "conta_debito": "328101015334",
+        "conta_credito": "928100000133",
+        "campo_valor": "principal_remanescente",
+        "campo_moeda": "moeda_principal_remanescent",
+        "ativo": false
+      },
+      {
+        "id": 10,
+        "id_regra": 1,
+        "condicao": "valor_mtm \u003c 0 \u0026\u0026 descricao_veiculo == \"NASSAU\" \u0026\u0026 indicador_contraparte_afiliada==false",
+        "conta_debito": "328200001781",
+        "conta_credito": "928201015683",
+        "campo_valor": "principal_remanescente",
+        "campo_moeda": "moeda_principal_remanescent",
+        "ativo": true
+      },
+      {
+        "id": 11,
+        "id_regra": 1,
+        "condicao": "valor_mtm \u003c 0 \u0026\u0026 descricao_veiculo == \"NASSAU\" \u0026\u0026 indicador_contraparte_afiliada==true",
+        "conta_debito": "328200001730",
+        "conta_credito": "928201015632",
+        "campo_valor": "principal_remanescente",
+        "campo_moeda": "moeda_principal_remanescent",
+        "ativo": true
+      },
+      {
+        "id": 12,
+        "id_regra": 2,
+        "condicao": "valor_mtm \u003e= 0 \u0026\u0026 descricao_veiculo == \"NASSAU\" \u0026\u0026 indicador_contraparte_afiliada==true",
+        "conta_debito": "133851320017",
+        "conta_credito": "715809030134",
+        "campo_valor": "valor_mtm",
+        "campo_moeda": "moeda_mtm",
+        "ativo": true
+      },
+      {
+        "id": 13,
+        "id_regra": 2,
+        "condicao": "valor_mtm \u003e= 0 \u0026\u0026 descricao_veiculo == \"NASSAU\" \u0026\u0026 indicador_contraparte_afiliada==false",
+        "conta_debito": "133851320011",
+        "conta_credito": "715809040016",
+        "campo_valor": "valor_mtm",
+        "campo_moeda": "moeda_mtm",
+        "ativo": true
+      },
+      {
+        "id": 14,
+        "id_regra": 2,
+        "condicao": "valor_mtm \u003c 0 \u0026\u0026 descricao_veiculo == \"NASSAU\" \u0026\u0026 indicador_contraparte_afiliada==false",
+        "conta_debito": "815509040010",
+        "conta_credito": "471851310017",
+        "campo_valor": "valor_mtm",
+        "campo_moeda": "moeda_mtm",
+        "ativo": true
+      },
+      {
+        "id": 15,
+        "id_regra": 2,
+        "condicao": "valor_mtm \u003c 0 \u0026\u0026 descricao_veiculo == \"NASSAU\" \u0026\u0026 indicador_contraparte_afiliada==true",
+        "conta_debito": "815509030014",
+        "conta_credito": "471851320012",
+        "campo_valor": "valor_mtm",
+        "campo_moeda": "moeda_mtm",
+        "ativo": true
+      }
+    ],
+    "next_regra": 3,
+    "next_cond": 16
+  }
+]
