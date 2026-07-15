@@ -1,0 +1,46 @@
+cen rios de testes
+
+Registro de Notional com baixa parcial e estorno ao final:
+Data: 3/7
+Boleto: BOL1
+Principal: 10000
+
+Data: 4/7
+Boleto: BOL1
+Principal: 10000
+
+Data: 5/7
+Boleto: BOL1
+Principal: 7000
+
+Data: 6/7
+Boleto: BOL1
+Principal: 7000
+
+Data 7/7
+BOL1 sai da posicao
+
+
+Registro de Notional olhando para MTM:
+Data: 3/7
+Boleto: BOL2
+Principal: 10000
+MTM: 8000
+
+Data: 4/7
+Boleto: BOL2
+Principal: 10000
+MTM: 7000
+
+Data: 5/7
+Boleto: BOL2
+Principal: 10000
+MTM: -3000
+
+Data: 6/7
+Boleto: BOL2
+Principal: 9500
+MTM: 1000
+
+Data: 7/7
+BOL2 sai da posicao

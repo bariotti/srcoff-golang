@@ -160,8 +160,8 @@ func (r *MovimentoContabilRepo) consultarFiltrado(ctx context.Context, dataInici
 
 	filtroSaldoZero := ""
 	if excluirSaldoZero {
-		// A comparação de saldo zero sempre usa a versão vigente (MAX) de cada data,
-		// independente do filtro de versão selecionado pelo usuário.
+		// Elimina grupos cujo saldo líquido é zero.
+		// Chave: boleto + regra + conta_debito + conta_credito (versão vigente por data)
 		filtroSaldoZero = `AND (
 			SELECT SUM(CASE WHEN m2.indicador_reversao = 0
 			                THEN  m2.valor_lancamento_contabil
@@ -170,8 +170,9 @@ func (r *MovimentoContabilRepo) consultarFiltrado(ctx context.Context, dataInici
 			FROM movimento_contabil m2
 			WHERE m2.data_lote_contabil         = m.data_lote_contabil
 			  AND m2.codigo_identificador_boleto = m.codigo_identificador_boleto
-			  AND m2.valor_lancamento_contabil   = m.valor_lancamento_contabil
 			  AND m2.id_regra_contabil           = m.id_regra_contabil
+			  AND m2.conta_debito                = m.conta_debito
+			  AND m2.conta_credito               = m.conta_credito
 			  AND m2.codigo_versao_conteudo      = (SELECT MAX(m3.codigo_versao_conteudo) FROM movimento_contabil m3 WHERE m3.data_lote_contabil = m.data_lote_contabil)
 		) <> 0`
 	}

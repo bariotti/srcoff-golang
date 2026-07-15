@@ -11,6 +11,7 @@ import (
 type PosicaoCarteiraRepository interface {
 	BuscarPorDataEVersaoMaxima(ctx context.Context, data time.Time) ([]model.PosicaoCarteira, error)
 	ListarPorData(ctx context.Context, data time.Time) ([]model.PosicaoCarteira, error)
+	ListarPorPeriodo(ctx context.Context, dataInicio, dataFim time.Time) ([]model.PosicaoCarteira, error)
 	Inserir(ctx context.Context, p model.PosicaoCarteira) (int64, error)
 	Deletar(ctx context.Context, id int64) error
 }

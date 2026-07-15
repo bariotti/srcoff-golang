@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"strings"
 	"time"
 
 	"srcoff/internal/evaluator"
@@ -60,6 +61,7 @@ func (s *MovimentoContabilService) GerarMovimento(ctx context.Context, data time
 	if err != nil {
 		return fmt.Errorf("erro ao buscar posicao_carteira: %w", err)
 	}
+
 	if len(posicoes) == 0 {
 		return fmt.Errorf("nenhum registro de posicao_carteira encontrado para a data %s", data.Format("2006-01-02"))
 	}
@@ -78,7 +80,7 @@ func (s *MovimentoContabilService) GerarMovimento(ctx context.Context, data time
 			// Filtrar pelo produto: só aplica a regra se o produto coincidir.
 			// Se posição ou regra não tiver produto definido, aplica para todos (retrocompatibilidade).
 			if regra.CodigoProdutoCorporativo != "" && posicao.Produto != "" &&
-				regra.CodigoProdutoCorporativo != posicao.Produto {
+				!produtoMatch(regra.CodigoProdutoCorporativo, posicao.Produto) {
 				continue
 			}
 			for _, condicao := range regra.Condicoes {
@@ -274,6 +276,17 @@ func (s *MovimentoContabilService) gerarEstornoInterno(ctx context.Context, data
 	}
 
 	return nil
+}
+
+// produtoMatch verifica se o produto da posição está na lista de produtos da regra.
+// A lista de produtos da regra é separada por vírgula (ex: "NDF,SWAP,FXO").
+func produtoMatch(produtosRegra, produtoPosicao string) bool {
+	for _, p := range strings.Split(produtosRegra, ",") {
+		if strings.TrimSpace(p) == strings.TrimSpace(produtoPosicao) {
+			return true
+		}
+	}
+	return false
 }
 
 // BulkInsertAjuste persiste lançamentos de ajuste gerados pela conciliação IA.

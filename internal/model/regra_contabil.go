@@ -3,7 +3,7 @@ package model
 type RegraContabil struct {
 	ID                       int64           `json:"id"`
 	Descricao                string          `json:"descricao"`
-	CodigoProdutoCorporativo string          `json:"codigo_produto_corporativo"`
+	CodigoProdutoCorporativo string          `json:"codigo_produto_corporativo"`  // separado por vírgula: "NDF,SWAP"
 	Ativo                    bool            `json:"ativo"`
 	PostaReverte             bool            `json:"posta_reverte"`
 	Condicoes                []CondicaoRegra `json:"condicoes"`

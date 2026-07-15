@@ -81,7 +81,25 @@ func (e *ExprEvaluator) EvaluateValue(expression string, env map[string]interfac
 // sanitizeEnv substitui valores nil por zero-values tipados (float64=0, string="", bool=false)
 // para evitar erros de tipo no avaliador de expressões quando colunas têm valor NULL no banco.
 func sanitizeEnv(env map[string]interface{}) map[string]interface{} {
+	
+	for chave, valor := range env {
+	switch t := valor.(type) {
+	case time.Time:
+		// Converte time.Time para string no formato YYYY-MM-DD
+		env[chave] = t.Format("2006-01-02")
+		
+	case *time.Time:
+		// Se for um ponteiro, verifica se não é nulo antes de converter
+		if t != nil {
+			env[chave] = t.Format("2006-01-02")
+		} else {
+			env[chave] = nil // Mantém nil se o ponteiro for nulo
+		}
+	}
+}
+
 	safe := make(map[string]interface{}, len(env))
+
 	for k, v := range env {
 		if v == nil {
 			safe[k] = float64(0) // default numérico para colunas NULL
@@ -89,6 +107,9 @@ func sanitizeEnv(env map[string]interface{}) map[string]interface{} {
 			safe[k] = v
 		}
 	}
+
+	
+
 	return safe
 }
 

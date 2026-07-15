@@ -32,13 +32,14 @@
     <!-- Sidebar -->
     <div class="col-auto sidebar d-flex flex-column" style="width:220px">
       <div class="sidebar-brand"><i class="bi bi-bank me-2"></i>SRCOff</div>
-      <nav class="nav flex-column mt-2">
-        <a class="nav-link active" href="#" onclick="showPage('operacao')"><i class="bi bi-play-circle me-2"></i>Operação</a>
+      <nav class="nav flex-column mt-2">        <a class="nav-link active" href="#" onclick="showPage('operacao')"><i class="bi bi-play-circle me-2"></i>Operação</a>
         <a class="nav-link" href="#" onclick="showPage('consulta')"><i class="bi bi-search me-2"></i>Consulta</a>
         <a class="nav-link" href="#" onclick="showPage('posicao')"><i class="bi bi-table me-2"></i>Posição</a>
-        <a class="nav-link" href="#" onclick="showPage('conciliacao')"><i class="bi bi-check2-circle me-2"></i>Conciliação</a>
         <a class="nav-link" href="#" onclick="showPage('regras')"><i class="bi bi-gear me-2"></i>Regras</a>
       </nav>
+      <div class="mt-auto px-3 py-3" style="font-size:0.7rem;color:#6c757d;border-top:1px solid #343a40">
+        © 2026 SRCOff<br>Todos os direitos reservados<br>@Bariotti
+      </div>
     </div>
 
     <!-- Main content -->
@@ -164,13 +165,18 @@
 
         <!-- Consulta -->
         <div class="card shadow-sm mb-3">
-          <div class="card-header">Consultar por Data</div>
+          <div class="card-header">Consultar por Data ou Período</div>
           <div class="card-body">
             <div class="row g-2 align-items-end">
               <div class="col-auto">
-                <input type="date" id="p-data" class="form-control form-control-sm">
+                <label class="form-label form-label-sm">Data início</label>
+                <input type="date" id="p-data-inicio" class="form-control form-control-sm">
               </div>
               <div class="col-auto">
+                <label class="form-label form-label-sm">Data fim <small class="text-muted">(opcional)</small></label>
+                <input type="date" id="p-data-fim" class="form-control form-control-sm">
+              </div>
+              <div class="col-auto d-flex align-items-end">
                 <button class="btn btn-primary btn-sm" onclick="consultarPosicao()"><i class="bi bi-search me-1"></i>Consultar</button>
               </div>
             </div>
@@ -265,8 +271,12 @@
       <div id="page-regras" class="page">
         <h4 class="mb-4"><i class="bi bi-gear me-2"></i>Regras Contábeis</h4>
         <div class="card shadow-sm">
-          <div class="card-header d-flex justify-content-between align-items-center">
-            Regras Cadastradas
+          <div class="card-header d-flex justify-content-between align-items-center gap-2">
+            <div class="d-flex align-items-center gap-2 flex-grow-1">
+              <span>Regras Cadastradas</span>
+              <input type="text" id="r-filtro" class="form-control form-control-sm" style="max-width:300px"
+                placeholder="Pesquisar por descrição, produto, conta, condição..." oninput="filtrarRegras()">
+            </div>
             <button class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#modalNovaRegra"><i class="bi bi-plus me-1"></i>Nova Regra</button>
           </div>
           <div class="card-body p-0">
@@ -305,7 +315,14 @@
       <div class="modal-header"><h5 class="modal-title">Nova Regra</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
       <div class="modal-body">
         <div class="mb-3"><label class="form-label">Descrição</label><input type="text" id="r-nova-desc" class="form-control"></div>
-        <div class="mb-3"><label class="form-label">Código Produto</label><input type="text" id="r-nova-codigo" class="form-control"></div>
+        <div class="mb-3">
+          <label class="form-label">Produtos <small class="text-muted">(selecione um ou mais)</small></label>
+          <div class="border rounded p-2">
+            <div class="form-check"><input class="form-check-input r-nova-produto" type="checkbox" value="NDF" id="r-prod-ndf"><label class="form-check-label" for="r-prod-ndf">NDF</label></div>
+            <div class="form-check"><input class="form-check-input r-nova-produto" type="checkbox" value="SWAP" id="r-prod-swap"><label class="form-check-label" for="r-prod-swap">SWAP</label></div>
+            <div class="form-check"><input class="form-check-input r-nova-produto" type="checkbox" value="FXO" id="r-prod-fxo"><label class="form-check-label" for="r-prod-fxo">FXO</label></div>
+          </div>
+        </div>
         <div class="mb-3 form-check">
           <input type="checkbox" class="form-check-input" id="r-nova-posta-reverte" checked>
           <label class="form-check-label" for="r-nova-posta-reverte">Posta/Reverte <small class="text-muted">(se desmarcado, os lançamentos desta regra não serão estornados)</small></label>
@@ -326,10 +343,20 @@
       <div class="modal-header"><h5 class="modal-title">Nova Condição</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
       <div class="modal-body">
         <div class="row g-2">
-          <div class="col-12"><label class="form-label">Condição (expressão booleana)</label><input type="text" id="r-cond-expr" class="form-control" placeholder='ex: valor_mtm > 0 && descricao_veiculo == "NASSAU"'></div>
+          <div class="col-12">
+            <label class="form-label">Condição (expressão booleana)</label>
+            <input type="text" id="r-cond-expr" class="form-control" placeholder='ex: valor_mtm > 0 && descricao_veiculo == "NASSAU"'
+              oninput="validarCondicao(this.value, 'condicao', 'r-cond-validacao')">
+            <div id="r-cond-validacao" class="mt-1"></div>
+          </div>
           <div class="col-md-6"><label class="form-label">Conta Débito</label><input type="text" id="r-cond-debito" class="form-control"></div>
           <div class="col-md-6"><label class="form-label">Conta Crédito</label><input type="text" id="r-cond-credito" class="form-control"></div>
-          <div class="col-md-6"><label class="form-label">Campo Valor</label><input type="text" id="r-cond-valor" class="form-control" placeholder="ex: principal_remanescente + valor_mtm"></div>
+          <div class="col-md-6">
+            <label class="form-label">Campo Valor</label>
+            <input type="text" id="r-cond-valor" class="form-control" placeholder="ex: principal_remanescente + valor_mtm"
+              oninput="validarCondicao(this.value, 'valor', 'r-cond-valor-validacao')">
+            <div id="r-cond-valor-validacao" class="mt-1"></div>
+          </div>
           <div class="col-md-6"><label class="form-label">Campo Moeda</label><input type="text" id="r-cond-moeda" class="form-control" placeholder="ex: moeda_principal_remanescente"></div>
         </div>
       </div>
@@ -348,6 +375,7 @@ const API = '';  // mesmo host, proxy pelo frontend Go
 let currentPage = 'operacao';
 let consultaPagina = 1;
 let regraAtualId = null;
+let todasRegras = []; // cache para filtro client-side
 
 // ── Navegação ──────────────────────────────────────────────
 function showPage(name) {
@@ -396,10 +424,30 @@ async function api(method, path, body) {
 async function gerarMovimento() {
   const data = document.getElementById('op-data-movimento').value;
   if (!data) { toast('Informe a data', 'warning'); return; }
+
+  // Mostrar toast de progresso
+  const toastId = 'toast-proc-' + Date.now();
+  document.getElementById('toastContainer').insertAdjacentHTML('beforeend',
+    `<div id="${toastId}" class="toast show mb-2" role="alert" data-bs-autohide="false">
+      <div class="toast-body d-flex align-items-center gap-2">
+        <div class="spinner-border spinner-border-sm text-primary"></div>
+        <span>Processando movimento contábil para ${data}...</span>
+      </div>
+    </div>`);
+
   const r = await api('POST', '/v1/movimento-contabil', { data });
+
+  // Remover toast de progresso
+  document.getElementById(toastId)?.remove();
+
   const el = document.getElementById('op-msg-movimento');
-  if (r?.mensagem) { el.innerHTML = `<div class="alert alert-success">${r.mensagem}</div>`; }
-  else if (r?.erro) { el.innerHTML = `<div class="alert alert-danger">${r.erro}</div>`; }
+  if (r?.mensagem) {
+    el.innerHTML = `<div class="alert alert-success"><i class="bi bi-check-circle me-2"></i>${r.mensagem}</div>`;
+    toast(r.mensagem);
+  } else if (r?.erro) {
+    el.innerHTML = `<div class="alert alert-danger"><i class="bi bi-x-circle me-2"></i>${r.erro}</div>`;
+    toast(r.erro, 'danger');
+  }
 }
 
 async function gerarEstorno() {
@@ -505,9 +553,14 @@ async function excluirMovimento() {
 
 // ── POSIÇÃO ────────────────────────────────────────────────
 async function consultarPosicao() {
-  const data = document.getElementById('p-data').value;
-  if (!data) { toast('Informe a data', 'warning'); return; }
-  const r = await api('GET', '/v1/posicao?data=' + data);
+  const dataInicio = document.getElementById('p-data-inicio').value;
+  const dataFim = document.getElementById('p-data-fim').value;
+  if (!dataInicio) { toast('Informe ao menos a data início', 'warning'); return; }
+
+  let url = '/v1/posicao?data_inicio=' + dataInicio;
+  if (dataFim) url += '&data_fim=' + dataFim;
+
+  const r = await api('GET', url);
   const el = document.getElementById('p-resultado');
   if (!r) { el.innerHTML = ''; return; }
   if (r.erro) { el.innerHTML = `<div class="alert alert-danger">${r.erro}</div>`; return; }
@@ -522,7 +575,21 @@ async function consultarPosicao() {
   const campos = lista[0].campos || {};
   const cols = Object.keys(campos);
 
-  const headers = cols.map(c => `<th class="text-nowrap">${c}</th>`).join('') + '<th style="width:50px"></th>';
+  // Mapa de nomes técnicos → nomes amigáveis (iguais ao formulário)
+  const nomeAmigavel = {
+    'id': 'ID',
+    'data_posicao_carteira': 'Data',
+    'codigo_versao_conteudo': 'Versão',
+    'codigo_identificador_boleto': 'Boleto',
+    'descricao_veiculo': 'Veículo',
+    'indicador_contraparte_afiliada': 'Afiliada',
+    'valor_mtm': 'MTM',
+    'principal_remanescente': 'Principal',
+    'moeda_principal_remanescente': 'Moeda',
+    'produto': 'Produto'
+  };
+
+  const headers = cols.map(c => `<th class="text-nowrap">${nomeAmigavel[c] || c}</th>`).join('') + '<th style="width:50px"></th>';
   const rows = lista.map(item => {
     const c = item.campos || {};
     const cells = cols.map(col => {
@@ -712,22 +779,43 @@ async function consultarIA() {
 async function carregarRegras() {
   const r = await api('GET', '/v1/regras');
   if (!r || r.erro) return;
-  const el = document.getElementById('r-lista');
-  if (!r.length) { el.innerHTML = '<div class="p-3 text-muted">Nenhuma regra cadastrada.</div>'; return; }
+  todasRegras = r;
+  renderizarRegras(r);
+}
 
-  const rows = r.map(reg => `<tr>
+function filtrarRegras() {
+  const termo = document.getElementById('r-filtro').value.toLowerCase();
+  if (!termo) { renderizarRegras(todasRegras); return; }
+  const filtradas = todasRegras.filter(reg =>
+    reg.descricao?.toLowerCase().includes(termo) ||
+    reg.codigo_produto_corporativo?.toLowerCase().includes(termo) ||
+    (reg.condicoes || []).some(c =>
+      c.condicao?.toLowerCase().includes(termo) ||
+      c.conta_debito?.toLowerCase().includes(termo) ||
+      c.conta_credito?.toLowerCase().includes(termo) ||
+      c.campo_valor?.toLowerCase().includes(termo) ||
+      c.campo_moeda?.toLowerCase().includes(termo)
+    )
+  );
+  renderizarRegras(filtradas);
+}
+
+function renderizarRegras(regras) {
+  const el = document.getElementById('r-lista');
+  if (!regras.length) { el.innerHTML = '<div class="p-3 text-muted">Nenhuma regra encontrada.</div>'; return; }
+  const rows = regras.map(reg => `<tr>
     <td>${reg.id}</td>
     <td><strong>${reg.descricao}</strong></td>
-    <td>${reg.codigo_produto_corporativo}</td>
+    <td>${reg.codigo_produto_corporativo ? reg.codigo_produto_corporativo.split(',').map(p => `<span class="badge bg-secondary me-1">${p.trim()}</span>`).join('') : '<span class="text-muted">Todos</span>'}</td>
+    <td>${reg.posta_reverte ? '<span class="badge bg-success">Sim</span>' : '<span class="badge bg-warning text-dark">Não</span>'}</td>
     <td>
       <button class="btn btn-sm btn-outline-primary" onclick="selecionarRegra(${reg.id}, '${reg.descricao.replace(/'/g,"\\'")}')">
         <i class="bi bi-list-check me-1"></i>Ver Condições
       </button>
     </td>
   </tr>`).join('');
-
   el.innerHTML = `<div class="table-responsive"><table class="table table-sm table-hover mb-0">
-    <thead class="table-dark"><tr><th>ID</th><th>Descrição</th><th>Produto</th><th></th></tr></thead>
+    <thead class="table-dark"><tr><th>ID</th><th>Descrição</th><th>Produtos</th><th>Posta/Reverte</th><th></th></tr></thead>
     <tbody>${rows}</tbody>
   </table></div>`;
 }
@@ -759,6 +847,31 @@ async function selecionarRegra(id, nome) {
   new bootstrap.Modal(document.getElementById('modalCondicoes')).show();
 }
 
+// ── VALIDAÇÃO DE EXPRESSÃO ─────────────────────────────────
+let validacaoTimer = {};
+function validarCondicao(valor, tipo, elId) {
+  clearTimeout(validacaoTimer[elId]);
+  const el = document.getElementById(elId);
+  if (!valor.trim()) { el.innerHTML = ''; return; }
+  el.innerHTML = '<small class="text-muted">Validando...</small>';
+  validacaoTimer[elId] = setTimeout(async () => {
+    const r = await fetch('/api/v1/validar-expressao', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ expressao: valor, tipo })
+    }).then(res => res.json()).catch(() => null);
+    if (!r) { el.innerHTML = ''; return; }
+    if (r.valido) {
+      el.innerHTML = '<small class="text-success"><i class="bi bi-check-circle me-1"></i>Expressão válida</small>';
+    } else {
+      el.innerHTML = `<div class="alert alert-warning py-1 px-2 mt-1 mb-0">
+        <small><strong><i class="bi bi-exclamation-triangle me-1"></i>Sintaxe inválida:</strong> ${r.erro}</small>
+        ${r.sugestao ? `<br><small><strong>Sugestão:</strong> ${r.sugestao}</small>` : ''}
+      </div>`;
+    }
+  }, 600);
+}
+
 function showNovaCondicaoModal() {
   bootstrap.Modal.getInstance(document.getElementById('modalCondicoes')).hide();
   setTimeout(() => new bootstrap.Modal(document.getElementById('modalNovaCondicao')).show(), 300);
@@ -777,15 +890,20 @@ async function excluirCondicao(id, nomeRegra) {
 
 async function criarRegra() {
   const desc = document.getElementById('r-nova-desc').value;
-  const cod = document.getElementById('r-nova-codigo').value;
   const postaReverte = document.getElementById('r-nova-posta-reverte').checked;
   if (!desc) { toast('Informe a descrição', 'warning'); return; }
-  const r = await api('POST', '/v1/regras', { descricao: desc, codigo_produto_corporativo: cod, posta_reverte: postaReverte });
+
+  // Coletar produtos selecionados
+  const produtos = [...document.querySelectorAll('.r-nova-produto:checked')].map(el => el.value);
+  const codigoProduto = produtos.join(',');
+
+  const r = await api('POST', '/v1/regras', { descricao: desc, codigo_produto_corporativo: codigoProduto, posta_reverte: postaReverte });
   if (r?.id) {
     toast('Regra criada!');
     bootstrap.Modal.getInstance(document.getElementById('modalNovaRegra')).hide();
     document.getElementById('r-nova-desc').value = '';
-    document.getElementById('r-nova-codigo').value = '';
+    document.querySelectorAll('.r-nova-produto').forEach(el => el.checked = false);
+    document.getElementById('r-nova-posta-reverte').checked = true;
     carregarRegras();
   } else if (r?.erro) toast(r.erro, 'danger');
 }

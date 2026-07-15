@@ -52,6 +52,17 @@ func (r *PosicaoCarteiraRepo) ListarPorData(ctx context.Context, data time.Time)
 	return scanPosicoes(rows)
 }
 
+func (r *PosicaoCarteiraRepo) ListarPorPeriodo(ctx context.Context, dataInicio, dataFim time.Time) ([]model.PosicaoCarteira, error) {
+	rows, err := r.db.QueryContext(ctx,
+		"SELECT * FROM posicao_carteira WHERE data_posicao_carteira >= '"+dataInicio.Format("2006-01-02")+"' AND data_posicao_carteira <= '"+dataFim.Format("2006-01-02")+"' ORDER BY data_posicao_carteira, codigo_versao_conteudo, id",
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	return scanPosicoes(rows)
+}
+
 func (r *PosicaoCarteiraRepo) Inserir(ctx context.Context, p model.PosicaoCarteira) (int64, error) {
 	afiliada := 0
 	if p.IndicadorContraparteAfiliada {

@@ -12,6 +12,7 @@ import (
 
 type posicaoCarteiraSvc interface {
 	ListarPorData(ctx context.Context, data time.Time) ([]model.PosicaoCarteira, error)
+	ListarPorPeriodo(ctx context.Context, dataInicio, dataFim time.Time) ([]model.PosicaoCarteira, error)
 	Inserir(ctx context.Context, p model.PosicaoCarteira) (int64, error)
 	Deletar(ctx context.Context, id int64) error
 }
@@ -25,13 +26,43 @@ func NewPosicaoCarteiraHandler(svc posicaoCarteiraSvc) *PosicaoCarteiraHandler {
 }
 
 func (h *PosicaoCarteiraHandler) Listar(w http.ResponseWriter, r *http.Request) {
-	dataStr := r.URL.Query().Get("data")
-	data, err := time.Parse("2006-01-02", dataStr)
-	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"erro": "data inválida: use YYYY-MM-DD"})
+	q := r.URL.Query()
+	dataInicioStr := q.Get("data_inicio")
+	dataFimStr := q.Get("data_fim")
+	dataStr := q.Get("data") // retrocompatibilidade
+
+	// Retrocompatibilidade com parâmetro data único
+	if dataStr != "" && dataInicioStr == "" {
+		dataInicioStr = dataStr
+	}
+
+	if dataInicioStr == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"erro": "informe data_inicio"})
 		return
 	}
-	posicoes, err := h.svc.ListarPorData(r.Context(), data)
+
+	dataInicio, err := time.Parse("2006-01-02", dataInicioStr)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"erro": "data_inicio inválida"})
+		return
+	}
+
+	// Se data_fim não informada, usa data_inicio (consulta de dia único)
+	dataFim := dataInicio
+	if dataFimStr != "" {
+		dataFim, err = time.Parse("2006-01-02", dataFimStr)
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"erro": "data_fim inválida"})
+			return
+		}
+	}
+
+	var posicoes []model.PosicaoCarteira
+	if dataFim.Equal(dataInicio) {
+		posicoes, err = h.svc.ListarPorData(r.Context(), dataInicio)
+	} else {
+		posicoes, err = h.svc.ListarPorPeriodo(r.Context(), dataInicio, dataFim)
+	}
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"erro": err.Error()})
 		return

@@ -249,3 +249,21 @@ func toBoolVal(v interface{}) bool {
 	}
 	return false
 }
+
+func (r *PosicaoCarteiraRepo) ListarPorPeriodo(_ context.Context, dataInicio, dataFim time.Time) ([]model.PosicaoCarteira, error) {
+	all, err := r.st.load()
+	if err != nil {
+		return nil, err
+	}
+	inicioStr := dataInicio.Format("2006-01-02")
+	fimStr := dataFim.Format("2006-01-02")
+	var result []model.PosicaoCarteira
+	for _, m := range all {
+		p := mapToPosicao(m)
+		d := p.DataPosicaoCarteira.Format("2006-01-02")
+		if d >= inicioStr && d <= fimStr {
+			result = append(result, p)
+		}
+	}
+	return result, nil
+}

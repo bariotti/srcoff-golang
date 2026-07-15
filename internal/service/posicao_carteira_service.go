@@ -11,6 +11,7 @@ import (
 type posicaoCarteiraRepoFull interface {
 	posicaoCarteiraRepo
 	ListarPorData(ctx context.Context, data time.Time) ([]model.PosicaoCarteira, error)
+	ListarPorPeriodo(ctx context.Context, dataInicio, dataFim time.Time) ([]model.PosicaoCarteira, error)
 	Inserir(ctx context.Context, p model.PosicaoCarteira) (int64, error)
 	Deletar(ctx context.Context, id int64) error
 }
@@ -44,4 +45,8 @@ func (s *PosicaoCarteiraService) Deletar(ctx context.Context, id int64) error {
 		return fmt.Errorf("id inválido")
 	}
 	return s.repo.Deletar(ctx, id)
+}
+
+func (s *PosicaoCarteiraService) ListarPorPeriodo(ctx context.Context, dataInicio, dataFim time.Time) ([]model.PosicaoCarteira, error) {
+	return s.repo.ListarPorPeriodo(ctx, dataInicio, dataFim)
 }

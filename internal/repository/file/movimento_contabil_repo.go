@@ -123,11 +123,13 @@ func (r *MovimentoContabilRepo) ConsultarPaginadoFiltradoSemCancelados(ctx conte
 	}
 
 	// Calcular saldo líquido usando SEMPRE a versão vigente (equivalente ao SQL Server)
+	// Chave: boleto + regra + conta_debito + conta_credito
 	type chave struct {
-		data  string
-		boleto string
-		valor float64
-		regra int64
+		data         string
+		boleto       string
+		regra        int64
+		contaDebito  string
+		contaCredito string
 	}
 	saldo := map[chave]float64{}
 	for _, l := range all {
@@ -138,7 +140,17 @@ func (r *MovimentoContabilRepo) ConsultarPaginadoFiltradoSemCancelados(ctx conte
 		if l.CodigoVersaoConteudo != maxVersaoPorData[d] {
 			continue
 		}
-		k := chave{d, l.CodigoIdentificadorBoleto, l.ValorLancamentoContabil, l.IDRegraContabil}
+
+		var k chave
+
+		if l.IndicadorReversao {
+			k = chave{d, l.CodigoIdentificadorBoleto, l.IDRegraContabil, l.ContaCredito, l.ContaDebito}
+		} else {
+			k = chave{d, l.CodigoIdentificadorBoleto, l.IDRegraContabil, l.ContaDebito, l.ContaCredito}
+		}
+
+		//k := chave{d, l.CodigoIdentificadorBoleto, l.IDRegraContabil, l.ContaDebito, l.ContaCredito}
+
 		if l.IndicadorReversao {
 			saldo[k] -= l.ValorLancamentoContabil
 		} else {
@@ -153,7 +165,16 @@ func (r *MovimentoContabilRepo) ConsultarPaginadoFiltradoSemCancelados(ctx conte
 	var filtered []model.LancamentoContabil
 	for _, l := range result.Lancamentos {
 		d := l.DataLoteContabil.Format("2006-01-02")
-		k := chave{d, l.CodigoIdentificadorBoleto, l.ValorLancamentoContabil, l.IDRegraContabil}
+
+		var k chave
+
+		if l.IndicadorReversao {
+			k = chave{d, l.CodigoIdentificadorBoleto, l.IDRegraContabil, l.ContaCredito, l.ContaDebito}
+		} else {
+			k = chave{d, l.CodigoIdentificadorBoleto, l.IDRegraContabil, l.ContaDebito, l.ContaCredito}
+		}
+
+		//k := chave{d, l.CodigoIdentificadorBoleto, l.IDRegraContabil, l.ContaDebito, l.ContaCredito}
 		if saldo[k] != 0 {
 			filtered = append(filtered, l)
 		}

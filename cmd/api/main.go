@@ -115,6 +115,8 @@ func main() {
 	http.HandleFunc("/api/v1/conciliacao", conciliacaoHandler.Conciliar)
 	http.HandleFunc("/api/v1/conciliacao-ia", conciliacaoIAHandler.Analisar)
 	http.HandleFunc("/api/v1/conciliacao-ia/ajuste", conciliacaoIAHandler.AplicarAjuste)
+	validarHandler := handler.NewValidarExpressaoHandler()
+	http.HandleFunc("/api/v1/validar-expressao", validarHandler.Validar)
 	http.HandleFunc("/api/v1/nlquery", nlQueryHandler.Query)
 	http.HandleFunc("/api/v1/movimento-contabil/export", exportHandler.ExportMovimentoCSV)
 	http.HandleFunc("/api/v1/movimento-contabil/export-txt", exportHandler.ExportMovimentoTXT)
