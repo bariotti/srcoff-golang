@@ -67,6 +67,22 @@ func (f *fakeMovimentoRepo) ConsultarPaginado(ctx context.Context, data time.Tim
 	return &model.PaginaLancamentos{}, nil
 }
 
+func (f *fakeMovimentoRepo) ObterVersaoAtual(ctx context.Context, data time.Time) (int, error) {
+	return f.versaoAtual, nil
+}
+
+func (f *fakeMovimentoRepo) ConsultarPaginadoFiltrado(ctx context.Context, dataInicio, dataFim time.Time, boleto string, versao int, versaoModo string, pagina, tamanho int) (*model.PaginaLancamentos, error) {
+	return &model.PaginaLancamentos{}, nil
+}
+
+func (f *fakeMovimentoRepo) ConsultarPaginadoFiltradoSemCancelados(ctx context.Context, dataInicio, dataFim time.Time, boleto string, versao int, versaoModo string, pagina, tamanho int) (*model.PaginaLancamentos, error) {
+	return &model.PaginaLancamentos{}, nil
+}
+
+func (f *fakeMovimentoRepo) ExcluirPorDataEVersao(ctx context.Context, data time.Time, versao int) error {
+	return nil
+}
+
 // fakeMovimentoRepoTracked records the versao assigned to each BulkInsert call.
 type fakeMovimentoRepoTracked struct {
 	versaoAtual    int
@@ -95,6 +111,22 @@ func (f *fakeMovimentoRepoTracked) ConsultarPaginado(ctx context.Context, data t
 	return &model.PaginaLancamentos{}, nil
 }
 
+func (f *fakeMovimentoRepoTracked) ObterVersaoAtual(ctx context.Context, data time.Time) (int, error) {
+	return f.versaoAtual, nil
+}
+
+func (f *fakeMovimentoRepoTracked) ConsultarPaginadoFiltrado(ctx context.Context, dataInicio, dataFim time.Time, boleto string, versao int, versaoModo string, pagina, tamanho int) (*model.PaginaLancamentos, error) {
+	return &model.PaginaLancamentos{}, nil
+}
+
+func (f *fakeMovimentoRepoTracked) ConsultarPaginadoFiltradoSemCancelados(ctx context.Context, dataInicio, dataFim time.Time, boleto string, versao int, versaoModo string, pagina, tamanho int) (*model.PaginaLancamentos, error) {
+	return &model.PaginaLancamentos{}, nil
+}
+
+func (f *fakeMovimentoRepoTracked) ExcluirPorDataEVersao(ctx context.Context, data time.Time, versao int) error {
+	return nil
+}
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -103,6 +135,26 @@ var baseDate = time.Date(2024, 1, 15, 0, 0, 0, 0, time.UTC)
 
 func dateOffset(days int) time.Time {
 	return baseDate.AddDate(0, 0, days)
+}
+
+// campoStr lê um campo da posição dinâmica como string.
+func campoStr(p model.PosicaoCarteira, campo string) string {
+	if v, ok := p.Campos[campo]; ok {
+		if s, ok := v.(string); ok {
+			return s
+		}
+	}
+	return ""
+}
+
+// campoFloat lê um campo da posição dinâmica como float64.
+func campoFloat(p model.PosicaoCarteira, campo string) float64 {
+	if v, ok := p.Campos[campo]; ok {
+		if f, ok := v.(float64); ok {
+			return f
+		}
+	}
+	return 0
 }
 
 // ---------------------------------------------------------------------------
@@ -129,10 +181,12 @@ func TestP1_SelecaoVersaoMaxima(t *testing.T) {
 			for i, v := range versoes {
 				offset := dateOffsets[i%len(dateOffsets)]
 				registros[i] = model.PosicaoCarteira{
-					ID:                        int64(i + 1),
-					DataPosicaoCarteira:       dateOffset(offset),
-					CodigoVersaoConteudo:      v,
-					CodigoIdentificadorBoleto: "BOLETO",
+					ID:                   int64(i + 1),
+					DataPosicaoCarteira:  dateOffset(offset),
+					CodigoVersaoConteudo: v,
+					Campos: map[string]interface{}{
+						"codigo_identificador_boleto": "BOLETO",
+					},
 				}
 			}
 
@@ -209,12 +263,14 @@ func TestP3_LancamentosCorrespondemCondicoesSatisfeitas(t *testing.T) {
 			posicoes := make([]model.PosicaoCarteira, len(valorMTMs))
 			for i, v := range valorMTMs {
 				posicoes[i] = model.PosicaoCarteira{
-					ID:                        int64(i + 1),
-					DataPosicaoCarteira:       baseDate,
-					CodigoVersaoConteudo:      1,
-					CodigoIdentificadorBoleto: "BOLETO",
-					ValorMTM:                  v,
-					MoedaPrincipalRemanescente: "USD",
+					ID:                   int64(i + 1),
+					DataPosicaoCarteira:  baseDate,
+					CodigoVersaoConteudo: 1,
+					Campos: map[string]interface{}{
+						"codigo_identificador_boleto":  "BOLETO",
+						"valor_mtm":                    v,
+						"moeda_principal_remanescente": "USD",
+					},
 				}
 			}
 
@@ -310,12 +366,14 @@ func TestP4_CamposLancamentoPreenchidosCorretamente(t *testing.T) {
 					v = -v + 1 // ensure positive
 				}
 				posicoes[i] = model.PosicaoCarteira{
-					ID:                        int64(i + 1),
-					DataPosicaoCarteira:       baseDate,
-					CodigoVersaoConteudo:      1,
-					CodigoIdentificadorBoleto: boletos[i%len(boletos)],
-					ValorMTM:                  v,
-					MoedaPrincipalRemanescente: moedas[i%len(moedas)],
+					ID:                   int64(i + 1),
+					DataPosicaoCarteira:  baseDate,
+					CodigoVersaoConteudo: 1,
+					Campos: map[string]interface{}{
+						"codigo_identificador_boleto":  boletos[i%len(boletos)],
+						"valor_mtm":                    v,
+						"moeda_principal_remanescente": moedas[i%len(moedas)],
+					},
 				}
 			}
 
@@ -362,7 +420,7 @@ func TestP4_CamposLancamentoPreenchidosCorretamente(t *testing.T) {
 			lookup := make(map[key]pair)
 			for _, p := range posicoes {
 				for _, c := range condicoes {
-					lookup[key{p.CodigoIdentificadorBoleto, c.ID}] = pair{p, c}
+					lookup[key{campoStr(p, "codigo_identificador_boleto"), c.ID}] = pair{p, c}
 				}
 			}
 
@@ -371,7 +429,7 @@ func TestP4_CamposLancamentoPreenchidosCorretamente(t *testing.T) {
 				// Find matching posicao
 				var matchPos *model.PosicaoCarteira
 				for i := range posicoes {
-					if posicoes[i].CodigoIdentificadorBoleto == l.CodigoIdentificadorBoleto {
+					if campoStr(posicoes[i], "codigo_identificador_boleto") == l.CodigoIdentificadorBoleto {
 						matchPos = &posicoes[i]
 						break
 					}
@@ -398,13 +456,13 @@ func TestP4_CamposLancamentoPreenchidosCorretamente(t *testing.T) {
 				if l.ContaCredito != matchCond.ContaCredito {
 					return false
 				}
-				if l.ValorLancamentoContabil != matchPos.ValorMTM {
+				if l.ValorLancamentoContabil != campoFloat(*matchPos, "valor_mtm") {
 					return false
 				}
-				if l.MoedaLancamentoContabil != matchPos.MoedaPrincipalRemanescente {
+				if l.MoedaLancamentoContabil != campoStr(*matchPos, "moeda_principal_remanescente") {
 					return false
 				}
-				if l.CodigoIdentificadorBoleto != matchPos.CodigoIdentificadorBoleto {
+				if l.CodigoIdentificadorBoleto != campoStr(*matchPos, "codigo_identificador_boleto") {
 					return false
 				}
 				if l.IndicadorReversao != false {
@@ -444,12 +502,14 @@ func TestP5_VersaoLoteIncrementadaMonotonicamente(t *testing.T) {
 			n := (numChamadas % 4) + 2 // 2 to 5 calls
 
 			posicao := model.PosicaoCarteira{
-				ID:                        1,
-				DataPosicaoCarteira:       baseDate,
-				CodigoVersaoConteudo:      1,
-				CodigoIdentificadorBoleto: "BOLETO001",
-				ValorMTM:                  100.0,
-				MoedaPrincipalRemanescente: "USD",
+				ID:                   1,
+				DataPosicaoCarteira:  baseDate,
+				CodigoVersaoConteudo: 1,
+				Campos: map[string]interface{}{
+					"codigo_identificador_boleto":  "BOLETO001",
+					"valor_mtm":                    100.0,
+					"moeda_principal_remanescente": "USD",
+				},
 			}
 
 			condicao := model.CondicaoRegra{

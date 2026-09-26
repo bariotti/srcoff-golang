@@ -18,7 +18,7 @@ func NewRegraContabilRepo(db *sql.DB) *RegraContabilRepo {
 }
 
 func (r *RegraContabilRepo) ListarRegrasAtivas(ctx context.Context) ([]model.RegraContabil, error) {
-	rows, err := r.db.QueryContext(ctx, "SELECT id, descricao, codigo_produto_corporativo, ativo, ISNULL(posta_reverte, 1) FROM regra_contabil WHERE ativo = 1")
+	rows, err := r.db.QueryContext(ctx, "SELECT id, descricao, codigo_produto_corporativo, ISNULL(campo_produto, ''), ISNULL(campo_data, ''), ISNULL(pre_condicao, ''), ISNULL(natureza, ''), ativo, ISNULL(posta_reverte, 1) FROM regra_contabil WHERE ativo = 1")
 	if err != nil {
 		return nil, err
 	}
@@ -27,7 +27,7 @@ func (r *RegraContabilRepo) ListarRegrasAtivas(ctx context.Context) ([]model.Reg
 	var regras []model.RegraContabil
 	for rows.Next() {
 		var reg model.RegraContabil
-		if err := rows.Scan(&reg.ID, &reg.Descricao, &reg.CodigoProdutoCorporativo, &reg.Ativo, &reg.PostaReverte); err != nil {
+		if err := rows.Scan(&reg.ID, &reg.Descricao, &reg.CodigoProdutoCorporativo, &reg.CampoProduto, &reg.CampoData, &reg.PreCondicao, &reg.Natureza, &reg.Ativo, &reg.PostaReverte); err != nil {
 			return nil, err
 		}
 		regras = append(regras, reg)
@@ -58,7 +58,7 @@ func (r *RegraContabilRepo) CriarRegra(ctx context.Context, regra model.RegraCon
 		postaReverte = 0
 	}
 	err := r.db.QueryRowContext(ctx,
-		"INSERT INTO regra_contabil (descricao, codigo_produto_corporativo, ativo, posta_reverte) VALUES ('"+esc(regra.Descricao)+"', '"+esc(regra.CodigoProdutoCorporativo)+"', 1, "+fmt.Sprintf("%d", postaReverte)+"); SELECT SCOPE_IDENTITY()",
+		"INSERT INTO regra_contabil (descricao, codigo_produto_corporativo, campo_produto, campo_data, pre_condicao, natureza, ativo, posta_reverte) VALUES ('"+esc(regra.Descricao)+"', '"+esc(regra.CodigoProdutoCorporativo)+"', '"+esc(regra.CampoProduto)+"', '"+esc(regra.CampoData)+"', '"+esc(regra.PreCondicao)+"', '"+esc(regra.Natureza)+"', 1, "+fmt.Sprintf("%d", postaReverte)+"); SELECT SCOPE_IDENTITY()",
 	).Scan(&id)
 	if err != nil {
 		return 0, err
@@ -76,15 +76,15 @@ func (r *RegraContabilRepo) EditarRegra(ctx context.Context, regra model.RegraCo
 		postaReverte = 1
 	}
 	_, err := r.db.ExecContext(ctx,
-		fmt.Sprintf("UPDATE regra_contabil SET descricao = '%s', codigo_produto_corporativo = '%s', ativo = %d, posta_reverte = %d WHERE id = %d",
-			esc(regra.Descricao), esc(regra.CodigoProdutoCorporativo), ativo, postaReverte, regra.ID),
+		fmt.Sprintf("UPDATE regra_contabil SET descricao = '%s', codigo_produto_corporativo = '%s', campo_produto = '%s', campo_data = '%s', pre_condicao = '%s', natureza = '%s', ativo = %d, posta_reverte = %d WHERE id = %d",
+			esc(regra.Descricao), esc(regra.CodigoProdutoCorporativo), esc(regra.CampoProduto), esc(regra.CampoData), esc(regra.PreCondicao), esc(regra.Natureza), ativo, postaReverte, regra.ID),
 	)
 	return err
 }
 
 func (r *RegraContabilRepo) ListarCondicoes(ctx context.Context, idRegra int64) ([]model.CondicaoRegra, error) {
 	rows, err := r.db.QueryContext(ctx,
-		fmt.Sprintf("SELECT id, id_regra, condicao, conta_debito, conta_credito, campo_valor, campo_moeda, ativo FROM condicao_regra WHERE id_regra = %d AND ativo = 1", idRegra),
+		fmt.Sprintf("SELECT id, id_regra, condicao, conta_debito, conta_credito, campo_valor, campo_moeda, ISNULL(campo_boleto, ''), ativo FROM condicao_regra WHERE id_regra = %d AND ativo = 1", idRegra),
 	)
 	if err != nil {
 		return nil, err
@@ -94,7 +94,7 @@ func (r *RegraContabilRepo) ListarCondicoes(ctx context.Context, idRegra int64) 
 	var condicoes []model.CondicaoRegra
 	for rows.Next() {
 		var c model.CondicaoRegra
-		if err := rows.Scan(&c.ID, &c.IDRegra, &c.Condicao, &c.ContaDebito, &c.ContaCredito, &c.CampoValor, &c.CampoMoeda, &c.Ativo); err != nil {
+		if err := rows.Scan(&c.ID, &c.IDRegra, &c.Condicao, &c.ContaDebito, &c.ContaCredito, &c.CampoValor, &c.CampoMoeda, &c.CampoBoleto, &c.Ativo); err != nil {
 			return nil, err
 		}
 		condicoes = append(condicoes, c)
@@ -109,8 +109,8 @@ func (r *RegraContabilRepo) ListarCondicoes(ctx context.Context, idRegra int64) 
 func (r *RegraContabilRepo) CriarCondicao(ctx context.Context, condicao model.CondicaoRegra) (int64, error) {
 	var id int64
 	err := r.db.QueryRowContext(ctx,
-		fmt.Sprintf("INSERT INTO condicao_regra (id_regra, condicao, conta_debito, conta_credito, campo_valor, campo_moeda, ativo) VALUES (%d, '%s', '%s', '%s', '%s', '%s', 1); SELECT SCOPE_IDENTITY()",
-			condicao.IDRegra, esc(condicao.Condicao), esc(condicao.ContaDebito), esc(condicao.ContaCredito), esc(condicao.CampoValor), esc(condicao.CampoMoeda)),
+		fmt.Sprintf("INSERT INTO condicao_regra (id_regra, condicao, conta_debito, conta_credito, campo_valor, campo_moeda, campo_boleto, ativo) VALUES (%d, '%s', '%s', '%s', '%s', '%s', '%s', 1); SELECT SCOPE_IDENTITY()",
+			condicao.IDRegra, esc(condicao.Condicao), esc(condicao.ContaDebito), esc(condicao.ContaCredito), esc(condicao.CampoValor), esc(condicao.CampoMoeda), esc(condicao.CampoBoleto)),
 	).Scan(&id)
 	if err != nil {
 		return 0, err
@@ -124,8 +124,8 @@ func (r *RegraContabilRepo) EditarCondicao(ctx context.Context, condicao model.C
 		ativo = 1
 	}
 	_, err := r.db.ExecContext(ctx,
-		fmt.Sprintf("UPDATE condicao_regra SET condicao = '%s', conta_debito = '%s', conta_credito = '%s', campo_valor = '%s', campo_moeda = '%s', ativo = %d WHERE id = %d",
-			esc(condicao.Condicao), esc(condicao.ContaDebito), esc(condicao.ContaCredito), esc(condicao.CampoValor), esc(condicao.CampoMoeda), ativo, condicao.ID),
+		fmt.Sprintf("UPDATE condicao_regra SET condicao = '%s', conta_debito = '%s', conta_credito = '%s', campo_valor = '%s', campo_moeda = '%s', campo_boleto = '%s', ativo = %d WHERE id = %d",
+			esc(condicao.Condicao), esc(condicao.ContaDebito), esc(condicao.ContaCredito), esc(condicao.CampoValor), esc(condicao.CampoMoeda), esc(condicao.CampoBoleto), ativo, condicao.ID),
 	)
 	return err
 }

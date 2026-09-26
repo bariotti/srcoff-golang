@@ -66,6 +66,22 @@ func (f *fakeMovimentoRepoPaginado) ConsultarPaginado(ctx context.Context, data 
 	}, nil
 }
 
+func (f *fakeMovimentoRepoPaginado) ObterVersaoAtual(ctx context.Context, data time.Time) (int, error) {
+	return 1, nil
+}
+
+func (f *fakeMovimentoRepoPaginado) ConsultarPaginadoFiltrado(ctx context.Context, dataInicio, dataFim time.Time, boleto string, versao int, versaoModo string, pagina, tamanho int) (*model.PaginaLancamentos, error) {
+	return f.ConsultarPaginado(ctx, dataInicio, pagina, tamanho)
+}
+
+func (f *fakeMovimentoRepoPaginado) ConsultarPaginadoFiltradoSemCancelados(ctx context.Context, dataInicio, dataFim time.Time, boleto string, versao int, versaoModo string, pagina, tamanho int) (*model.PaginaLancamentos, error) {
+	return f.ConsultarPaginado(ctx, dataInicio, pagina, tamanho)
+}
+
+func (f *fakeMovimentoRepoPaginado) ExcluirPorDataEVersao(ctx context.Context, data time.Time, versao int) error {
+	return nil
+}
+
 // ---------------------------------------------------------------------------
 // Property 8: Lote consolidado contém exatamente todos os lançamentos e estornos da data
 // ---------------------------------------------------------------------------

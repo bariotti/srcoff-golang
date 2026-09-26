@@ -3,10 +3,28 @@ package service
 import (
 	"context"
 	"testing"
+	"time"
 
 	"srcoff/internal/evaluator"
 	"srcoff/internal/model"
 )
+
+// posIntegra cria uma posição dinâmica para os testes de integração.
+func posIntegra(id int64, data time.Time, boleto string, mtm, principal float64, moeda string) model.PosicaoCarteira {
+	return model.PosicaoCarteira{
+		ID:                   id,
+		DataPosicaoCarteira:  data,
+		CodigoVersaoConteudo: 1,
+		Campos: map[string]interface{}{
+			"codigo_identificador_boleto":    boleto,
+			"descricao_veiculo":              "NASSAU",
+			"indicador_contraparte_afiliada": true,
+			"valor_mtm":                      mtm,
+			"principal_remanescente":         principal,
+			"moeda_principal_remanescente":   moeda,
+		},
+	}
+}
 
 // ---------------------------------------------------------------------------
 // Test 1: Fluxo completo — inserir posição → gerar movimento → gerar estorno → consultar lote consolidado
@@ -20,30 +38,9 @@ func TestFluxoCompleto_MovimentoEstornoConsulta(t *testing.T) {
 	dataDMenos1 := baseDate.AddDate(0, 0, -1)
 
 	// Posição para D-1
-	posicaoD1 := model.PosicaoCarteira{
-		ID:                           1,
-		DataPosicaoCarteira:          dataDMenos1,
-		CodigoVersaoConteudo:         1,
-		CodigoIdentificadorBoleto:    "BOLETO-D1",
-		DescricaoVeiculo:             "NASSAU",
-		IndicadorContraparteAfiliada: true,
-		ValorMTM:                     200.0,
-		PrincipalRemanescente:        1000.0,
-		MoedaPrincipalRemanescente:   "USD",
-	}
-
+	posicaoD1 := posIntegra(1, dataDMenos1, "BOLETO-D1", 200.0, 1000.0, "USD")
 	// Posição para D (mesmo boleto, valor MTM diferente para gerar estorno)
-	posicaoD := model.PosicaoCarteira{
-		ID:                           2,
-		DataPosicaoCarteira:          baseDate,
-		CodigoVersaoConteudo:         1,
-		CodigoIdentificadorBoleto:    "BOLETO-D1",
-		DescricaoVeiculo:             "NASSAU",
-		IndicadorContraparteAfiliada: true,
-		ValorMTM:                     500.0,
-		PrincipalRemanescente:        1000.0,
-		MoedaPrincipalRemanescente:   "USD",
-	}
+	posicaoD := posIntegra(2, baseDate, "BOLETO-D1", 500.0, 1000.0, "USD")
 
 	posRepo := &fakePosicaoRepo{registros: []model.PosicaoCarteira{posicaoD1, posicaoD}}
 
@@ -60,6 +57,7 @@ func TestFluxoCompleto_MovimentoEstornoConsulta(t *testing.T) {
 				ContaCredito: "2001",
 				CampoValor:   "valor_mtm",
 				CampoMoeda:   "moeda_principal_remanescente",
+				CampoBoleto:  "codigo_identificador_boleto",
 				Ativo:        true,
 			},
 		},
@@ -164,17 +162,7 @@ func TestNovaRegra_AplicadaNoProximoProcessamento(t *testing.T) {
 	ctx := context.Background()
 	eval := evaluator.New()
 
-	posicao := model.PosicaoCarteira{
-		ID:                           1,
-		DataPosicaoCarteira:          baseDate,
-		CodigoVersaoConteudo:         1,
-		CodigoIdentificadorBoleto:    "BOLETO-001",
-		DescricaoVeiculo:             "NASSAU",
-		IndicadorContraparteAfiliada: true,
-		ValorMTM:                     500.0,
-		PrincipalRemanescente:        1000.0,
-		MoedaPrincipalRemanescente:   "USD",
-	}
+	posicao := posIntegra(1, baseDate, "BOLETO-001", 500.0, 1000.0, "USD")
 
 	posRepo := &fakePosicaoRepo{registros: []model.PosicaoCarteira{posicao}}
 
@@ -193,6 +181,7 @@ func TestNovaRegra_AplicadaNoProximoProcessamento(t *testing.T) {
 						ContaCredito: "2001",
 						CampoValor:   "valor_mtm",
 						CampoMoeda:   "moeda_principal_remanescente",
+						CampoBoleto:  "codigo_identificador_boleto",
 						Ativo:        true,
 					},
 				},
@@ -226,6 +215,7 @@ func TestNovaRegra_AplicadaNoProximoProcessamento(t *testing.T) {
 				ContaCredito: "4001",
 				CampoValor:   "principal_remanescente",
 				CampoMoeda:   "moeda_principal_remanescente",
+				CampoBoleto:  "codigo_identificador_boleto",
 				Ativo:        true,
 			},
 		},

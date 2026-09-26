@@ -1,0 +1,10 @@
+{
+  "natureza": [
+    "Receita",
+    "Despesa"
+  ],
+  "produto": [
+    "NDF",
+    "SWAP"
+  ]
+}

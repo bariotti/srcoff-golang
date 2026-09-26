@@ -25,20 +25,9 @@ func (h *ValidarExpressaoHandler) Validar(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	// Env de exemplo com campos típicos da posição para validação de sintaxe
-	envExemplo := map[string]interface{}{
-		"id":                              float64(1),
-		"codigo_identificador_boleto":     "BOL-001",
-		"descricao_veiculo":               "NASSAU",
-		"indicador_contraparte_afiliada":  true,
-		"valor_mtm":                       float64(1000),
-		"principal_remanescente":          float64(5000),
-		"moeda_principal_remanescente":    "BRL",
-		"produto":                         "NDF",
-		"agio":                            float64(0),
-		"codigo_versao_conteudo":          float64(1),
-	}
-
+	// Validação apenas de SINTAXE (compilação). Não executamos contra um env de
+	// exemplo fixo, pois a posição é dinâmica: qualquer campo importado pode ser
+	// referenciado e não deve ser rejeitado como "campo desconhecido".
 	var compileErr error
 	if req.Tipo == "valor" {
 		_, compileErr = expr.Compile(req.Expressao)
@@ -47,31 +36,11 @@ func (h *ValidarExpressaoHandler) Validar(w http.ResponseWriter, r *http.Request
 	}
 
 	if compileErr != nil {
-		// Gerar sugestão baseada no erro
 		sugestao := gerarSugestao(req.Expressao, compileErr.Error())
 		writeJSON(w, http.StatusOK, map[string]interface{}{
 			"valido":   false,
 			"erro":     compileErr.Error(),
 			"sugestao": sugestao,
-		})
-		return
-	}
-
-	// Testar execução com env de exemplo
-	var execErr error
-	if req.Tipo == "valor" {
-		prog, _ := expr.Compile(req.Expressao)
-		_, execErr = expr.Run(prog, envExemplo)
-	} else {
-		prog, _ := expr.Compile(req.Expressao, expr.AsBool())
-		_, execErr = expr.Run(prog, envExemplo)
-	}
-
-	if execErr != nil {
-		writeJSON(w, http.StatusOK, map[string]interface{}{
-			"valido":   false,
-			"erro":     execErr.Error(),
-			"sugestao": gerarSugestao(req.Expressao, execErr.Error()),
 		})
 		return
 	}

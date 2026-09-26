@@ -3,13 +3,16 @@ package repository
 import (
 	"context"
 	"database/sql"
-	"fmt"
-	"strings"
+	"encoding/json"
 	"time"
 
 	"srcoff/internal/model"
 )
 
+// PosicaoCarteiraRepo persiste a posição de carteira no SQL Server usando um
+// schema dinâmico: os metadados do lote ficam em colunas fixas e todos os campos
+// de negócio ficam serializados como JSON na coluna `campos` (NVARCHAR(MAX)).
+// Ver migration 002_posicao_dinamica.sql.
 type PosicaoCarteiraRepo struct {
 	db *sql.DB
 }
@@ -21,29 +24,53 @@ func NewPosicaoCarteiraRepo(db *sql.DB) *PosicaoCarteiraRepo {
 func (r *PosicaoCarteiraRepo) BuscarPorDataEVersaoMaxima(ctx context.Context, data time.Time) ([]model.PosicaoCarteira, error) {
 	dataStr := data.Format("2006-01-02")
 
-	var maxVersao int
-	err := r.db.QueryRowContext(ctx,
-		"SELECT ISNULL(MAX(codigo_versao_conteudo), 0) FROM posicao_carteira WHERE data_posicao_carteira = '"+dataStr+"'",
-	).Scan(&maxVersao)
-	if err != nil {
-		return nil, err
-	}
-
+	// Busca todas as linhas da data e computa, por produto, a maior versão em Go —
+	// o produto está serializado dentro do JSON `campos`, então o filtro por versão
+	// máxima por produto não é expresso trivialmente em SQL.
 	rows, err := r.db.QueryContext(ctx,
-		"SELECT * FROM posicao_carteira WHERE data_posicao_carteira = '"+dataStr+"' AND codigo_versao_conteudo = "+fmt.Sprintf("%d", maxVersao),
+		"SELECT id, data_posicao_carteira, codigo_versao_conteudo, campos FROM posicao_carteira WHERE data_posicao_carteira = @p1 ORDER BY id",
+		dataStr,
 	)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
+	doDia, err := scanPosicoes(rows)
+	if err != nil {
+		return nil, err
+	}
 
-	return scanPosicoes(rows)
+	maxPorProduto := map[string]int{}
+	for _, p := range doDia {
+		prod := produtoDaPosicao(p)
+		if p.CodigoVersaoConteudo > maxPorProduto[prod] {
+			maxPorProduto[prod] = p.CodigoVersaoConteudo
+		}
+	}
+	var result []model.PosicaoCarteira
+	for _, p := range doDia {
+		if p.CodigoVersaoConteudo == maxPorProduto[produtoDaPosicao(p)] {
+			result = append(result, p)
+		}
+	}
+	return result, nil
+}
+
+// produtoDaPosicao lê o campo `produto` de uma posição.
+func produtoDaPosicao(p model.PosicaoCarteira) string {
+	if v, ok := p.Campos["produto"]; ok {
+		if s, ok := v.(string); ok {
+			return s
+		}
+	}
+	return ""
 }
 
 func (r *PosicaoCarteiraRepo) ListarPorData(ctx context.Context, data time.Time) ([]model.PosicaoCarteira, error) {
 	dataStr := data.Format("2006-01-02")
 	rows, err := r.db.QueryContext(ctx,
-		"SELECT * FROM posicao_carteira WHERE data_posicao_carteira = '"+dataStr+"' ORDER BY codigo_versao_conteudo, id",
+		"SELECT id, data_posicao_carteira, codigo_versao_conteudo, campos FROM posicao_carteira WHERE data_posicao_carteira = @p1 ORDER BY codigo_versao_conteudo, id",
+		dataStr,
 	)
 	if err != nil {
 		return nil, err
@@ -54,7 +81,8 @@ func (r *PosicaoCarteiraRepo) ListarPorData(ctx context.Context, data time.Time)
 
 func (r *PosicaoCarteiraRepo) ListarPorPeriodo(ctx context.Context, dataInicio, dataFim time.Time) ([]model.PosicaoCarteira, error) {
 	rows, err := r.db.QueryContext(ctx,
-		"SELECT * FROM posicao_carteira WHERE data_posicao_carteira >= '"+dataInicio.Format("2006-01-02")+"' AND data_posicao_carteira <= '"+dataFim.Format("2006-01-02")+"' ORDER BY data_posicao_carteira, codigo_versao_conteudo, id",
+		"SELECT id, data_posicao_carteira, codigo_versao_conteudo, campos FROM posicao_carteira WHERE data_posicao_carteira >= @p1 AND data_posicao_carteira <= @p2 ORDER BY data_posicao_carteira, codigo_versao_conteudo, id",
+		dataInicio.Format("2006-01-02"), dataFim.Format("2006-01-02"),
 	)
 	if err != nil {
 		return nil, err
@@ -63,209 +91,59 @@ func (r *PosicaoCarteiraRepo) ListarPorPeriodo(ctx context.Context, dataInicio, 
 	return scanPosicoes(rows)
 }
 
-func (r *PosicaoCarteiraRepo) Inserir(ctx context.Context, p model.PosicaoCarteira) (int64, error) {
-	afiliada := 0
-	if p.IndicadorContraparteAfiliada {
-		afiliada = 1
-	}
-	query := fmt.Sprintf(
-		"INSERT INTO posicao_carteira (data_posicao_carteira, codigo_versao_conteudo, codigo_identificador_boleto, descricao_veiculo, indicador_contraparte_afiliada, valor_mtm, principal_remanescente, moeda_principal_remanescente, produto) VALUES ('%s', %d, '%s', '%s', %d, %f, %f, '%s', '%s'); SELECT SCOPE_IDENTITY()",
-		p.DataPosicaoCarteira.Format("2006-01-02"),
-		p.CodigoVersaoConteudo,
-		strings.ReplaceAll(p.CodigoIdentificadorBoleto, "'", "''"),
-		strings.ReplaceAll(p.DescricaoVeiculo, "'", "''"),
-		afiliada,
-		p.ValorMTM,
-		p.PrincipalRemanescente,
-		strings.ReplaceAll(p.MoedaPrincipalRemanescente, "'", "''"),
-		strings.ReplaceAll(p.Produto, "'", "''"),
-	)
-	var id int64
-	err := r.db.QueryRowContext(ctx, query).Scan(&id)
-	return id, err
-}
-
-func (r *PosicaoCarteiraRepo) Deletar(ctx context.Context, id int64) error {
-	_, err := r.db.ExecContext(ctx,
-		"DELETE FROM posicao_carteira WHERE id = "+fmt.Sprintf("%d", id),
-	)
-	return err
-}
-
-// scanPosicoes lê todas as linhas usando ColumnTypes para alocar o tipo Go correto
-// para cada coluna, evitando conversões ambíguas via []byte.
-func scanPosicoes(rows *sql.Rows) ([]model.PosicaoCarteira, error) {
-	colTypes, err := rows.ColumnTypes()
+// ImportarLote insere um lote de posição (data/versão) serializando os campos
+// dinâmicos de cada registro como JSON.
+func (r *PosicaoCarteiraRepo) ImportarLote(ctx context.Context, data time.Time, versao int, registros []map[string]interface{}) error {
+	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
-		return nil, err
+		return err
 	}
+	defer tx.Rollback()
 
+	dataStr := data.Format("2006-01-02")
+	for _, reg := range registros {
+		camposJSON, err := json.Marshal(reg)
+		if err != nil {
+			return err
+		}
+		if _, err := tx.ExecContext(ctx,
+			"INSERT INTO posicao_carteira (data_posicao_carteira, codigo_versao_conteudo, campos) VALUES (@p1, @p2, @p3)",
+			dataStr, versao, string(camposJSON),
+		); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
+// scanPosicoes lê as linhas do novo schema (id, data, versão, campos JSON).
+func scanPosicoes(rows *sql.Rows) ([]model.PosicaoCarteira, error) {
 	var result []model.PosicaoCarteira
 	for rows.Next() {
-		// Alocar ponteiros tipados conforme o tipo do banco
-		ptrs := make([]interface{}, len(colTypes))
-		for i, ct := range colTypes {
-			nullable, _ := ct.Nullable()
-			ptrs[i] = allocForType(ct.DatabaseTypeName(), nullable)
-		}
-
-		if err := rows.Scan(ptrs...); err != nil {
+		var (
+			id         int64
+			data       time.Time
+			versao     int
+			camposJSON sql.NullString
+		)
+		if err := rows.Scan(&id, &data, &versao, &camposJSON); err != nil {
 			return nil, err
 		}
-
-		campos := make(map[string]interface{}, len(colTypes))
-		for i, ct := range colTypes {
-			campos[strings.ToLower(ct.Name())] = deref(ptrs[i])
+		campos := map[string]interface{}{}
+		if camposJSON.Valid && camposJSON.String != "" {
+			if err := json.Unmarshal([]byte(camposJSON.String), &campos); err != nil {
+				return nil, err
+			}
 		}
-
-		p := model.PosicaoCarteira{Campos: campos}
-		p.ID = toInt64(campos["id"])
-		p.CodigoVersaoConteudo = int(toInt64(campos["codigo_versao_conteudo"]))
-		p.CodigoIdentificadorBoleto = toStr(campos["codigo_identificador_boleto"])
-		p.DescricaoVeiculo = toStr(campos["descricao_veiculo"])
-		p.IndicadorContraparteAfiliada = toBool(campos["indicador_contraparte_afiliada"])
-		p.ValorMTM = toFloat64(campos["valor_mtm"])
-		p.PrincipalRemanescente = toFloat64(campos["principal_remanescente"])
-		p.MoedaPrincipalRemanescente = toStr(campos["moeda_principal_remanescente"])
-		p.Produto = toStr(campos["produto"])
-		if t, ok := campos["data_posicao_carteira"].(time.Time); ok {
-			p.DataPosicaoCarteira = t
-		}
-
-		result = append(result, p)
+		campos["id"] = float64(id)
+		campos["codigo_versao_conteudo"] = float64(versao)
+		campos["data_posicao_carteira"] = data
+		result = append(result, model.PosicaoCarteira{
+			ID:                   id,
+			DataPosicaoCarteira:  data,
+			CodigoVersaoConteudo: versao,
+			Campos:               campos,
+		})
 	}
 	return result, rows.Err()
-}
-
-// allocForType aloca um ponteiro do tipo Go adequado para o tipo SQL Server informado.
-// nullable=true usa sql.NullXxx para evitar panic em valores NULL.
-func allocForType(dbType string, nullable bool) interface{} {
-	switch strings.ToUpper(dbType) {
-	case "BIGINT", "INT", "SMALLINT", "TINYINT":
-		if nullable {
-			return new(sql.NullInt64)
-		}
-		return new(int64)
-	case "DECIMAL", "NUMERIC", "FLOAT", "REAL", "MONEY", "SMALLMONEY":
-		if nullable {
-			return new(sql.NullFloat64)
-		}
-		return new(float64)
-	case "BIT":
-		if nullable {
-			return new(sql.NullBool)
-		}
-		return new(bool)
-	case "DATE", "DATETIME", "DATETIME2", "SMALLDATETIME", "DATETIMEOFFSET":
-		if nullable {
-			return new(sql.NullTime)
-		}
-		return new(time.Time)
-	default:
-		// VARCHAR, NVARCHAR, CHAR, TEXT e qualquer outro tipo desconhecido
-		if nullable {
-			return new(sql.NullString)
-		}
-		return new(string)
-	}
-}
-
-// deref extrai o valor de um ponteiro alocado por allocForType.
-// Valores NULL são convertidos para zero values do tipo correspondente
-// para que o avaliador de expressões não receba nil em comparações numéricas.
-func deref(ptr interface{}) interface{} {
-	switch v := ptr.(type) {
-	case *int64:
-		return float64(*v)
-	case *float64:
-		return *v
-	case *bool:
-		return *v
-	case *string:
-		return *v
-	case *time.Time:
-		return *v
-	case *sql.NullInt64:
-		if v.Valid {
-			return float64(v.Int64)
-		}
-		return float64(0) // NULL numérico → 0
-	case *sql.NullFloat64:
-		if v.Valid {
-			return v.Float64
-		}
-		return float64(0) // NULL numérico → 0
-	case *sql.NullBool:
-		if v.Valid {
-			return v.Bool
-		}
-		return false // NULL bool → false
-	case *sql.NullString:
-		if v.Valid {
-			return v.String
-		}
-		return "" // NULL string → ""
-	case *sql.NullTime:
-		if v.Valid {
-			return v.Time
-		}
-		return time.Time{} // NULL time → zero time
-	}
-	return nil
-}
-
-func toInt64(v interface{}) int64 {
-	switch val := v.(type) {
-	case int64:
-		return val
-	case float64:
-		return int64(val)
-	case int:
-		return int64(val)
-	case string:
-		var n int64
-		fmt.Sscanf(val, "%d", &n)
-		return n
-	}
-	return 0
-}
-
-func toFloat64(v interface{}) float64 {
-	switch val := v.(type) {
-	case float64:
-		return val
-	case int64:
-		return float64(val)
-	case int:
-		return float64(val)
-	case string:
-		var f float64
-		fmt.Sscanf(val, "%f", &f)
-		return f
-	}
-	return 0
-}
-
-func toStr(v interface{}) string {
-	if v == nil {
-		return ""
-	}
-	if s, ok := v.(string); ok {
-		return s
-	}
-	return fmt.Sprintf("%v", v)
-}
-
-func toBool(v interface{}) bool {
-	switch val := v.(type) {
-	case bool:
-		return val
-	case int64:
-		return val != 0
-	case float64:
-		return val != 0
-	case int:
-		return val != 0
-	}
-	return false
 }

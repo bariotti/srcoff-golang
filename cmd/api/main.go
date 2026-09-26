@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"database/sql"
 	"log"
 	"net/http"
@@ -23,9 +24,13 @@ func main() {
 	}
 
 	var (
-		posicaoRepo   repository.PosicaoCarteiraRepository
-		regraRepo     repository.RegraContabilRepository
-		movimentoRepo repository.MovimentoContabilRepository
+		posicaoRepo        repository.PosicaoCarteiraRepository
+		regraRepo          repository.RegraContabilRepository
+		movimentoRepo      repository.MovimentoContabilRepository
+		parametrizacaoRepo repository.ParametrizacaoRepository
+		inconsistenciaRepo repository.InconsistenciaRepository
+		padraoArquivoRepo  repository.PadraoArquivoRepository
+		configuracaoRepo   repository.ConfiguracaoRepository
 	)
 
 	var rawSQLDB *sql.DB
@@ -40,6 +45,10 @@ func main() {
 		posicaoRepo = filerepo.NewPosicaoCarteiraRepo(dir)
 		regraRepo = filerepo.NewRegraContabilRepo(dir)
 		movimentoRepo = filerepo.NewMovimentoContabilRepo(dir)
+		parametrizacaoRepo = filerepo.NewParametrizacaoRepo(dir)
+		inconsistenciaRepo = filerepo.NewInconsistenciaRepo(dir)
+		padraoArquivoRepo = filerepo.NewPadraoArquivoRepo(dir)
+		configuracaoRepo = filerepo.NewConfiguracaoRepo(dir)
 
 	default: // sqlserver
 		rawSQLDB = db.Connect()
@@ -48,25 +57,43 @@ func main() {
 		posicaoRepo = repository.NewPosicaoCarteiraRepo(rawSQLDB)
 		regraRepo = repository.NewRegraContabilRepo(rawSQLDB)
 		movimentoRepo = repository.NewMovimentoContabilRepo(rawSQLDB)
+		parametrizacaoRepo = repository.NewParametrizacaoRepo(rawSQLDB)
+		inconsistenciaRepo = repository.NewInconsistenciaRepo(rawSQLDB)
+		padraoArquivoRepo = repository.NewPadraoArquivoRepo(rawSQLDB)
+		configuracaoRepo = repository.NewConfiguracaoRepo(rawSQLDB)
 	}
 
 	// 2. Instanciar avaliador de expressões
 	eval := evaluator.New()
 
 	// 3. Instanciar serviços
-	movimentoSvc := service.NewMovimentoContabilService(posicaoRepo, regraRepo, movimentoRepo, eval)
+	movimentoSvc := service.NewMovimentoContabilService(posicaoRepo, regraRepo, movimentoRepo, eval).
+		ComInconsistenciaRepo(inconsistenciaRepo)
+	inconsistenciaSvc := service.NewInconsistenciaService(inconsistenciaRepo)
 	regraSvc := service.NewRegraContabilService(regraRepo)
 	conciliacaoSvc := service.NewConciliacaoService(posicaoRepo, movimentoRepo)
-	posicaoSvc := service.NewPosicaoCarteiraService(posicaoRepo)
+	posicaoSvc := service.NewPosicaoCarteiraService(posicaoRepo, regraRepo)
+	parametrizacaoSvc := service.NewParametrizacaoService(parametrizacaoRepo)
+	padraoArquivoSvc := service.NewPadraoArquivoService(padraoArquivoRepo)
+	configuracaoSvc := service.NewConfiguracaoService(configuracaoRepo)
 
 	// 4. Instanciar handlers
 	movimentoHandler := handler.NewMovimentoContabilHandler(movimentoSvc)
 	regraHandler := handler.NewRegraContabilHandler(regraSvc)
 	conciliacaoHandler := handler.NewConciliacaoHandler(conciliacaoSvc)
 	conciliacaoIAHandler := handler.NewConciliacaoIAHandler(movimentoSvc, posicaoSvc)
-	posicaoHandler := handler.NewPosicaoCarteiraHandler(posicaoSvc)
+	posicaoHandler := handler.NewPosicaoCarteiraHandler(posicaoSvc, padraoArquivoSvc)
+	parametrizacaoHandler := handler.NewParametrizacaoHandler(parametrizacaoSvc)
+	padraoArquivoHandler := handler.NewPadraoArquivoHandler(padraoArquivoSvc)
+	configuracaoHandler := handler.NewConfiguracaoHandler(configuracaoSvc)
+	inconsistenciaHandler := handler.NewInconsistenciaHandler(inconsistenciaSvc)
 	exportHandler := handler.NewExportHandler(movimentoSvc)
 	nlQueryHandler := handler.NewNLQueryHandler(rawSQLDB)
+
+	// Watcher de pasta monitorada (varredura periódica em segundo plano).
+	// O intervalo (em minutos) é parametrizável; sem parametrização, não varre.
+	pastaWatcher := handler.NewPastaWatcher(posicaoSvc, padraoArquivoSvc, configuracaoSvc)
+	pastaWatcher.Start(context.Background())
 
 	// 5. Registrar rotas
 	http.HandleFunc("/api/v1/movimento-contabil", func(w http.ResponseWriter, r *http.Request) {
@@ -121,17 +148,27 @@ func main() {
 	http.HandleFunc("/api/v1/movimento-contabil/export", exportHandler.ExportMovimentoCSV)
 	http.HandleFunc("/api/v1/movimento-contabil/export-txt", exportHandler.ExportMovimentoTXT)
 	http.HandleFunc("/api/v1/posicao", func(w http.ResponseWriter, r *http.Request) {
-		switch r.Method {
-		case http.MethodGet:
+		if r.Method == http.MethodGet {
 			posicaoHandler.Listar(w, r)
-		case http.MethodPost:
-			posicaoHandler.Inserir(w, r)
-		case http.MethodDelete:
-			posicaoHandler.Deletar(w, r)
-		default:
-			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+		w.WriteHeader(http.StatusMethodNotAllowed)
+	})
+	http.HandleFunc("/api/v1/posicao/upload", posicaoHandler.Upload)
+	http.HandleFunc("/api/v1/posicao/upload-lote", posicaoHandler.UploadLote)
+	http.HandleFunc("/api/v1/posicao/campos", posicaoHandler.Campos)
+	http.HandleFunc("/api/v1/posicao/scan-pasta", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			pastaWatcher.Status(w, r)
+		} else {
+			pastaWatcher.ScanAgora(w, r)
 		}
 	})
+	http.HandleFunc("/api/v1/parametrizacoes/opcoes", parametrizacaoHandler.Opcoes)
+	http.HandleFunc("/api/v1/parametrizacoes/padroes", padraoArquivoHandler.Padroes)
+	http.HandleFunc("/api/v1/configuracoes", configuracaoHandler.Configuracoes)
+	http.HandleFunc("/api/v1/inconsistencias", inconsistenciaHandler.Listar)
+	http.HandleFunc("/api/v1/inconsistencias/export", inconsistenciaHandler.Export)
 
 	// 6. Ler porta
 	port := os.Getenv("API_PORT")

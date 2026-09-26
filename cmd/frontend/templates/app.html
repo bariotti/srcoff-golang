@@ -26,6 +26,7 @@
   <div class="spinner-border text-light" style="width:3rem;height:3rem"></div>
 </div>
 <div class="toast-container" id="toastContainer"></div>
+<datalist id="r-campos-datalist"></datalist>
 
 <div class="container-fluid p-0">
   <div class="row g-0">
@@ -36,6 +37,7 @@
         <a class="nav-link" href="#" onclick="showPage('consulta')"><i class="bi bi-search me-2"></i>Consulta</a>
         <a class="nav-link" href="#" onclick="showPage('posicao')"><i class="bi bi-table me-2"></i>Posição</a>
         <a class="nav-link" href="#" onclick="showPage('regras')"><i class="bi bi-gear me-2"></i>Regras</a>
+        <a class="nav-link" href="#" onclick="showPage('parametrizacoes')"><i class="bi bi-sliders me-2"></i>Parametrizações</a>
       </nav>
       <div class="mt-auto px-3 py-3" style="font-size:0.7rem;color:#6c757d;border-top:1px solid #343a40">
         © 2026 SRCOff<br>Todos os direitos reservados<br>@Bariotti
@@ -63,7 +65,30 @@
               </div>
             </div>
           </div>
+
+          <!-- Consulta de inconsistências -->
+          <div class="col-md-6">
+            <div class="card shadow-sm">
+              <div class="card-header bg-warning bg-opacity-25 text-dark"><i class="bi bi-exclamation-triangle me-2"></i>Inconsistências do Processamento</div>
+              <div class="card-body">
+                <p class="text-muted small">Consulte as inconsistências registradas em um processamento passado, informando a data do movimento.</p>
+                <div class="row g-2 align-items-end">
+                  <div class="col-auto">
+                    <label class="form-label form-label-sm">Data do movimento</label>
+                    <input type="date" id="op-inc-data" class="form-control form-control-sm">
+                  </div>
+                  <div class="col-auto">
+                    <button class="btn btn-outline-primary btn-sm" onclick="consultarInconsistencias()"><i class="bi bi-search me-1"></i>Consultar</button>
+                    <button class="btn btn-success btn-sm ms-1" onclick="exportarInconsistencias()"><i class="bi bi-file-earmark-excel me-1"></i>CSV</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
+
+        <!-- Resultado das inconsistências -->
+        <div id="op-inconsistencias" class="mt-3"></div>
       </div>
 
       <!-- ==================== CONSULTA ==================== -->
@@ -165,9 +190,13 @@
 
         <!-- Consulta -->
         <div class="card shadow-sm mb-3">
-          <div class="card-header">Consultar por Data ou Período</div>
+          <div class="card-header">Consultar por Produto e Data</div>
           <div class="card-body">
             <div class="row g-2 align-items-end">
+              <div class="col-auto">
+                <label class="form-label form-label-sm">Produto <span class="text-danger">*</span></label>
+                <select id="p-consulta-produto" class="form-select form-select-sm"></select>
+              </div>
               <div class="col-auto">
                 <label class="form-label form-label-sm">Data início</label>
                 <input type="date" id="p-data-inicio" class="form-control form-control-sm">
@@ -186,22 +215,55 @@
         <!-- Resultado da consulta -->
         <div id="p-resultado" class="mb-3"></div>
 
-        <!-- Inserção -->
+        <!-- Importação de arquivo (CSV/XLSX) -->
         <div class="card shadow-sm">
-          <div class="card-header bg-success text-white">Inserir Novo Registro</div>
+          <div class="card-header bg-success text-white"><i class="bi bi-upload me-2"></i>Importar Posição (CSV / XLSX)</div>
           <div class="card-body">
-            <div class="row g-2">
-              <div class="col-md-2"><label class="form-label form-label-sm">Data</label><input type="date" id="p-ins-data" class="form-control form-control-sm"></div>
-              <div class="col-md-1"><label class="form-label form-label-sm">Versão</label><input type="number" id="p-ins-versao" class="form-control form-control-sm" value="1" min="1"></div>
-              <div class="col-md-2"><label class="form-label form-label-sm">Boleto</label><input type="text" id="p-ins-boleto" class="form-control form-control-sm"></div>
-              <div class="col-md-2"><label class="form-label form-label-sm">Veículo</label><input type="text" id="p-ins-veiculo" class="form-control form-control-sm"></div>
-              <div class="col-md-1"><label class="form-label form-label-sm">Afiliada</label><select id="p-ins-afiliada" class="form-select form-select-sm"><option value="false">Não</option><option value="true">Sim</option></select></div>
-              <div class="col-md-1"><label class="form-label form-label-sm">MTM</label><input type="number" id="p-ins-mtm" class="form-control form-control-sm" step="0.000001" value="0"></div>
-              <div class="col-md-1"><label class="form-label form-label-sm">Principal</label><input type="number" id="p-ins-principal" class="form-control form-control-sm" step="0.000001" value="0"></div>
-              <div class="col-md-1"><label class="form-label form-label-sm">Moeda</label><input type="text" id="p-ins-moeda" class="form-control form-control-sm" value="BRL"></div>
-              <div class="col-md-1"><label class="form-label form-label-sm">Produto</label><input type="text" id="p-ins-produto" class="form-control form-control-sm" placeholder="ex: NDF"></div>
-              <div class="col-md-1 d-flex align-items-end"><button class="btn btn-success btn-sm w-100" onclick="inserirPosicao()"><i class="bi bi-plus-circle me-1"></i>Inserir</button></div>
+            <p class="text-muted small mb-3">Envie um arquivo <strong>.csv</strong> ou <strong>.xlsx</strong> com a posição de carteira. Informe o <strong>produto</strong> — ele é gravado em cada registro, determina quais regras serão aplicadas e define qual coluna contém a data (via <em>Campo Data</em> da regra do produto). Se a regra não definir, o sistema tenta detectar uma coluna de data automaticamente. A versão é atribuída automaticamente por (data, produto).</p>
+            <div class="row g-2 align-items-end">
+              <div class="col-md-3">
+                <label class="form-label form-label-sm">Produto</label>
+                <select id="p-imp-produto" class="form-select form-select-sm"></select>
+              </div>
+              <div class="col-md-5">
+                <label class="form-label form-label-sm">Arquivo</label>
+                <input type="file" id="p-imp-arquivo" class="form-control form-control-sm" accept=".csv,.xlsx,.xlsm">
+              </div>
+              <div class="col-md-4 d-flex align-items-end gap-2">
+                <button class="btn btn-outline-primary btn-sm" onclick="previewPosicao()"><i class="bi bi-eye me-1"></i>Pré-visualizar</button>
+                <button class="btn btn-success btn-sm" onclick="importarPosicao()"><i class="bi bi-upload me-1"></i>Importar</button>
+              </div>
             </div>
+            <div id="p-imp-resultado" class="mt-3"></div>
+          </div>
+        </div>
+
+        <!-- Importação em lote (por padrão de nome) -->
+        <div class="card shadow-sm mt-3">
+          <div class="card-header bg-success bg-opacity-75 text-white"><i class="bi bi-files me-2"></i>Importar em Lote (produto pelo nome do arquivo)</div>
+          <div class="card-body">
+            <p class="text-muted small mb-3">Selecione vários arquivos de uma vez. O produto de cada arquivo é identificado pelo <strong>padrão de nome</strong> cadastrado em Parametrizações (ex: <code>posicao_ndf*.csv</code> → NDF). Um arquivo que casa com mais de um padrão é importado para cada produto.</p>
+            <div class="row g-2 align-items-end">
+              <div class="col-md-8">
+                <label class="form-label form-label-sm">Arquivos</label>
+                <input type="file" id="p-lote-arquivos" class="form-control form-control-sm" accept=".csv,.xlsx,.xlsm" multiple>
+              </div>
+              <div class="col-md-4 d-flex align-items-end">
+                <button class="btn btn-success btn-sm" onclick="importarLote()"><i class="bi bi-upload me-1"></i>Importar em lote</button>
+              </div>
+            </div>
+            <div id="p-lote-resultado" class="mt-3"></div>
+          </div>
+        </div>
+
+        <!-- Pasta monitorada -->
+        <div class="card shadow-sm mt-3">
+          <div class="card-header"><i class="bi bi-folder-symlink me-2"></i>Pasta Monitorada</div>
+          <div class="card-body">
+            <p class="text-muted small mb-3">A pasta configurada em <strong>Parametrizações → Pastas de Importação</strong> é varrida automaticamente. Use o botão abaixo para varrer agora.</p>
+            <button class="btn btn-outline-primary btn-sm" onclick="escanearPasta()"><i class="bi bi-arrow-repeat me-1"></i>Escanear agora</button>
+            <button class="btn btn-outline-secondary btn-sm ms-1" onclick="statusPasta()"><i class="bi bi-info-circle me-1"></i>Status</button>
+            <div id="p-scan-resultado" class="mt-3"></div>
           </div>
         </div>
       </div>
@@ -285,6 +347,82 @@
         </div>
       </div>
 
+      <!-- ==================== PARAMETRIZAÇÕES ==================== -->
+      <div id="page-parametrizacoes" class="page">
+        <h4 class="mb-4"><i class="bi bi-sliders me-2"></i>Parametrizações</h4>
+        <p class="text-muted">Defina as opções disponíveis nos combos do sistema. Novas funcionalidades serão adicionadas aqui futuramente.</p>
+        <div class="row g-4">
+          <div class="col-md-6">
+            <div class="card shadow-sm">
+              <div class="card-header d-flex justify-content-between align-items-center">
+                <span><i class="bi bi-box-seam me-2"></i>Produtos</span>
+              </div>
+              <div class="card-body">
+                <div class="input-group input-group-sm mb-3">
+                  <input type="text" id="param-produto-novo" class="form-control" placeholder="Novo produto (ex: NDF)" onkeydown="if(event.key==='Enter')adicionarOpcao('produto')">
+                  <button class="btn btn-primary" onclick="adicionarOpcao('produto')"><i class="bi bi-plus"></i> Adicionar</button>
+                </div>
+                <ul class="list-group list-group-flush" id="param-produto-lista"></ul>
+              </div>
+            </div>
+          </div>
+          <div class="col-md-6">
+            <div class="card shadow-sm">
+              <div class="card-header d-flex justify-content-between align-items-center">
+                <span><i class="bi bi-tag me-2"></i>Naturezas da Regra</span>
+              </div>
+              <div class="card-body">
+                <div class="input-group input-group-sm mb-3">
+                  <input type="text" id="param-natureza-novo" class="form-control" placeholder="Nova natureza" onkeydown="if(event.key==='Enter')adicionarOpcao('natureza')">
+                  <button class="btn btn-primary" onclick="adicionarOpcao('natureza')"><i class="bi bi-plus"></i> Adicionar</button>
+                </div>
+                <ul class="list-group list-group-flush" id="param-natureza-lista"></ul>
+              </div>
+            </div>
+          </div>
+
+          <!-- Padrões de arquivo -->
+          <div class="col-md-6">
+            <div class="card shadow-sm">
+              <div class="card-header"><i class="bi bi-file-earmark-ruled me-2"></i>Padrões de Arquivo → Produto</div>
+              <div class="card-body">
+                <p class="text-muted small mb-3">Associe um padrão de nome de arquivo a um produto (ex: <code>posicao_ndf*.csv</code> → NDF). Usado na importação em lote e no monitoramento de pasta. Um arquivo pode casar com mais de um padrão.</p>
+                <div class="row g-2 mb-3">
+                  <div class="col-7"><input type="text" id="param-padrao-novo" class="form-control form-control-sm" placeholder="ex: posicao_ndf*.csv"></div>
+                  <div class="col-3"><select id="param-padrao-produto" class="form-select form-select-sm"></select></div>
+                  <div class="col-2"><button class="btn btn-primary btn-sm w-100" onclick="adicionarPadrao()"><i class="bi bi-plus"></i></button></div>
+                </div>
+                <ul class="list-group list-group-flush" id="param-padrao-lista"></ul>
+              </div>
+            </div>
+          </div>
+
+          <!-- Pastas de importação -->
+          <div class="col-md-6">
+            <div class="card shadow-sm">
+              <div class="card-header"><i class="bi bi-folder me-2"></i>Pastas de Importação (monitoramento)</div>
+              <div class="card-body">
+                <p class="text-muted small mb-3">A pasta monitorada é varrida periodicamente; arquivos que casam com um padrão são importados e movidos para a pasta de processados. Arquivos sem padrão permanecem intactos.</p>
+                <div class="mb-2">
+                  <label class="form-label form-label-sm">Pasta monitorada</label>
+                  <input type="text" id="cfg-pasta-monitorada" class="form-control form-control-sm" placeholder="ex: C:\posicoes\entrada">
+                </div>
+                <div class="mb-2">
+                  <label class="form-label form-label-sm">Pasta de processados</label>
+                  <input type="text" id="cfg-pasta-processados" class="form-control form-control-sm" placeholder="ex: C:\posicoes\processados">
+                </div>
+                <div class="mb-3">
+                  <label class="form-label form-label-sm">Intervalo de varredura (minutos)</label>
+                  <input type="number" id="cfg-intervalo-scan" class="form-control form-control-sm" min="1" placeholder="vazio ou 0 = varredura automática desativada">
+                  <small class="text-muted">Se vazio ou 0, o monitoramento automático fica desativado (o botão "Escanear agora" continua funcionando).</small>
+                </div>
+                <button class="btn btn-primary btn-sm" onclick="salvarPastas()"><i class="bi bi-save me-1"></i>Salvar</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
     </div><!-- /col -->
   </div><!-- /row -->
 </div><!-- /container -->
@@ -316,12 +454,23 @@
       <div class="modal-body">
         <div class="mb-3"><label class="form-label">Descrição</label><input type="text" id="r-nova-desc" class="form-control"></div>
         <div class="mb-3">
-          <label class="form-label">Produtos <small class="text-muted">(selecione um ou mais)</small></label>
-          <div class="border rounded p-2">
-            <div class="form-check"><input class="form-check-input r-nova-produto" type="checkbox" value="NDF" id="r-prod-ndf"><label class="form-check-label" for="r-prod-ndf">NDF</label></div>
-            <div class="form-check"><input class="form-check-input r-nova-produto" type="checkbox" value="SWAP" id="r-prod-swap"><label class="form-check-label" for="r-prod-swap">SWAP</label></div>
-            <div class="form-check"><input class="form-check-input r-nova-produto" type="checkbox" value="FXO" id="r-prod-fxo"><label class="form-check-label" for="r-prod-fxo">FXO</label></div>
-          </div>
+          <label class="form-label">Produtos <small class="text-muted">(selecione um ou mais; nenhum = todas as posições)</small></label>
+          <select id="r-nova-produto" class="form-select" multiple size="4"></select>
+          <small class="text-muted">A regra só é aplicada às posições cujo produto (informado no upload) coincide.</small>
+        </div>
+        <div class="mb-3">
+          <label class="form-label">Campo Data <small class="text-muted">(coluna do arquivo que contém a data da posição)</small></label>
+          <input type="text" id="r-nova-campo-data" class="form-control" list="r-campos-datalist" placeholder="ex: data_posicao_carteira">
+        </div>
+        <div class="mb-3">
+          <label class="form-label">Pré Condição <small class="text-muted">(opcional — combinada com E a cada condição da regra)</small></label>
+          <input type="text" id="r-nova-pre-condicao" class="form-control" placeholder='ex: descricao_veiculo == "NASSAU"'
+            oninput="validarCondicao(this.value, 'condicao', 'r-nova-pre-validacao')">
+          <div id="r-nova-pre-validacao" class="mt-1"></div>
+        </div>
+        <div class="mb-3">
+          <label class="form-label">Natureza da Regra <small class="text-muted">(informativo, opcional)</small></label>
+          <select id="r-nova-natureza" class="form-select"></select>
         </div>
         <div class="mb-3 form-check">
           <input type="checkbox" class="form-check-input" id="r-nova-posta-reverte" checked>
@@ -353,12 +502,14 @@
           <div class="col-md-6"><label class="form-label">Conta Crédito</label><input type="text" id="r-cond-credito" class="form-control"></div>
           <div class="col-md-6">
             <label class="form-label">Campo Valor</label>
-            <input type="text" id="r-cond-valor" class="form-control" placeholder="ex: principal_remanescente + valor_mtm"
+            <input type="text" id="r-cond-valor" class="form-control" list="r-campos-datalist" placeholder="ex: principal_remanescente + valor_mtm"
               oninput="validarCondicao(this.value, 'valor', 'r-cond-valor-validacao')">
             <div id="r-cond-valor-validacao" class="mt-1"></div>
           </div>
-          <div class="col-md-6"><label class="form-label">Campo Moeda</label><input type="text" id="r-cond-moeda" class="form-control" placeholder="ex: moeda_principal_remanescente"></div>
+          <div class="col-md-6"><label class="form-label">Campo Moeda</label><input type="text" id="r-cond-moeda" class="form-control" list="r-campos-datalist" placeholder="ex: moeda_principal_remanescente"></div>
+          <div class="col-md-6"><label class="form-label">Campo Boleto <small class="text-muted">(identificador do lançamento)</small></label><input type="text" id="r-cond-boleto" class="form-control" list="r-campos-datalist" placeholder="ex: codigo_identificador_boleto"></div>
         </div>
+        <p class="text-muted small mt-2 mb-0"><i class="bi bi-info-circle me-1"></i>Os campos sugeridos vêm da última posição importada para a data consultada na aba Posição.</p>
       </div>
       <div class="modal-footer">
         <button class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
@@ -386,7 +537,121 @@ function showPage(name) {
     if (l.getAttribute('onclick') && l.getAttribute('onclick').includes("'" + name + "'")) l.classList.add('active');
   });
   currentPage = name;
-  if (name === 'regras') carregarRegras();
+  if (name === 'regras') { carregarRegras(); carregarCamposPosicao(); preencherCombosRegra(); }
+  if (name === 'posicao') { preencherSelectOpcoes('p-imp-produto', 'produto'); preencherSelectOpcoes('p-consulta-produto', 'produto', { incluirVazio: true }); }
+  if (name === 'parametrizacoes') { renderParametrizacoes(); }
+}
+
+// ── PARAMETRIZAÇÕES / OPÇÕES ───────────────────────────────
+async function carregarOpcoes(categoria) {
+  const r = await api('GET', '/v1/parametrizacoes/opcoes?categoria=' + encodeURIComponent(categoria));
+  return Array.isArray(r) ? r : [];
+}
+
+// Preenche um <select> com as opções de uma categoria, preservando a seleção atual.
+async function preencherSelectOpcoes(selectId, categoria, opts = {}) {
+  const sel = document.getElementById(selectId);
+  if (!sel) return;
+  const selecionadas = [...sel.selectedOptions].map(o => o.value);
+  const opcoes = await carregarOpcoes(categoria);
+  let html = opts.incluirVazio ? '<option value=""></option>' : '';
+  html += opcoes.map(o => `<option value="${o}">${o}</option>`).join('');
+  sel.innerHTML = html;
+  for (const opt of sel.options) { if (selecionadas.includes(opt.value)) opt.selected = true; }
+}
+
+async function renderParametrizacoes() {
+  renderOpcaoLista('produto', 'param-produto-lista');
+  renderOpcaoLista('natureza', 'param-natureza-lista');
+  preencherSelectOpcoes('param-padrao-produto', 'produto');
+  renderPadroes();
+  carregarPastas();
+}
+
+// ── PADRÕES DE ARQUIVO ─────────────────────────────────────
+async function renderPadroes() {
+  const r = await api('GET', '/v1/parametrizacoes/padroes');
+  const ul = document.getElementById('param-padrao-lista');
+  const lista = Array.isArray(r) ? r : [];
+  if (!lista.length) { ul.innerHTML = '<li class="list-group-item text-muted">Nenhum padrão cadastrado.</li>'; return; }
+  ul.innerHTML = lista.map(p => `<li class="list-group-item d-flex justify-content-between align-items-center py-1">
+    <span><code>${p.padrao}</code> <i class="bi bi-arrow-right mx-1"></i> <span class="badge bg-secondary">${p.produto}</span></span>
+    <button class="btn btn-sm btn-outline-danger py-0 px-1" onclick="excluirPadrao(${p.id})"><i class="bi bi-trash"></i></button>
+  </li>`).join('');
+}
+
+async function adicionarPadrao() {
+  const padrao = document.getElementById('param-padrao-novo').value.trim();
+  const produto = document.getElementById('param-padrao-produto').value;
+  if (!padrao || !produto) { toast('Informe o padrão e o produto', 'warning'); return; }
+  const r = await api('POST', '/v1/parametrizacoes/padroes', { padrao, produto });
+  if (r?.id) { document.getElementById('param-padrao-novo').value = ''; renderPadroes(); }
+  else if (r?.erro) toast(r.erro, 'danger');
+}
+
+async function excluirPadrao(id) {
+  if (!confirm('Remover este padrão?')) return;
+  const r = await api('DELETE', '/v1/parametrizacoes/padroes?id=' + id);
+  if (r?.mensagem) renderPadroes();
+  else if (r?.erro) toast(r.erro, 'danger');
+}
+
+// ── PASTAS DE IMPORTAÇÃO ───────────────────────────────────
+async function carregarPastas() {
+  const r = await api('GET', '/v1/configuracoes');
+  if (!r || r.erro) return;
+  document.getElementById('cfg-pasta-monitorada').value = r.pasta_monitorada || '';
+  document.getElementById('cfg-pasta-processados').value = r.pasta_processados || '';
+  document.getElementById('cfg-intervalo-scan').value = r.intervalo_scan_minutos || '';
+}
+
+async function salvarPastas() {
+  const monitorada = document.getElementById('cfg-pasta-monitorada').value.trim();
+  const processados = document.getElementById('cfg-pasta-processados').value.trim();
+  const intervalo = document.getElementById('cfg-intervalo-scan').value.trim();
+  const r1 = await api('PUT', '/v1/configuracoes', { chave: 'pasta_monitorada', valor: monitorada });
+  const r2 = await api('PUT', '/v1/configuracoes', { chave: 'pasta_processados', valor: processados });
+  const r3 = await api('PUT', '/v1/configuracoes', { chave: 'intervalo_scan_minutos', valor: intervalo });
+  if (r1?.mensagem && r2?.mensagem && r3?.mensagem) toast('Configurações salvas!');
+  else toast((r1?.erro || r2?.erro || r3?.erro || 'Erro ao salvar'), 'danger');
+}
+
+async function renderOpcaoLista(categoria, ulId) {
+  const opcoes = await carregarOpcoes(categoria);
+  const ul = document.getElementById(ulId);
+  if (!ul) return;
+  if (!opcoes.length) { ul.innerHTML = '<li class="list-group-item text-muted">Nenhuma opção cadastrada.</li>'; return; }
+  ul.innerHTML = opcoes.map(o => `<li class="list-group-item d-flex justify-content-between align-items-center py-1">
+    <span>${o}</span>
+    <button class="btn btn-sm btn-outline-danger py-0 px-1" title="Remover" onclick="removerOpcao('${categoria}','${o.replace(/'/g,"\\'")}')"><i class="bi bi-trash"></i></button>
+  </li>`).join('');
+}
+
+async function adicionarOpcao(categoria) {
+  const input = document.getElementById('param-' + categoria + '-novo');
+  const valor = input.value.trim();
+  if (!valor) { toast('Informe o valor', 'warning'); return; }
+  const r = await api('POST', '/v1/parametrizacoes/opcoes', { categoria, valor });
+  if (r?.mensagem) { input.value = ''; renderOpcaoLista(categoria, 'param-' + categoria + '-lista'); }
+  else if (r?.erro) toast(r.erro, 'danger');
+}
+
+async function removerOpcao(categoria, valor) {
+  if (!confirm('Remover a opção "' + valor + '"?')) return;
+  const r = await api('DELETE', '/v1/parametrizacoes/opcoes?categoria=' + encodeURIComponent(categoria) + '&valor=' + encodeURIComponent(valor));
+  if (r?.mensagem) { renderOpcaoLista(categoria, 'param-' + categoria + '-lista'); }
+  else if (r?.erro) toast(r.erro, 'danger');
+}
+
+// Carrega os nomes de campos da última posição importada para preencher os datalists.
+async function carregarCamposPosicao() {
+  const data = document.getElementById('p-data-inicio')?.value
+    || document.getElementById('op-data-movimento')?.value
+    || new Date().toISOString().substring(0, 10);
+  const campos = await api('GET', '/v1/posicao/campos?data=' + data);
+  const dl = document.getElementById('r-campos-datalist');
+  if (!dl || !Array.isArray(campos)) return;
+  dl.innerHTML = campos.map(c => `<option value="${c}"></option>`).join('');
 }
 
 // ── Toast ──────────────────────────────────────────────────
@@ -444,10 +709,58 @@ async function gerarMovimento() {
   if (r?.mensagem) {
     el.innerHTML = `<div class="alert alert-success"><i class="bi bi-check-circle me-2"></i>${r.mensagem}</div>`;
     toast(r.mensagem);
+    // Após processar, listar as inconsistências detectadas para a data.
+    document.getElementById('op-inc-data').value = data;
+    consultarInconsistencias();
   } else if (r?.erro) {
     el.innerHTML = `<div class="alert alert-danger"><i class="bi bi-x-circle me-2"></i>${r.erro}</div>`;
     toast(r.erro, 'danger');
   }
+}
+
+// ── INCONSISTÊNCIAS ────────────────────────────────────────
+function rotuloTipoInc(t) {
+  return { PRE_CONDICAO: 'Pré-condição', CONDICAO: 'Condição', CAMPO_VALOR: 'Campo valor' }[t] || t;
+}
+
+async function consultarInconsistencias() {
+  const data = document.getElementById('op-inc-data').value;
+  if (!data) { toast('Informe a data do movimento', 'warning'); return; }
+  const r = await api('GET', '/v1/inconsistencias?data=' + data);
+  const el = document.getElementById('op-inconsistencias');
+  if (!r || r.erro) { el.innerHTML = `<div class="alert alert-danger">${r?.erro || 'Erro'}</div>`; return; }
+  const lista = Array.isArray(r) ? r : [];
+  if (lista.length === 0) {
+    el.innerHTML = `<div class="alert alert-success"><i class="bi bi-check-circle me-2"></i>Nenhuma inconsistência registrada para ${data}.</div>`;
+    return;
+  }
+  const rows = lista.map(i => `<tr>
+    <td>${i.codigo_identificador_boleto || '—'}</td>
+    <td>${i.produto || '—'}</td>
+    <td>${i.descricao_regra_contabil || '—'}</td>
+    <td><span class="badge bg-warning text-dark">${rotuloTipoInc(i.tipo)}</span></td>
+    <td><code>${i.expressao || ''}</code></td>
+    <td>${i.campos_faltantes || ''}</td>
+    <td>${i.detalhe || ''}</td>
+  </tr>`).join('');
+  el.innerHTML = `<div class="card shadow-sm border-warning">
+    <div class="card-header bg-warning bg-opacity-25 d-flex justify-content-between align-items-center">
+      <span><i class="bi bi-exclamation-triangle me-2"></i>${lista.length} inconsistência(s) — ${data}</span>
+      <button class="btn btn-success btn-sm" onclick="exportarInconsistencias()"><i class="bi bi-file-earmark-excel me-1"></i>Exportar CSV</button>
+    </div>
+    <div class="card-body p-0"><div class="table-responsive">
+      <table class="table table-sm table-hover mb-0">
+        <thead class="table-dark"><tr><th>Boleto</th><th>Produto</th><th>Regra</th><th>Tipo</th><th>Expressão</th><th>Campos Faltantes</th><th>Detalhe</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div></div>
+  </div>`;
+}
+
+function exportarInconsistencias() {
+  const data = document.getElementById('op-inc-data').value;
+  if (!data) { toast('Informe a data do movimento', 'warning'); return; }
+  window.open('/api/v1/inconsistencias/export?data=' + data, '_blank');
 }
 
 async function gerarEstorno() {
@@ -553,11 +866,13 @@ async function excluirMovimento() {
 
 // ── POSIÇÃO ────────────────────────────────────────────────
 async function consultarPosicao() {
+  const produto = document.getElementById('p-consulta-produto').value;
   const dataInicio = document.getElementById('p-data-inicio').value;
   const dataFim = document.getElementById('p-data-fim').value;
+  if (!produto) { toast('Selecione o produto para consultar', 'warning'); return; }
   if (!dataInicio) { toast('Informe ao menos a data início', 'warning'); return; }
 
-  let url = '/v1/posicao?data_inicio=' + dataInicio;
+  let url = '/v1/posicao?produto=' + encodeURIComponent(produto) + '&data_inicio=' + dataInicio;
   if (dataFim) url += '&data_fim=' + dataFim;
 
   const r = await api('GET', url);
@@ -568,7 +883,7 @@ async function consultarPosicao() {
   // API pode retornar null quando não há registros
   const lista = Array.isArray(r) ? r : [];
   if (lista.length === 0) {
-    el.innerHTML = `<div class="alert alert-info"><i class="bi bi-info-circle me-2"></i>Nenhum registro de posição encontrado para ${data}.</div>`;
+    el.innerHTML = `<div class="alert alert-info"><i class="bi bi-info-circle me-2"></i>Nenhum registro de posição encontrado para ${dataInicio}.</div>`;
     return;
   }
 
@@ -589,14 +904,14 @@ async function consultarPosicao() {
     'produto': 'Produto'
   };
 
-  const headers = cols.map(c => `<th class="text-nowrap">${nomeAmigavel[c] || c}</th>`).join('') + '<th style="width:50px"></th>';
+  const headers = cols.map(c => `<th class="text-nowrap">${nomeAmigavel[c] || c}</th>`).join('');
   const rows = lista.map(item => {
     const c = item.campos || {};
     const cells = cols.map(col => {
       const v = c[col];
       return `<td class="text-nowrap">${v !== null && v !== undefined ? v : ''}</td>`;
     }).join('');
-    return `<tr>${cells}<td><button class="btn btn-danger btn-sm py-0 px-1" onclick="deletarPosicao(${item.id})"><i class="bi bi-trash"></i></button></td></tr>`;
+    return `<tr>${cells}</tr>`;
   }).join('');
 
   el.innerHTML = `<div class="card shadow-sm" style="max-width:100%;overflow:hidden">
@@ -610,30 +925,135 @@ async function consultarPosicao() {
   </div>`;
 }
 
-async function deletarPosicao(id) {
-  if (!confirm('Excluir este registro?')) return;
-  const r = await api('DELETE', '/v1/posicao?id=' + id);
-  if (r?.mensagem) { toast(r.mensagem); consultarPosicao(); }
-  else if (r?.erro) toast(r.erro, 'danger');
+// Envia o arquivo de posição; preview=true só pré-visualiza sem persistir.
+async function enviarArquivoPosicao(preview) {
+  const produto = document.getElementById('p-imp-produto').value.trim();
+  const input = document.getElementById('p-imp-arquivo');
+  if (!preview && !produto) { toast('Informe o produto da posição', 'warning'); return null; }
+  if (!input.files || input.files.length === 0) { toast('Selecione um arquivo', 'warning'); return null; }
+
+  const fd = new FormData();
+  if (produto) fd.append('produto', produto);
+  fd.append('arquivo', input.files[0]);
+  if (preview) fd.append('preview', '1');
+
+  spin(true);
+  try {
+    const r = await fetch('/api/v1/posicao/upload', { method: 'POST', body: fd });
+    return await r.json();
+  } catch (e) {
+    toast('Erro de comunicação: ' + e.message, 'danger');
+    return null;
+  } finally {
+    spin(false);
+  }
 }
 
-async function inserirPosicao() {
-  const data = document.getElementById('p-ins-data').value;
-  if (!data) { toast('Informe a data', 'warning'); return; }
-  const payload = {
-    data_posicao_carteira: data,
-    codigo_versao_conteudo: parseInt(document.getElementById('p-ins-versao').value) || 1,
-    codigo_identificador_boleto: document.getElementById('p-ins-boleto').value,
-    descricao_veiculo: document.getElementById('p-ins-veiculo').value,
-    indicador_contraparte_afiliada: document.getElementById('p-ins-afiliada').value === 'true',
-    valor_mtm: parseFloat(document.getElementById('p-ins-mtm').value) || 0,
-    principal_remanescente: parseFloat(document.getElementById('p-ins-principal').value) || 0,
-    moeda_principal_remanescente: document.getElementById('p-ins-moeda').value,
-    produto: document.getElementById('p-ins-produto').value,
-  };
-  const r = await api('POST', '/v1/posicao', payload);
-  if (r?.id) { toast('Registro inserido com sucesso!'); consultarPosicao(); }
-  else if (r?.erro) toast(r.erro, 'danger');
+async function previewPosicao() {
+  const r = await enviarArquivoPosicao(true);
+  const el = document.getElementById('p-imp-resultado');
+  if (!r) { return; }
+  if (r.erro) { el.innerHTML = `<div class="alert alert-danger">${r.erro}</div>`; return; }
+
+  const cols = r.colunas.filter(c => c);
+  const headers = cols.map(c => `<th class="text-nowrap">${c}</th>`).join('');
+  const rows = (r.amostra || []).map(item => {
+    const cells = cols.map(col => {
+      const v = item[col];
+      return `<td class="text-nowrap">${v !== null && v !== undefined ? v : ''}</td>`;
+    }).join('');
+    return `<tr>${cells}</tr>`;
+  }).join('');
+
+  el.innerHTML = `<div class="alert alert-info py-2 mb-2"><i class="bi bi-info-circle me-1"></i>Pré-visualização — ${r.total} registro(s), mostrando ${(r.amostra||[]).length}. Coluna de data detectada: <code>${r.coluna_data}</code>. Clique em <strong>Importar</strong> para confirmar.</div>
+    <div style="overflow-x:auto"><table class="table table-sm table-striped table-bordered mb-0">
+      <thead class="table-dark"><tr>${headers}</tr></thead><tbody>${rows}</tbody>
+    </table></div>`;
+}
+
+async function importarPosicao() {
+  const r = await enviarArquivoPosicao(false);
+  const el = document.getElementById('p-imp-resultado');
+  if (!r) { return; }
+  if (r.erro) { el.innerHTML = `<div class="alert alert-danger">${r.erro}</div>`; return; }
+  const lotes = (r.lotes || []).map(l => `${l.data} (v${l.versao}, ${l.total})`).join(', ');
+  el.innerHTML = `<div class="alert alert-success"><i class="bi bi-check-circle me-2"></i>${r.mensagem} — produto <strong>${r.produto}</strong>, ${r.total} registro(s). Lotes: ${lotes}.</div>`;
+  toast('Posição importada!');
+  // Recarrega a consulta na primeira data importada, com o produto informado.
+  const primeira = (r.lotes || [])[0];
+  const dataInicio = document.getElementById('p-data-inicio');
+  const comboProduto = document.getElementById('p-consulta-produto');
+  if (primeira && dataInicio) {
+    dataInicio.value = primeira.data;
+    if (comboProduto && r.produto) {
+      // Garante que o produto esteja nas opções antes de selecionar.
+      await preencherSelectOpcoes('p-consulta-produto', 'produto', { incluirVazio: true });
+      comboProduto.value = r.produto;
+    }
+    consultarPosicao();
+  }
+}
+
+// ── IMPORTAÇÃO EM LOTE / PASTA ─────────────────────────────
+function renderResultadosLote(el, resultados) {
+  if (!resultados || !resultados.length) { el.innerHTML = '<div class="alert alert-info">Nenhum arquivo processado.</div>'; return; }
+  const linhas = resultados.map(a => {
+    if (a.sem_padrao) {
+      return `<tr><td>${a.arquivo}</td><td colspan="2"><span class="badge bg-secondary">Sem padrão correspondente</span></td></tr>`;
+    }
+    return (a.produtos || []).map(p => {
+      if (p.erro) return `<tr><td>${a.arquivo}</td><td>${p.produto || '—'}</td><td><span class="text-danger">${p.erro}</span></td></tr>`;
+      const lotes = (p.lotes || []).map(l => `${l.data} (v${l.versao}, ${l.total})`).join(', ');
+      return `<tr><td>${a.arquivo}</td><td><span class="badge bg-secondary">${p.produto}</span></td><td><span class="text-success"><i class="bi bi-check-circle me-1"></i>${lotes}</span></td></tr>`;
+    }).join('');
+  }).join('');
+  el.innerHTML = `<div class="table-responsive"><table class="table table-sm table-hover mb-0">
+    <thead class="table-dark"><tr><th>Arquivo</th><th>Produto</th><th>Resultado</th></tr></thead>
+    <tbody>${linhas}</tbody></table></div>`;
+}
+
+async function importarLote() {
+  const input = document.getElementById('p-lote-arquivos');
+  if (!input.files || input.files.length === 0) { toast('Selecione ao menos um arquivo', 'warning'); return; }
+  const fd = new FormData();
+  for (const f of input.files) fd.append('arquivos', f);
+  spin(true);
+  let r;
+  try { r = await fetch('/api/v1/posicao/upload-lote', { method: 'POST', body: fd }).then(x => x.json()); }
+  catch (e) { toast('Erro de comunicação: ' + e.message, 'danger'); spin(false); return; }
+  spin(false);
+  const el = document.getElementById('p-lote-resultado');
+  if (r?.erro) { el.innerHTML = `<div class="alert alert-danger">${r.erro}</div>`; return; }
+  renderResultadosLote(el, r.resultados);
+  toast('Importação em lote concluída');
+}
+
+async function escanearPasta() {
+  const r = await api('POST', '/v1/posicao/scan-pasta');
+  renderScan(r);
+}
+
+async function statusPasta() {
+  const r = await api('GET', '/v1/posicao/scan-pasta');
+  renderScan(r, true);
+}
+
+function renderScan(r, status) {
+  const el = document.getElementById('p-scan-resultado');
+  if (!r || r.erro) { el.innerHTML = `<div class="alert alert-danger">${r?.erro || 'Erro'}</div>`; return; }
+  let cab = `<div class="small text-muted mb-2">Pasta monitorada: <code>${r.pasta_monitorada || '—'}</code> · Processados: <code>${r.pasta_processados || '—'}</code>${r.ultima_varredura ? ' · Última varredura: ' + r.ultima_varredura : ''}</div>`;
+  if (!r.executada) {
+    el.innerHTML = cab + `<div class="alert alert-warning py-2">${r.motivo || 'Varredura não executada.'}</div>`;
+    return;
+  }
+  cab += `<div class="alert alert-success py-2">${status ? 'Última varredura' : 'Varredura concluída'} — ${r.movidos} arquivo(s) importado(s) e movido(s).</div>`;
+  let tabela = '';
+  if (r.arquivos && r.arquivos.length) {
+    const div = document.createElement('div');
+    renderResultadosLote(div, r.arquivos);
+    tabela = div.innerHTML;
+  }
+  el.innerHTML = cab + tabela;
 }
 
 // ── CONCILIAÇÃO IA ─────────────────────────────────────────
@@ -778,9 +1198,17 @@ async function consultarIA() {
 // ── REGRAS ─────────────────────────────────────────────────
 async function carregarRegras() {
   const r = await api('GET', '/v1/regras');
-  if (!r || r.erro) return;
-  todasRegras = r;
-  renderizarRegras(r);
+  // A API retorna null quando não há regras; trata como lista vazia.
+  todasRegras = Array.isArray(r) ? r : [];
+  if (r && r.erro) { renderizarRegras([]); return; }
+  renderizarRegras(todasRegras);
+}
+
+// Popula os combos do modal de nova regra com as opções parametrizadas.
+// Independente da existência de regras — chamado ao abrir a página e o modal.
+function preencherCombosRegra() {
+  preencherSelectOpcoes('r-nova-produto', 'produto');
+  preencherSelectOpcoes('r-nova-natureza', 'natureza', { incluirVazio: true });
 }
 
 function filtrarRegras() {
@@ -789,6 +1217,8 @@ function filtrarRegras() {
   const filtradas = todasRegras.filter(reg =>
     reg.descricao?.toLowerCase().includes(termo) ||
     reg.codigo_produto_corporativo?.toLowerCase().includes(termo) ||
+    reg.natureza?.toLowerCase().includes(termo) ||
+    reg.pre_condicao?.toLowerCase().includes(termo) ||
     (reg.condicoes || []).some(c =>
       c.condicao?.toLowerCase().includes(termo) ||
       c.conta_debito?.toLowerCase().includes(termo) ||
@@ -807,6 +1237,8 @@ function renderizarRegras(regras) {
     <td>${reg.id}</td>
     <td><strong>${reg.descricao}</strong></td>
     <td>${reg.codigo_produto_corporativo ? reg.codigo_produto_corporativo.split(',').map(p => `<span class="badge bg-secondary me-1">${p.trim()}</span>`).join('') : '<span class="text-muted">Todos</span>'}</td>
+    <td>${reg.natureza ? reg.natureza : '<span class="text-muted">—</span>'}</td>
+    <td>${reg.pre_condicao ? `<code>${reg.pre_condicao}</code>` : '<span class="text-muted">—</span>'}</td>
     <td>${reg.posta_reverte ? '<span class="badge bg-success">Sim</span>' : '<span class="badge bg-warning text-dark">Não</span>'}</td>
     <td>
       <button class="btn btn-sm btn-outline-primary" onclick="selecionarRegra(${reg.id}, '${reg.descricao.replace(/'/g,"\\'")}')">
@@ -815,7 +1247,7 @@ function renderizarRegras(regras) {
     </td>
   </tr>`).join('');
   el.innerHTML = `<div class="table-responsive"><table class="table table-sm table-hover mb-0">
-    <thead class="table-dark"><tr><th>ID</th><th>Descrição</th><th>Produtos</th><th>Posta/Reverte</th><th></th></tr></thead>
+    <thead class="table-dark"><tr><th>ID</th><th>Descrição</th><th>Produtos</th><th>Natureza</th><th>Pré Condição</th><th>Posta/Reverte</th><th></th></tr></thead>
     <tbody>${rows}</tbody>
   </table></div>`;
 }
@@ -836,10 +1268,11 @@ async function selecionarRegra(id, nome) {
       <td>${c.conta_credito}</td>
       <td><code>${c.campo_valor}</code></td>
       <td>${c.campo_moeda}</td>
+      <td>${c.campo_boleto || '<span class="text-muted">padrão</span>'}</td>
       <td><button class="btn btn-danger btn-sm py-0 px-1" onclick="excluirCondicao(${c.id}, '${nome.replace(/'/g,"\\'")}')"><i class="bi bi-trash"></i></button></td>
     </tr>`).join('');
     el.innerHTML = `<div class="table-responsive"><table class="table table-sm table-hover mb-0">
-      <thead class="table-light"><tr><th>Condição</th><th>Débito</th><th>Crédito</th><th>Campo Valor</th><th>Campo Moeda</th><th></th></tr></thead>
+      <thead class="table-light"><tr><th>Condição</th><th>Débito</th><th>Crédito</th><th>Campo Valor</th><th>Campo Moeda</th><th>Campo Boleto</th><th></th></tr></thead>
       <tbody>${rows}</tbody>
     </table></div>`;
   }
@@ -893,16 +1326,29 @@ async function criarRegra() {
   const postaReverte = document.getElementById('r-nova-posta-reverte').checked;
   if (!desc) { toast('Informe a descrição', 'warning'); return; }
 
-  // Coletar produtos selecionados
-  const produtos = [...document.querySelectorAll('.r-nova-produto:checked')].map(el => el.value);
-  const codigoProduto = produtos.join(',');
+  const produtosSel = [...document.getElementById('r-nova-produto').selectedOptions].map(o => o.value);
+  const codigoProduto = produtosSel.join(',');
+  const campoData = document.getElementById('r-nova-campo-data').value.trim();
+  const preCondicao = document.getElementById('r-nova-pre-condicao').value.trim();
+  const natureza = document.getElementById('r-nova-natureza').value.trim();
 
-  const r = await api('POST', '/v1/regras', { descricao: desc, codigo_produto_corporativo: codigoProduto, posta_reverte: postaReverte });
+  const r = await api('POST', '/v1/regras', {
+    descricao: desc,
+    codigo_produto_corporativo: codigoProduto,
+    campo_data: campoData,
+    pre_condicao: preCondicao,
+    natureza: natureza,
+    posta_reverte: postaReverte,
+  });
   if (r?.id) {
     toast('Regra criada!');
     bootstrap.Modal.getInstance(document.getElementById('modalNovaRegra')).hide();
     document.getElementById('r-nova-desc').value = '';
-    document.querySelectorAll('.r-nova-produto').forEach(el => el.checked = false);
+    [...document.getElementById('r-nova-produto').options].forEach(o => o.selected = false);
+    document.getElementById('r-nova-campo-data').value = '';
+    document.getElementById('r-nova-pre-condicao').value = '';
+    document.getElementById('r-nova-natureza').value = '';
+    document.getElementById('r-nova-pre-validacao').innerHTML = '';
     document.getElementById('r-nova-posta-reverte').checked = true;
     carregarRegras();
   } else if (r?.erro) toast(r.erro, 'danger');
@@ -916,6 +1362,7 @@ async function criarCondicao() {
     conta_credito: document.getElementById('r-cond-credito').value,
     campo_valor: document.getElementById('r-cond-valor').value,
     campo_moeda: document.getElementById('r-cond-moeda').value,
+    campo_boleto: document.getElementById('r-cond-boleto').value,
   };
   const r = await api('POST', `/v1/regras/${regraAtualId}/condicoes`, payload);
   if (r?.id) {
@@ -925,6 +1372,10 @@ async function criarCondicao() {
     setTimeout(() => selecionarRegra(regraAtualId, nome), 300);
   } else if (r?.erro) toast(r.erro, 'danger');
 }
+
+// Repopula os combos sempre que o modal de nova regra é aberto — garante que
+// opções recém-cadastradas em Parametrizações apareçam sem trocar de página.
+document.getElementById('modalNovaRegra').addEventListener('show.bs.modal', preencherCombosRegra);
 </script>
 </body>
 </html>

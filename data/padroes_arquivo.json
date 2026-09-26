@@ -1,0 +1,12 @@
+[
+  {
+    "id": 1,
+    "padrao": "posicao_ndf*.csv",
+    "produto": "NDF"
+  },
+  {
+    "id": 2,
+    "padrao": "posicao_swap*.csv",
+    "produto": "SWAP"
+  }
+]

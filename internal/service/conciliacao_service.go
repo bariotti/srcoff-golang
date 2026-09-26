@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"srcoff/internal/evaluator"
 	"srcoff/internal/model"
 )
 
@@ -48,11 +49,13 @@ func (s *ConciliacaoService) Conciliar(ctx context.Context, data time.Time) (*mo
 	}
 
 	// Validação 1: posição sem movimento
+	campoBoleto := campoBoletoPadrao()
 	for _, p := range posicoes {
-		if !boletosNoMovimento[p.CodigoIdentificadorBoleto] {
+		boleto := evaluator.CampoString(p.Campos, campoBoleto)
+		if !boletosNoMovimento[boleto] {
 			resultado.Inconsistencias = append(resultado.Inconsistencias, model.Inconsistencia{
 				Tipo:                      model.InconsistenciaSemMovimento,
-				CodigoIdentificadorBoleto: p.CodigoIdentificadorBoleto,
+				CodigoIdentificadorBoleto: boleto,
 				Detalhe:                   fmt.Sprintf("Boleto presente na posição de %s não possui lançamento contábil", dataStr),
 			})
 		}

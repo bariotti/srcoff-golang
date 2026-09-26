@@ -81,6 +81,10 @@ func (r *RegraContabilRepo) EditarRegra(_ context.Context, regra model.RegraCont
 		if reg.ID == regra.ID {
 			s.Regras[i].Descricao = regra.Descricao
 			s.Regras[i].CodigoProdutoCorporativo = regra.CodigoProdutoCorporativo
+			s.Regras[i].CampoProduto = regra.CampoProduto
+			s.Regras[i].CampoData = regra.CampoData
+			s.Regras[i].PreCondicao = regra.PreCondicao
+			s.Regras[i].Natureza = regra.Natureza
 			s.Regras[i].Ativo = regra.Ativo
 			return r.save(s)
 		}
@@ -126,6 +130,7 @@ func (r *RegraContabilRepo) EditarCondicao(_ context.Context, condicao model.Con
 			s.Condicoes[i].ContaCredito = condicao.ContaCredito
 			s.Condicoes[i].CampoValor = condicao.CampoValor
 			s.Condicoes[i].CampoMoeda = condicao.CampoMoeda
+			s.Condicoes[i].CampoBoleto = condicao.CampoBoleto
 			s.Condicoes[i].Ativo = condicao.Ativo
 			return r.save(s)
 		}

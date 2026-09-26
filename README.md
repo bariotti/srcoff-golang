@@ -38,6 +38,7 @@ O SRCOff processa em lote os registros de posição de carteira offshore para um
 | Banco de dados | Microsoft SQL Server Express |
 | Driver SQL | `github.com/denisenkom/go-mssqldb` |
 | Avaliador de expressões | `github.com/expr-lang/expr` |
+| Leitura de XLSX | `github.com/xuri/excelize/v2` |
 | Testes de propriedade | `github.com/leanovate/gopter` |
 | Frontend | HTML/template (stdlib Go) |
 
@@ -81,13 +82,14 @@ srcoff/
 
 | Variável | Padrão | Descrição |
 |----------|--------|-----------|
-| `STORAGE_BACKEND` | `sqlserver` | Backend de persistência: `sqlserver` ou `file` |
+| `STORAGE_BACKEND` | `file` | Backend de persistência: `sqlserver` ou `file` |
 | `DB_SERVER` | `LOCALHOST\SQLEXPRESS` | Servidor SQL Server |
 | `DB_NAME` | `srcoff` | Nome do banco de dados |
 | `API_PORT` | `8080` | Porta da API |
 | `FRONTEND_PORT` | `9090` | Porta do Frontend |
 | `API_URL` | `http://localhost:8080` | URL da API consumida pelo frontend |
 | `FILE_STORAGE_DIR` | `./data` | Diretório dos arquivos JSON (backend file) |
+| `CAMPO_BOLETO_PADRAO` | `codigo_identificador_boleto` | Campo da posição usado como identificador do boleto na conciliação/exportação e como fallback quando a condição não define `campo_boleto` |
 
 ### Executar com SQL Server
 
@@ -125,21 +127,21 @@ set FILE_STORAGE_DIR=./data
 
 ### posicao_carteira
 
-Armazena a posição diária de carteira offshore. Suporta múltiplas versões por data.
+Armazena a posição diária de carteira offshore, de forma **totalmente dinâmica**.
+Apenas os metadados do lote são colunas fixas; todos os campos de negócio ficam
+serializados em JSON na coluna `campos`. Suporta múltiplas versões por data.
 
 | Coluna | Tipo | Descrição |
 |--------|------|-----------|
 | `id` | BIGINT IDENTITY PK | Identificador único |
-| `data_posicao_carteira` | DATE | Data da posição |
+| `data_posicao_carteira` | DATE | Data da posição (informada no upload) |
 | `codigo_versao_conteudo` | INT | Versão do conteúdo (maior = mais recente) |
-| `codigo_identificador_boleto` | VARCHAR(50) | Identificador único da operação |
-| `descricao_veiculo` | VARCHAR(100) | Veículo da operação (ex: NASSAU) |
-| `indicador_contraparte_afiliada` | BIT | Se a contraparte é afiliada |
-| `valor_mtm` | DECIMAL(18,6) | Valor Mark-to-Market |
-| `principal_remanescente` | DECIMAL(18,6) | Principal remanescente |
-| `moeda_principal_remanescente` | VARCHAR(10) | Moeda (BRL, USD, EUR) |
+| `campos` | NVARCHAR(MAX) | JSON com todos os campos de negócio do arquivo importado |
 
-> Colunas adicionais podem ser incluídas livremente — o sistema as carrega automaticamente via `SELECT *` e as disponibiliza nas expressões das regras.
+> **Não há acoplamento** entre a estrutura da posição e o código. Qualquer coluna
+> do arquivo importado (CSV/XLSX) fica disponível nas expressões das regras pelo
+> seu nome normalizado (snake_case, sem acento). Backend `file`: cada registro é
+> um mapa JSON flat. Aplique a migration `002_posicao_dinamica.sql` no SQL Server.
 
 ### regra_contabil
 
@@ -149,8 +151,18 @@ Define as regras de roteamento contábil.
 |--------|------|-----------|
 | `id` | BIGINT IDENTITY PK | Identificador único |
 | `descricao` | VARCHAR(255) | Nome da regra |
-| `codigo_produto_corporativo` | VARCHAR(50) | Código do produto (ex: NDF) |
+| `codigo_produto_corporativo` | VARCHAR(50) | Código(s) do produto, separados por vírgula (ex: `NDF,SWAP`) — opcional |
+| `campo_produto` | VARCHAR(100) | Campo da posição comparado com o produto (default: `produto`) |
+| `campo_data` | VARCHAR(100) | Nome da coluna do arquivo que contém a data da posição (usado na importação) |
+| `pre_condicao` | VARCHAR(1000) | Expressão opcional combinada com **E** a cada condição da regra |
+| `natureza` | VARCHAR(255) | Texto informativo (combo parametrizável) sobre a natureza da regra |
 | `ativo` | BIT | Se a regra está ativa |
+
+> A regra só é aplicada às posições cujo **produto** (informado no upload e gravado no campo `produto`) coincide com `codigo_produto_corporativo`. Ex.: ao processar uma posição de NDF, apenas as regras de NDF são aplicadas. Regra sem produto aplica-se a todas as posições.
+>
+> **Pré-condição:** quando preenchida, é avaliada uma vez por posição/regra; se falsa, nenhuma condição da regra é aplicada. Útil para fatorar uma condição comum a várias condições da regra (ex: `descricao_veiculo == "NASSAU"`), evitando repeti-la em cada condição.
+>
+> **Campo Data:** na importação, a coluna de data é determinada pelo `campo_data` da regra do produto informado; se não configurado, o sistema tenta detectar automaticamente uma coluna cujo nome comece com `data`.
 
 ### condicao_regra
 
@@ -165,6 +177,7 @@ Define as condições e contas de cada regra.
 | `conta_credito` | VARCHAR(20) | Conta de crédito do lançamento |
 | `campo_valor` | VARCHAR(500) | Expressão para calcular o valor (ex: `principal_remanescente + valor_mtm`) |
 | `campo_moeda` | VARCHAR(100) | Campo da posição que contém a moeda |
+| `campo_boleto` | VARCHAR(100) | Campo da posição usado como identificador do boleto no lançamento (fallback: `CAMPO_BOLETO_PADRAO`) |
 | `ativo` | BIT | Se a condição está ativa |
 
 ### movimento_contabil
@@ -200,6 +213,13 @@ Página principal para acionar o processamento diário.
 - Avalia todas as regras e condições ativas
 - Persiste os lançamentos gerados em lote
 - Exibe mensagem de confirmação ou erro
+- **Inconsistências:** se a pré-condição, condição ou campo_valor de uma regra referenciar um campo que **não existe** na posição, o lançamento **não é gerado** e uma inconsistência é registrada. Após o processamento, as inconsistências da data são listadas na tela.
+
+**Inconsistências do Processamento:**
+- As inconsistências são persistidas por data do movimento e podem ser consultadas informando a data
+- Cada registro traz boleto, produto, regra, tipo (`PRE_CONDICAO` / `CONDICAO` / `CAMPO_VALOR`), a expressão que falhou, os campos faltantes e o detalhe
+- Botão **Exportar CSV** gera um arquivo com esses detalhes (BOM UTF-8, separador `;`)
+- Reprocessar a mesma data **substitui** as inconsistências anteriores
 
 **Gerar Estorno:**
 - Informe uma data D e clique em "Estornar"
@@ -243,18 +263,47 @@ Página para consultar, exportar e excluir lançamentos.
 
 ### Posição de Carteira (`/posicao`)
 
-Página para gerenciar os registros de posição.
+Página **somente leitura + importação** — não há mais inserção nem exclusão manual de registros.
 
 **Consultar:**
-- Informe uma data e clique em "Consultar"
-- Exibe grid dinâmico com todas as colunas da tabela (incluindo colunas adicionais)
-- Botão "Excluir" em cada linha
+- **Selecione o produto (obrigatório)** e informe uma data (ou período), depois clique em "Consultar"
+- Exibe grid dinâmico com todas as colunas do arquivo importado (inclusive colunas adicionais), filtrado pelo produto
 
-**Inserir:**
-- Formulário com campos: Data, Versão, Boleto, Veículo, Contraparte Afiliada, Valor MTM, Principal Remanescente, Moeda
-- Versão padrão: 1
+**Importar (individual — CSV / XLSX):**
+- Selecione o **produto** da posição (combo com opções parametrizadas) e um arquivo `.csv` ou `.xlsx`
+- A **data** de cada registro vem de uma **coluna do próprio arquivo**, cujo nome é definido no `campo_data` da regra do produto (fallback: coluna cujo nome comece com `data`)
 
-> Para inserir colunas adicionais (ex: `accrual_ativo`), use INSERT direto no banco ou ajuste o formulário.
+**Importar em lote (produto pelo nome do arquivo):**
+- Selecione **vários arquivos** de uma vez; o produto de cada um é identificado por **padrões de nome** parametrizados (ex: `posicao_ndf*.csv` → NDF)
+- Um arquivo que casa com **mais de um padrão** é importado para **cada produto** correspondente
+- A data continua vindo de uma coluna do conteúdo (mesma lógica do import individual)
+
+**Pasta monitorada (automático):**
+- Uma **pasta monitorada** parametrizada é varrida periodicamente e também sob demanda ("Escanear agora")
+- O **intervalo de varredura é parametrizável em minutos**; se estiver vazio ou 0, o monitoramento automático fica **desativado** (o botão "Escanear agora" continua funcionando)
+- Arquivos que casam com um padrão são importados e **movidos** para a **pasta de processados** (também parametrizada)
+- Arquivos **sem padrão** correspondente **permanecem intactos** na pasta monitorada
+
+> A importação (individual, em lote ou por varredura) apenas **persiste a posição** — não avalia as regras contábeis. As regras (condições, pré-condições) só são aplicadas ao **Gerar Movimento Contábil**. O único uso das regras na importação é ler o `campo_data` para localizar a coluna de data.
+- O produto informado é gravado no campo `produto` de cada registro e determina quais regras serão aplicadas
+- A primeira linha do arquivo deve conter os nomes das colunas; qualquer coluna é aceita e fica disponível nas regras
+- "Pré-visualizar" mostra as primeiras linhas e a coluna de data detectada antes de confirmar
+- "Importar" persiste os registros; a versão é atribuída automaticamente por **(data, produto)**, de modo que produtos distintos da mesma data coexistem no snapshot vigente
+- Números com vírgula decimal (formato BR) e valores `true/false`/`sim/não` são convertidos automaticamente
+
+---
+
+### Parametrizações (`/parametrizacoes`)
+
+Menu para manter as opções disponíveis nos combos do sistema (extensível para novas funcionalidades futuras). Atualmente:
+
+- **Produtos** — lista de produtos usada nos combos de Produto (upload de posição e cadastro de regra). Adicione/remova opções livremente.
+- **Naturezas da Regra** — lista usada no combo de Natureza da regra contábil.
+
+Os campos Produto (upload e regra) e Natureza (regra) deixam de ser texto livre e passam a ser selecionados a partir dessas listas.
+
+- **Padrões de Arquivo → Produto** — mapeia um padrão de nome de arquivo (glob, ex: `posicao_ndf*.csv`) a um produto. Usado na importação em lote e no monitoramento de pasta. Um arquivo pode casar com mais de um padrão (importa para cada produto).
+- **Pastas de Importação** — configura a **pasta monitorada** (varrida automaticamente) e a **pasta de processados** (para onde os arquivos importados são movidos).
 
 ---
 
@@ -316,9 +365,18 @@ Página para cadastrar e manter as regras de roteamento contábil.
 | GET    | `/api/v1/movimento-contabil/export-txt` | Exporta TXT estruturado            |
 | POST   | `/api/v1/estorno`                       | Gera estorno                       |
 | GET    | `/api/v1/conciliacao`                   | Executa conciliação                |
-| GET    | `/api/v1/posicao`                       | Lista posições por data            |
-| POST   | `/api/v1/posicao`                       | Insere posição                     |
-| DELETE | `/api/v1/posicao`                       | Exclui posição por ID              |
+| GET    | `/api/v1/posicao`                       | Lista posições por **produto** (obrigatório) e data |
+| GET    | `/api/v1/inconsistencias`               | Lista inconsistências do processamento (`?data=YYYY-MM-DD`) |
+| GET    | `/api/v1/inconsistencias/export`        | Exporta inconsistências em CSV (`?data=YYYY-MM-DD`) |
+| POST   | `/api/v1/posicao/upload`                | Importa posição de CSV/XLSX (multipart: `produto` + `arquivo`; data vem de coluna do arquivo; `preview=1` só pré-visualiza) |
+| POST   | `/api/v1/posicao/upload-lote`           | Importa vários arquivos (multipart `arquivos`); produto por padrão de nome |
+| GET/POST | `/api/v1/posicao/scan-pasta`          | Status (GET) / varredura imediata (POST) da pasta monitorada |
+| GET/POST/DELETE | `/api/v1/parametrizacoes/padroes` | CRUD dos padrões nome-de-arquivo → produto |
+| GET/PUT | `/api/v1/configuracoes`                | Lê todas / define uma configuração (`{chave, valor}`) — ex: pastas |
+| GET    | `/api/v1/posicao/campos`                | Lista os campos disponíveis na posição da data |
+| GET    | `/api/v1/parametrizacoes/opcoes`        | Lista opções de uma categoria (`?categoria=produto\|natureza`) |
+| POST   | `/api/v1/parametrizacoes/opcoes`        | Adiciona opção (`{categoria, valor}`) |
+| DELETE | `/api/v1/parametrizacoes/opcoes`        | Remove opção (`?categoria=...&valor=...`) |
 | GET    | `/api/v1/regras`                        | Lista regras                       |
 | POST   | `/api/v1/regras`                        | Cria regra                         |
 | PUT    | `/api/v1/regras/{id}`                   | Edita regra                        |
@@ -398,6 +456,21 @@ sqlcmd -S localhost\SQLEXPRESS -d srcoff -i migrations/seed_regras_condicoes.sql
 
 # Inserir massa de teste de posição (09/04/2026)
 sqlcmd -S localhost\SQLEXPRESS -d srcoff -i migrations/seed_posicao_carteira_20260409.sql
+
+# Migrar para posição dinâmica + campo_boleto/campo_produto
+sqlcmd -S localhost\SQLEXPRESS -d srcoff -i migrations/002_posicao_dinamica.sql
+
+# Campos extras da regra (campo_data, pre_condicao, natureza)
+sqlcmd -S localhost\SQLEXPRESS -d srcoff -i migrations/003_regra_campos_extras.sql
+
+# Parametrizações (opções de combos: produto, natureza)
+sqlcmd -S localhost\SQLEXPRESS -d srcoff -i migrations/004_parametrizacao.sql
+
+# Inconsistências de processamento
+sqlcmd -S localhost\SQLEXPRESS -d srcoff -i migrations/005_inconsistencia.sql
+
+# Padrões de arquivo → produto e configurações (pastas)
+sqlcmd -S localhost\SQLEXPRESS -d srcoff -i migrations/006_padrao_arquivo.sql
 ```
 
 

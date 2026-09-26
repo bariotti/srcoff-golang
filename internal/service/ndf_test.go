@@ -24,6 +24,7 @@ func ndfRules() model.RegraContabil {
 				ContaCredito: "222222222",
 				CampoValor:   "principal_remanescente + valor_mtm",
 				CampoMoeda:   "moeda_principal_remanescente",
+				CampoBoleto:  "codigo_identificador_boleto",
 				Ativo:        true,
 			},
 			// Regra 2: Nassau + afiliada + MTM < 0
@@ -34,6 +35,7 @@ func ndfRules() model.RegraContabil {
 				ContaCredito: "444444444",
 				CampoValor:   "principal_remanescente",
 				CampoMoeda:   "moeda_principal_remanescente",
+				CampoBoleto:  "codigo_identificador_boleto",
 				Ativo:        true,
 			},
 			// Regra 3: Nassau + não-afiliada + MTM > 0
@@ -44,6 +46,7 @@ func ndfRules() model.RegraContabil {
 				ContaCredito: "666666666",
 				CampoValor:   "principal_remanescente + valor_mtm",
 				CampoMoeda:   "moeda_principal_remanescente",
+				CampoBoleto:  "codigo_identificador_boleto",
 				Ativo:        true,
 			},
 			// Regra 4: Nassau + não-afiliada + MTM < 0
@@ -54,8 +57,26 @@ func ndfRules() model.RegraContabil {
 				ContaCredito: "888888888",
 				CampoValor:   "principal_remanescente",
 				CampoMoeda:   "moeda_principal_remanescente",
+				CampoBoleto:  "codigo_identificador_boleto",
 				Ativo:        true,
 			},
+		},
+	}
+}
+
+// posNDF cria uma posição de carteira dinâmica (Campos) para os testes NDF.
+func posNDF(id int64, boleto, veiculo string, afiliada bool, mtm, principal float64, moeda string) model.PosicaoCarteira {
+	return model.PosicaoCarteira{
+		ID:                   id,
+		DataPosicaoCarteira:  ndfBaseDate,
+		CodigoVersaoConteudo: 1,
+		Campos: map[string]interface{}{
+			"codigo_identificador_boleto":    boleto,
+			"descricao_veiculo":              veiculo,
+			"indicador_contraparte_afiliada": afiliada,
+			"valor_mtm":                      mtm,
+			"principal_remanescente":         principal,
+			"moeda_principal_remanescente":   moeda,
 		},
 	}
 }
@@ -66,17 +87,7 @@ var ndfBaseDate = time.Date(2024, 1, 15, 0, 0, 0, 0, time.UTC)
 // Nassau + afiliada + MTM > 0 → conta_debito="111111111", conta_credito="222222222",
 // valor=principal_remanescente+valor_mtm, moeda=moeda_principal_remanescente
 func TestNDF_Nassau_Afiliada_MTMPositivo(t *testing.T) {
-	posicao := model.PosicaoCarteira{
-		ID:                           1,
-		DataPosicaoCarteira:          ndfBaseDate,
-		CodigoVersaoConteudo:         1,
-		CodigoIdentificadorBoleto:    "BOLETO-NDF-001",
-		DescricaoVeiculo:             "NASSAU",
-		IndicadorContraparteAfiliada: true,
-		ValorMTM:                     500.0,
-		PrincipalRemanescente:        1000.0,
-		MoedaPrincipalRemanescente:   "USD",
-	}
+	posicao := posNDF(1, "BOLETO-NDF-001", "NASSAU", true, 500.0, 1000.0, "USD")
 
 	posRepo := &fakePosicaoRepo{registros: []model.PosicaoCarteira{posicao}}
 	regraRepo := &fakeRegraRepo{regras: []model.RegraContabil{ndfRules()}}
@@ -99,7 +110,7 @@ func TestNDF_Nassau_Afiliada_MTMPositivo(t *testing.T) {
 	if l.ContaCredito != "222222222" {
 		t.Errorf("ContaCredito: esperado %q, obtido %q", "222222222", l.ContaCredito)
 	}
-	expectedValor := posicao.PrincipalRemanescente + posicao.ValorMTM // 1500.0
+	expectedValor := 1000.0 + 500.0 // principal + mtm
 	if l.ValorLancamentoContabil != expectedValor {
 		t.Errorf("ValorLancamentoContabil: esperado %v, obtido %v", expectedValor, l.ValorLancamentoContabil)
 	}
@@ -112,17 +123,7 @@ func TestNDF_Nassau_Afiliada_MTMPositivo(t *testing.T) {
 // Nassau + afiliada + MTM < 0 → conta_debito="333333333", conta_credito="444444444",
 // valor=principal_remanescente, moeda=moeda_principal_remanescente
 func TestNDF_Nassau_Afiliada_MTMNegativo(t *testing.T) {
-	posicao := model.PosicaoCarteira{
-		ID:                           2,
-		DataPosicaoCarteira:          ndfBaseDate,
-		CodigoVersaoConteudo:         1,
-		CodigoIdentificadorBoleto:    "BOLETO-NDF-001",
-		DescricaoVeiculo:             "NASSAU",
-		IndicadorContraparteAfiliada: true,
-		ValorMTM:                     -300.0,
-		PrincipalRemanescente:        1000.0,
-		MoedaPrincipalRemanescente:   "USD",
-	}
+	posicao := posNDF(2, "BOLETO-NDF-001", "NASSAU", true, -300.0, 1000.0, "USD")
 
 	posRepo := &fakePosicaoRepo{registros: []model.PosicaoCarteira{posicao}}
 	regraRepo := &fakeRegraRepo{regras: []model.RegraContabil{ndfRules()}}
@@ -145,7 +146,7 @@ func TestNDF_Nassau_Afiliada_MTMNegativo(t *testing.T) {
 	if l.ContaCredito != "444444444" {
 		t.Errorf("ContaCredito: esperado %q, obtido %q", "444444444", l.ContaCredito)
 	}
-	expectedValor := posicao.PrincipalRemanescente // 1000.0
+	expectedValor := 1000.0 // principal
 	if l.ValorLancamentoContabil != expectedValor {
 		t.Errorf("ValorLancamentoContabil: esperado %v, obtido %v", expectedValor, l.ValorLancamentoContabil)
 	}
@@ -158,17 +159,7 @@ func TestNDF_Nassau_Afiliada_MTMNegativo(t *testing.T) {
 // Nassau + não-afiliada + MTM > 0 → conta_debito="555555555", conta_credito="666666666",
 // valor=principal_remanescente+valor_mtm, moeda=moeda_principal_remanescente
 func TestNDF_Nassau_NaoAfiliada_MTMPositivo(t *testing.T) {
-	posicao := model.PosicaoCarteira{
-		ID:                           3,
-		DataPosicaoCarteira:          ndfBaseDate,
-		CodigoVersaoConteudo:         1,
-		CodigoIdentificadorBoleto:    "BOLETO-NDF-001",
-		DescricaoVeiculo:             "NASSAU",
-		IndicadorContraparteAfiliada: false,
-		ValorMTM:                     500.0,
-		PrincipalRemanescente:        1000.0,
-		MoedaPrincipalRemanescente:   "USD",
-	}
+	posicao := posNDF(3, "BOLETO-NDF-001", "NASSAU", false, 500.0, 1000.0, "USD")
 
 	posRepo := &fakePosicaoRepo{registros: []model.PosicaoCarteira{posicao}}
 	regraRepo := &fakeRegraRepo{regras: []model.RegraContabil{ndfRules()}}
@@ -191,7 +182,7 @@ func TestNDF_Nassau_NaoAfiliada_MTMPositivo(t *testing.T) {
 	if l.ContaCredito != "666666666" {
 		t.Errorf("ContaCredito: esperado %q, obtido %q", "666666666", l.ContaCredito)
 	}
-	expectedValor := posicao.PrincipalRemanescente + posicao.ValorMTM // 1500.0
+	expectedValor := 1000.0 + 500.0 // principal + mtm
 	if l.ValorLancamentoContabil != expectedValor {
 		t.Errorf("ValorLancamentoContabil: esperado %v, obtido %v", expectedValor, l.ValorLancamentoContabil)
 	}
@@ -204,17 +195,7 @@ func TestNDF_Nassau_NaoAfiliada_MTMPositivo(t *testing.T) {
 // Nassau + não-afiliada + MTM < 0 → conta_debito="777777777", conta_credito="888888888",
 // valor=principal_remanescente, moeda=moeda_principal_remanescente
 func TestNDF_Nassau_NaoAfiliada_MTMNegativo(t *testing.T) {
-	posicao := model.PosicaoCarteira{
-		ID:                           4,
-		DataPosicaoCarteira:          ndfBaseDate,
-		CodigoVersaoConteudo:         1,
-		CodigoIdentificadorBoleto:    "BOLETO-NDF-001",
-		DescricaoVeiculo:             "NASSAU",
-		IndicadorContraparteAfiliada: false,
-		ValorMTM:                     -300.0,
-		PrincipalRemanescente:        1000.0,
-		MoedaPrincipalRemanescente:   "USD",
-	}
+	posicao := posNDF(4, "BOLETO-NDF-001", "NASSAU", false, -300.0, 1000.0, "USD")
 
 	posRepo := &fakePosicaoRepo{registros: []model.PosicaoCarteira{posicao}}
 	regraRepo := &fakeRegraRepo{regras: []model.RegraContabil{ndfRules()}}
@@ -237,7 +218,7 @@ func TestNDF_Nassau_NaoAfiliada_MTMNegativo(t *testing.T) {
 	if l.ContaCredito != "888888888" {
 		t.Errorf("ContaCredito: esperado %q, obtido %q", "888888888", l.ContaCredito)
 	}
-	expectedValor := posicao.PrincipalRemanescente // 1000.0
+	expectedValor := 1000.0 // principal
 	if l.ValorLancamentoContabil != expectedValor {
 		t.Errorf("ValorLancamentoContabil: esperado %v, obtido %v", expectedValor, l.ValorLancamentoContabil)
 	}
@@ -250,17 +231,7 @@ func TestNDF_Nassau_NaoAfiliada_MTMNegativo(t *testing.T) {
 // Quando nenhuma condição é satisfeita, nenhum lançamento deve ser gerado.
 func TestNDF_SemCondicaoSatisfeita_NaoGeraLancamento(t *testing.T) {
 	// DescricaoVeiculo "OUTRO" não satisfaz nenhuma das 4 regras NDF
-	posicao := model.PosicaoCarteira{
-		ID:                           5,
-		DataPosicaoCarteira:          ndfBaseDate,
-		CodigoVersaoConteudo:         1,
-		CodigoIdentificadorBoleto:    "BOLETO-NDF-001",
-		DescricaoVeiculo:             "OUTRO",
-		IndicadorContraparteAfiliada: true,
-		ValorMTM:                     500.0,
-		PrincipalRemanescente:        1000.0,
-		MoedaPrincipalRemanescente:   "USD",
-	}
+	posicao := posNDF(5, "BOLETO-NDF-001", "OUTRO", true, 500.0, 1000.0, "USD")
 
 	posRepo := &fakePosicaoRepo{registros: []model.PosicaoCarteira{posicao}}
 	regraRepo := &fakeRegraRepo{regras: []model.RegraContabil{ndfRules()}}

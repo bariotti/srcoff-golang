@@ -1,15 +1,167 @@
 [
   {
-    "codigo_identificador_boleto": "BOL1",
+    "codigo_identificador_boleto": "BOL-1",
     "codigo_versao_conteudo": 1,
-    "data_posicao_carteira": "2026-07-08",
+    "data_posicao_carteira": "2026-09-26",
     "descricao_veiculo": "NASSAU",
     "id": 1,
-    "indicador_contraparte_afiliada": false,
-    "moeda_principal_remanescente": "BRL",
-    "principal_remanescente": 5000,
+    "moeda_principal": "USD",
     "produto": "NDF",
-    "valor_mtm": 1000,
-    "moeda_mtm": "USD"
+    "valor_mtm": 500,
+    "valor_principal": 1000
+  },
+  {
+    "codigo_identificador_boleto": "BOL-2",
+    "codigo_versao_conteudo": 1,
+    "data_posicao_carteira": "2026-09-26",
+    "descricao_veiculo": "LICANIA",
+    "id": 2,
+    "moeda_principal": "USD",
+    "produto": "NDF",
+    "valor_mtm": 500,
+    "valor_principal": 5000
+  },
+  {
+    "codigo_identificador_boleto": "BOL-3",
+    "codigo_versao_conteudo": 1,
+    "data_posicao_carteira": "2026-09-26",
+    "descricao_veiculo": "NASSAU",
+    "id": 3,
+    "moeda_principal": "BRL",
+    "produto": "NDF",
+    "valor_mtm": 500,
+    "valor_principal": 1000.5
+  },
+  {
+    "codigo_identificador_boleto": "BOL-4",
+    "codigo_versao_conteudo": 1,
+    "data_posicao_carteira": "2026-09-26",
+    "descricao_veiculo": "NASSAU",
+    "id": 4,
+    "moeda_principal": "BRL",
+    "produto": "NDF",
+    "valor_mtm": 500,
+    "valor_principal": 8000
+  },
+  {
+    "codigo_identificador_boleto": "BOL-1",
+    "codigo_versao_conteudo": 1,
+    "data_posicao_carteira": "2026-09-27",
+    "descricao_veiculo": "NASSAU",
+    "id": 5,
+    "moeda_principal": "USD",
+    "produto": "NDF",
+    "valor_mtm": 500,
+    "valor_principal": 2000
+  },
+  {
+    "codigo_identificador_boleto": "BOL-2",
+    "codigo_versao_conteudo": 1,
+    "data_posicao_carteira": "2026-09-27",
+    "descricao_veiculo": "LICANIA",
+    "id": 6,
+    "moeda_principal": "USD",
+    "produto": "NDF",
+    "valor_mtm": 500,
+    "valor_principal": 5000
+  },
+  {
+    "codigo_identificador_boleto": "BOL-3",
+    "codigo_versao_conteudo": 1,
+    "data_posicao_carteira": "2026-09-27",
+    "descricao_veiculo": "NASSAU",
+    "id": 7,
+    "moeda_principal": "BRL",
+    "produto": "NDF",
+    "valor_mtm": 500,
+    "valor_principal": 1000.5
+  },
+  {
+    "codigo_identificador_boleto": "BOL-4",
+    "codigo_versao_conteudo": 1,
+    "data_posicao_carteira": "2026-09-27",
+    "descricao_veiculo": "NASSAU",
+    "id": 8,
+    "moeda_principal": "BRL",
+    "produto": "NDF",
+    "valor_mtm": -500,
+    "valor_principal": 5000.5
+  },
+  {
+    "codigo_identificador_boleto": "BOL-1",
+    "codigo_versao_conteudo": 1,
+    "data_posicao_carteira": "2026-09-28",
+    "descricao_veiculo": "NASSAU",
+    "id": 9,
+    "moeda_principal": "USD",
+    "produto": "NDF",
+    "valor_mtm": 500,
+    "valor_principal": 2000
+  },
+  {
+    "codigo_identificador_boleto": "BOL-2",
+    "codigo_versao_conteudo": 1,
+    "data_posicao_carteira": "2026-09-28",
+    "descricao_veiculo": "LICANIA",
+    "id": 10,
+    "moeda_principal": "USD",
+    "produto": "NDF",
+    "valor_mtm": 500,
+    "valor_principal": 5000
+  },
+  {
+    "codigo_identificador_boleto": "BOL-3",
+    "codigo_versao_conteudo": 1,
+    "data_posicao_carteira": "2026-09-28",
+    "descricao_veiculo": "NASSAU",
+    "id": 11,
+    "moeda_principal": "BRL",
+    "produto": "NDF",
+    "valor_mtm": -300,
+    "valor_principal": 1000.5
+  },
+  {
+    "codigo_identificador_boleto": "BOL-4",
+    "codigo_versao_conteudo": 1,
+    "data_posicao_carteira": "2026-09-28",
+    "descricao_veiculo": "NASSAU",
+    "id": 12,
+    "moeda_principal": "BRL",
+    "produto": "NDF",
+    "valor_mtm": 500,
+    "valor_principal": 3000.5
+  },
+  {
+    "codigo_identificador_boleto": "BOL-1",
+    "codigo_versao_conteudo": 1,
+    "data_posicao_carteira": "2026-09-26",
+    "descricao_veiculo": "NASSAU",
+    "id": 13,
+    "moeda_principal": "USD",
+    "produto": "SWAP",
+    "valor_mtm": 500,
+    "valor_principal": 1000
+  },
+  {
+    "codigo_identificador_boleto": "BOL-2",
+    "codigo_versao_conteudo": 1,
+    "data_posicao_carteira": "2026-09-26",
+    "descricao_veiculo": "LICANIA",
+    "id": 14,
+    "moeda_principal": "USD",
+    "produto": "SWAP",
+    "valor_mtm": 500,
+    "valor_principal": 5000
+  },
+  {
+    "codigo_identificador_boleto": "BOL-3",
+    "codigo_versao_conteudo": 1,
+    "data_posicao_carteira": "2026-09-26",
+    "descricao_veiculo": "NASSAU",
+    "id": 15,
+    "moeda_principal": "BRL",
+    "produto": "SWAP",
+    "valor_mtm": 500,
+    "valor_principal": 1000.5
   }
 ]

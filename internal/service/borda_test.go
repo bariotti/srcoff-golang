@@ -12,6 +12,20 @@ import (
 
 var testDate = time.Date(2024, 1, 15, 0, 0, 0, 0, time.UTC)
 
+// posBorda cria uma posição dinâmica mínima para os testes de borda.
+func posBorda(id int64, boleto string, mtm float64, moeda string) model.PosicaoCarteira {
+	return model.PosicaoCarteira{
+		ID:                   id,
+		DataPosicaoCarteira:  testDate,
+		CodigoVersaoConteudo: 1,
+		Campos: map[string]interface{}{
+			"codigo_identificador_boleto":  boleto,
+			"valor_mtm":                    mtm,
+			"moeda_principal_remanescente": moeda,
+		},
+	}
+}
+
 // ---------------------------------------------------------------------------
 // Test 1: Posição vazia → erro de ausência
 // Valida: Requisito 1.3
@@ -71,22 +85,8 @@ func TestGerarEstorno_LoteD1Inexistente_RetornaErroAusencia(t *testing.T) {
 
 func TestGerarMovimento_ExpressaoBooleanaInvalida_ContinuaProcessamento(t *testing.T) {
 	posicoes := []model.PosicaoCarteira{
-		{
-			ID:                        1,
-			DataPosicaoCarteira:       testDate,
-			CodigoVersaoConteudo:      1,
-			CodigoIdentificadorBoleto: "BOLETO-001",
-			ValorMTM:                  100.0,
-			MoedaPrincipalRemanescente: "USD",
-		},
-		{
-			ID:                        2,
-			DataPosicaoCarteira:       testDate,
-			CodigoVersaoConteudo:      1,
-			CodigoIdentificadorBoleto: "BOLETO-002",
-			ValorMTM:                  100.0,
-			MoedaPrincipalRemanescente: "USD",
-		},
+		posBorda(1, "BOLETO-001", 100.0, "USD"),
+		posBorda(2, "BOLETO-002", 100.0, "USD"),
 	}
 
 	regra := model.RegraContabil{
@@ -139,22 +139,8 @@ func TestGerarMovimento_ExpressaoBooleanaInvalida_ContinuaProcessamento(t *testi
 
 func TestGerarMovimento_ExpressaoValorInvalida_ContinuaProcessamento(t *testing.T) {
 	posicoes := []model.PosicaoCarteira{
-		{
-			ID:                        1,
-			DataPosicaoCarteira:       testDate,
-			CodigoVersaoConteudo:      1,
-			CodigoIdentificadorBoleto: "BOLETO-001",
-			ValorMTM:                  100.0,
-			MoedaPrincipalRemanescente: "USD",
-		},
-		{
-			ID:                        2,
-			DataPosicaoCarteira:       testDate,
-			CodigoVersaoConteudo:      1,
-			CodigoIdentificadorBoleto: "BOLETO-002",
-			ValorMTM:                  100.0,
-			MoedaPrincipalRemanescente: "USD",
-		},
+		posBorda(1, "BOLETO-001", 100.0, "USD"),
+		posBorda(2, "BOLETO-002", 100.0, "USD"),
 	}
 
 	regra := model.RegraContabil{

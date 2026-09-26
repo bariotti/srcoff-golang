@@ -33,9 +33,7 @@ func (s *RegraContabilService) CriarRegra(ctx context.Context, regra model.Regra
 	if regra.Descricao == "" {
 		return 0, fmt.Errorf("campo obrigatório ausente: descricao")
 	}
-	if regra.CodigoProdutoCorporativo == "" {
-		return 0, fmt.Errorf("campo obrigatório ausente: codigo_produto_corporativo")
-	}
+	// Produto é opcional: uma regra sem produto se aplica a todas as posições.
 	return s.repo.CriarRegra(ctx, regra)
 }
 

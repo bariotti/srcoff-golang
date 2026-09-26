@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"os"
 	"strings"
 	"time"
 
@@ -30,12 +31,18 @@ type movimentoContabilRepo interface {
 	ExcluirPorDataEVersao(ctx context.Context, data time.Time, versao int) error
 }
 
+// inconsistenciaRepoWriter persiste as inconsistências detectadas no processamento.
+type inconsistenciaRepoWriter interface {
+	SubstituirPorData(ctx context.Context, data time.Time, itens []model.InconsistenciaProcessamento) error
+}
+
 // MovimentoContabilService implementa a lógica de geração e consulta de movimentos contábeis.
 type MovimentoContabilService struct {
-	posicaoRepo   posicaoCarteiraRepo
-	regraRepo     regraContabilRepo
-	movimentoRepo movimentoContabilRepo
-	evaluator     evaluator.Evaluator
+	posicaoRepo        posicaoCarteiraRepo
+	regraRepo          regraContabilRepo
+	movimentoRepo      movimentoContabilRepo
+	evaluator          evaluator.Evaluator
+	inconsistenciaRepo inconsistenciaRepoWriter
 }
 
 // NewMovimentoContabilService cria uma nova instância do serviço com as dependências injetadas.
@@ -51,6 +58,14 @@ func NewMovimentoContabilService(
 		movimentoRepo: movimentoRepo,
 		evaluator:     eval,
 	}
+}
+
+// ComInconsistenciaRepo injeta o repositório de inconsistências (opcional). Permite
+// persistir as inconsistências detectadas em GerarMovimento sem alterar a assinatura
+// do construtor usada nos testes.
+func (s *MovimentoContabilService) ComInconsistenciaRepo(r inconsistenciaRepoWriter) *MovimentoContabilService {
+	s.inconsistenciaRepo = r
+	return s
 }
 
 // GerarMovimento processa a posição de carteira para a data informada, avalia as regras
@@ -74,41 +89,69 @@ func (s *MovimentoContabilService) GerarMovimento(ctx context.Context, data time
 
 	// 3. Gerar lançamentos de D em memória
 	var lancamentos []model.LancamentoContabil
+	var inconsistencias []model.InconsistenciaProcessamento
 	for _, posicao := range posicoes {
 		env := evaluator.PosicaoToEnv(posicao)
+		produto := evaluator.CampoString(env, "produto")
 		for _, regra := range regras {
-			// Filtrar pelo produto: só aplica a regra se o produto coincidir.
-			// Se posição ou regra não tiver produto definido, aplica para todos (retrocompatibilidade).
-			if regra.CodigoProdutoCorporativo != "" && posicao.Produto != "" &&
-				!produtoMatch(regra.CodigoProdutoCorporativo, posicao.Produto) {
+			// Filtrar pelo produto: só aplica a regra se o produto da posição
+			// coincidir com o código da regra.
+			if !regraAplicaAPosicao(regra, env) {
 				continue
 			}
-			for _, condicao := range regra.Condicoes {
-				if !condicao.Ativo {
+			boleto := boletoDaPosicao(env, regra.Condicoes)
+			// Pré-condição da regra (opcional): avaliada uma vez por posição/regra.
+			// Se referenciar um campo ausente na posição, registra inconsistência e
+			// NÃO processa nenhuma condição desta regra (não gera lançamento).
+			if strings.TrimSpace(regra.PreCondicao) != "" {
+				if faltantes := camposFaltantes(env, regra.PreCondicao); len(faltantes) > 0 {
+					inconsistencias = append(inconsistencias, novaInconsistencia(
+						data, boleto, produto, regra, model.InconsistenciaPreCondicao, regra.PreCondicao, faltantes))
 					continue
 				}
-				ok, err := s.evaluator.EvaluateCondition(condicao.Condicao, env)
+				ok, err := s.evaluator.EvaluateCondition(regra.PreCondicao, env)
 				if err != nil {
-					evaluator.LogEvalError(data, posicao.CodigoIdentificadorBoleto, condicao.Condicao, err)
+					evaluator.LogEvalError(data, boleto, regra.PreCondicao, err)
 					continue
 				}
 				if !ok {
 					continue
 				}
-				valor, err := s.evaluator.EvaluateValue(condicao.CampoValor, env)
-				if err != nil {
-					evaluator.LogEvalError(data, posicao.CodigoIdentificadorBoleto, condicao.CampoValor, err)
+			}
+			for _, condicao := range regra.Condicoes {
+				if !condicao.Ativo {
 					continue
 				}
-				moeda := ""
-				if v, found := env[condicao.CampoMoeda]; found {
-					if s, ok := v.(string); ok {
-						moeda = s
-					}
+				// Condição referenciando campo ausente → inconsistência, sem lançamento.
+				if faltantes := camposFaltantes(env, condicao.Condicao); len(faltantes) > 0 {
+					inconsistencias = append(inconsistencias, novaInconsistencia(
+						data, boleto, produto, regra, model.InconsistenciaCondicao, condicao.Condicao, faltantes))
+					continue
 				}
+				ok, err := s.evaluator.EvaluateCondition(condicao.Condicao, env)
+				if err != nil {
+					evaluator.LogEvalError(data, boleto, condicao.Condicao, err)
+					continue
+				}
+				if !ok {
+					continue
+				}
+				// Condição satisfeita: campo_valor referenciando campo ausente → inconsistência.
+				if faltantes := camposFaltantes(env, condicao.CampoValor); len(faltantes) > 0 {
+					inconsistencias = append(inconsistencias, novaInconsistencia(
+						data, boleto, produto, regra, model.InconsistenciaCampoValor, condicao.CampoValor, faltantes))
+					continue
+				}
+				valor, err := s.evaluator.EvaluateValue(condicao.CampoValor, env)
+				if err != nil {
+					evaluator.LogEvalError(data, boleto, condicao.CampoValor, err)
+					continue
+				}
+				moeda := evaluator.CampoString(env, condicao.CampoMoeda)
+				boletoLanc := evaluator.CampoString(env, campoBoletoOuPadrao(condicao.CampoBoleto))
 				lancamentos = append(lancamentos, model.LancamentoContabil{
 					DataLoteContabil:          data,
-					CodigoIdentificadorBoleto: posicao.CodigoIdentificadorBoleto,
+					CodigoIdentificadorBoleto: boletoLanc,
 					ValorLancamentoContabil:   valor,
 					MoedaLancamentoContabil:   moeda,
 					ContaDebito:               condicao.ContaDebito,
@@ -120,6 +163,17 @@ func (s *MovimentoContabilService) GerarMovimento(ctx context.Context, data time
 				})
 			}
 		}
+	}
+
+	// Persistir inconsistências detectadas (substitui as da data). Sempre chamado —
+	// mesmo vazio — para limpar inconsistências de um processamento anterior da data.
+	if s.inconsistenciaRepo != nil {
+		if err := s.inconsistenciaRepo.SubstituirPorData(ctx, data, inconsistencias); err != nil {
+			log.Printf("[movimento] falha ao persistir inconsistências para %s: %v", data.Format("2006-01-02"), err)
+		}
+	}
+	if len(inconsistencias) > 0 {
+		log.Printf("[movimento] %d inconsistência(s) detectada(s) para %s (lançamentos não gerados)", len(inconsistencias), data.Format("2006-01-02"))
 	}
 
 	// 4. Calcular próxima versão para D
@@ -278,11 +332,101 @@ func (s *MovimentoContabilService) gerarEstornoInterno(ctx context.Context, data
 	return nil
 }
 
-// produtoMatch verifica se o produto da posição está na lista de produtos da regra.
-// A lista de produtos da regra é separada por vírgula (ex: "NDF,SWAP,FXO").
-func produtoMatch(produtosRegra, produtoPosicao string) bool {
-	for _, p := range strings.Split(produtosRegra, ",") {
-		if strings.TrimSpace(p) == strings.TrimSpace(produtoPosicao) {
+// camposFaltantes retorna os campos referenciados na expressão que não existem no
+// env da posição. Erros de sintaxe são ignorados aqui (tratados na avaliação).
+func camposFaltantes(env map[string]interface{}, expressao string) []string {
+	if strings.TrimSpace(expressao) == "" {
+		return nil
+	}
+	campos, err := evaluator.CamposReferenciados(expressao)
+	if err != nil {
+		return nil
+	}
+	var faltantes []string
+	for _, c := range campos {
+		if _, ok := env[c]; !ok {
+			faltantes = append(faltantes, c)
+		}
+	}
+	return faltantes
+}
+
+// novaInconsistencia monta um registro de inconsistência com detalhe legível.
+func novaInconsistencia(data time.Time, boleto, produto string, regra model.RegraContabil, tipo, expressao string, faltantes []string) model.InconsistenciaProcessamento {
+	campos := strings.Join(faltantes, ", ")
+	rotulos := map[string]string{
+		model.InconsistenciaPreCondicao: "pré-condição",
+		model.InconsistenciaCondicao:    "condição",
+		model.InconsistenciaCampoValor:  "campo valor",
+	}
+	detalhe := fmt.Sprintf("A %s da regra %q referencia campo(s) inexistente(s) na posição: %s. Lançamento não gerado.",
+		rotulos[tipo], regra.Descricao, campos)
+	return model.InconsistenciaProcessamento{
+		DataLoteContabil:          data,
+		CodigoIdentificadorBoleto: boleto,
+		Produto:                   produto,
+		IDRegraContabil:           regra.ID,
+		DescricaoRegraContabil:    regra.Descricao,
+		Tipo:                      tipo,
+		Expressao:                 expressao,
+		CamposFaltantes:           campos,
+		Detalhe:                   detalhe,
+		CriadoEm:                  time.Now(),
+	}
+}
+
+// campoBoletoPadrao é o nome do campo da posição usado como identificador do
+// boleto quando a condição não parametriza um campo_boleto próprio. Configurável
+// via CAMPO_BOLETO_PADRAO para manter compatibilidade com bases existentes.
+func campoBoletoPadrao() string {
+	if v := os.Getenv("CAMPO_BOLETO_PADRAO"); v != "" {
+		return v
+	}
+	return "codigo_identificador_boleto"
+}
+
+// campoBoletoOuPadrao retorna o campo_boleto da condição ou o padrão do sistema.
+func campoBoletoOuPadrao(campoBoleto string) string {
+	if strings.TrimSpace(campoBoleto) != "" {
+		return campoBoleto
+	}
+	return campoBoletoPadrao()
+}
+
+// boletoDaPosicao tenta descobrir um identificador de boleto para logs, usando o
+// campo_boleto da primeira condição que o define, ou o padrão do sistema.
+func boletoDaPosicao(env map[string]interface{}, condicoes []model.CondicaoRegra) string {
+	for _, c := range condicoes {
+		if b := evaluator.CampoString(env, campoBoletoOuPadrao(c.CampoBoleto)); b != "" {
+			return b
+		}
+	}
+	return evaluator.CampoString(env, campoBoletoPadrao())
+}
+
+// regraAplicaAPosicao decide se uma regra deve ser avaliada para a posição,
+// comparando o produto da posição com a lista de produtos da regra (separada por
+// vírgula, ex: "NDF,SWAP"). O produto da posição é informado no momento do upload
+// e persistido no campo `produto` (ou no campo indicado por regra.CampoProduto).
+//
+// Regras:
+//   - Regra SEM produto (codigo_produto_corporativo vazio) aplica-se a todas as posições.
+//   - Regra COM produto aplica-se apenas às posições cujo produto coincide — assim,
+//     ao processar uma posição de NDF, somente as regras de NDF são aplicadas.
+func regraAplicaAPosicao(regra model.RegraContabil, env map[string]interface{}) bool {
+	if strings.TrimSpace(regra.CodigoProdutoCorporativo) == "" {
+		return true
+	}
+	campo := strings.TrimSpace(regra.CampoProduto)
+	if campo == "" {
+		campo = "produto"
+	}
+	produtoPosicao := strings.TrimSpace(evaluator.CampoString(env, campo))
+	if produtoPosicao == "" {
+		return false
+	}
+	for _, p := range strings.Split(regra.CodigoProdutoCorporativo, ",") {
+		if strings.TrimSpace(p) == produtoPosicao {
 			return true
 		}
 	}

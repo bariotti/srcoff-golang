@@ -6,6 +6,8 @@ import (
 	"time"
 
 	"github.com/expr-lang/expr"
+	"github.com/expr-lang/expr/ast"
+	"github.com/expr-lang/expr/parser"
 	"srcoff/internal/model"
 )
 
@@ -78,39 +80,66 @@ func (e *ExprEvaluator) EvaluateValue(expression string, env map[string]interfac
 	}
 }
 
-// sanitizeEnv substitui valores nil por zero-values tipados (float64=0, string="", bool=false)
-// para evitar erros de tipo no avaliador de expressões quando colunas têm valor NULL no banco.
+// sanitizeEnv produz uma cópia do env pronta para o avaliador, sem mutar o mapa
+// original. Converte time.Time para string YYYY-MM-DD e substitui valores nil por
+// zero-values numéricos (0), evitando erros de tipo quando um campo é NULL/ausente.
 func sanitizeEnv(env map[string]interface{}) map[string]interface{} {
-	
-	for chave, valor := range env {
-	switch t := valor.(type) {
-	case time.Time:
-		// Converte time.Time para string no formato YYYY-MM-DD
-		env[chave] = t.Format("2006-01-02")
-		
-	case *time.Time:
-		// Se for um ponteiro, verifica se não é nulo antes de converter
-		if t != nil {
-			env[chave] = t.Format("2006-01-02")
-		} else {
-			env[chave] = nil // Mantém nil se o ponteiro for nulo
-		}
-	}
-}
-
 	safe := make(map[string]interface{}, len(env))
-
 	for k, v := range env {
-		if v == nil {
-			safe[k] = float64(0) // default numérico para colunas NULL
-		} else {
+		switch t := v.(type) {
+		case time.Time:
+			safe[k] = t.Format("2006-01-02")
+		case *time.Time:
+			if t != nil {
+				safe[k] = t.Format("2006-01-02")
+			} else {
+				safe[k] = float64(0)
+			}
+		case nil:
+			safe[k] = float64(0)
+		default:
 			safe[k] = v
 		}
 	}
-
-	
-
 	return safe
+}
+
+// visitorFunc adapta uma função ao ast.Visitor do expr-lang.
+type visitorFunc func(*ast.Node)
+
+func (f visitorFunc) Visit(n *ast.Node) { f(n) }
+
+// CamposReferenciados retorna os nomes de campos (identificadores) usados em uma
+// expressão. Nomes de funções (callees) e literais booleanos/nil não são campos e
+// portanto não são retornados. Usado para detectar expressões que referenciam
+// colunas ausentes na posição.
+func CamposReferenciados(expression string) ([]string, error) {
+	tree, err := parser.Parse(expression)
+	if err != nil {
+		return nil, err
+	}
+	identificadores := map[string]bool{}
+	callees := map[string]bool{}
+	v := visitorFunc(func(n *ast.Node) {
+		switch node := (*n).(type) {
+		case *ast.IdentifierNode:
+			identificadores[node.Value] = true
+		case *ast.CallNode:
+			if id, ok := node.Callee.(*ast.IdentifierNode); ok {
+				callees[id.Value] = true
+			}
+		}
+	})
+	ast.Walk(&tree.Node, v)
+
+	var campos []string
+	for nome := range identificadores {
+		if callees[nome] {
+			continue // é nome de função, não de campo
+		}
+		campos = append(campos, nome)
+	}
+	return campos, nil
 }
 
 // LogEvalError registra um erro de avaliação de expressão com contexto completo:
@@ -121,10 +150,50 @@ func LogEvalError(data time.Time, boleto string, expression string, err error) {
 		data.Format("2006-01-02"), boleto, expression, err)
 }
 
-// PosicaoToEnv retorna o mapa de campos da posição diretamente para o avaliador.
-// O mapa é construído dinamicamente pelo repositório a partir de SELECT *,
-// portanto qualquer coluna presente na tabela posicao_carteira fica disponível
-// nas expressões das regras sem necessidade de alteração de código.
+// PosicaoToEnv retorna o mapa de campos da posição para o avaliador.
+// O mapa é construído dinamicamente pelo repositório (upload ou SELECT *),
+// portanto qualquer campo presente na posição fica disponível nas expressões
+// das regras sem necessidade de alteração de código. Os metadados do lote
+// (id, data e versão) também são expostos como campos utilizáveis.
 func PosicaoToEnv(p model.PosicaoCarteira) map[string]interface{} {
-	return p.Campos
+	env := make(map[string]interface{}, len(p.Campos)+3)
+	for k, v := range p.Campos {
+		env[k] = v
+	}
+	if _, ok := env["id"]; !ok {
+		env["id"] = float64(p.ID)
+	}
+	if _, ok := env["codigo_versao_conteudo"]; !ok {
+		env["codigo_versao_conteudo"] = float64(p.CodigoVersaoConteudo)
+	}
+	if _, ok := env["data_posicao_carteira"]; !ok && !p.DataPosicaoCarteira.IsZero() {
+		env["data_posicao_carteira"] = p.DataPosicaoCarteira
+	}
+	return env
+}
+
+// CampoString extrai o valor de um campo do env como string. Retorna "" se o
+// campo não existir ou não for representável como texto simples.
+func CampoString(env map[string]interface{}, campo string) string {
+	if campo == "" {
+		return ""
+	}
+	v, ok := env[campo]
+	if !ok || v == nil {
+		return ""
+	}
+	switch t := v.(type) {
+	case string:
+		return t
+	case float64:
+		return fmt.Sprintf("%v", t)
+	case int64:
+		return fmt.Sprintf("%d", t)
+	case int:
+		return fmt.Sprintf("%d", t)
+	case bool:
+		return fmt.Sprintf("%v", t)
+	default:
+		return fmt.Sprintf("%v", t)
+	}
 }
