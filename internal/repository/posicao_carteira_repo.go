@@ -40,16 +40,16 @@ func (r *PosicaoCarteiraRepo) BuscarPorDataEVersaoMaxima(ctx context.Context, da
 		return nil, err
 	}
 
-	maxPorProduto := map[string]int{}
+	maxPorCombo := map[string]int{}
 	for _, p := range doDia {
-		prod := produtoDaPosicao(p)
-		if p.CodigoVersaoConteudo > maxPorProduto[prod] {
-			maxPorProduto[prod] = p.CodigoVersaoConteudo
+		k := comboKeyPosSQL(p)
+		if p.CodigoVersaoConteudo > maxPorCombo[k] {
+			maxPorCombo[k] = p.CodigoVersaoConteudo
 		}
 	}
 	var result []model.PosicaoCarteira
 	for _, p := range doDia {
-		if p.CodigoVersaoConteudo == maxPorProduto[produtoDaPosicao(p)] {
+		if p.CodigoVersaoConteudo == maxPorCombo[comboKeyPosSQL(p)] {
 			result = append(result, p)
 		}
 	}
@@ -58,12 +58,21 @@ func (r *PosicaoCarteiraRepo) BuscarPorDataEVersaoMaxima(ctx context.Context, da
 
 // produtoDaPosicao lê o campo `produto` de uma posição.
 func produtoDaPosicao(p model.PosicaoCarteira) string {
-	if v, ok := p.Campos["produto"]; ok {
+	return campoStrSQL(p, "produto")
+}
+
+func campoStrSQL(p model.PosicaoCarteira, campo string) string {
+	if v, ok := p.Campos[campo]; ok {
 		if s, ok := v.(string); ok {
 			return s
 		}
 	}
 	return ""
+}
+
+// comboKeyPosSQL identifica a combinação (produto, domínio) para versionamento.
+func comboKeyPosSQL(p model.PosicaoCarteira) string {
+	return campoStrSQL(p, "produto") + "\x00" + campoStrSQL(p, "dominio")
 }
 
 func (r *PosicaoCarteiraRepo) ListarPorData(ctx context.Context, data time.Time) ([]model.PosicaoCarteira, error) {

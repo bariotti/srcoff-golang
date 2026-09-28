@@ -29,12 +29,12 @@ type RegraContabilRepository interface {
 // InconsistenciaRepository persiste as inconsistências detectadas na geração do
 // movimento contábil, chaveadas pela data do lote.
 type InconsistenciaRepository interface {
-	SubstituirPorData(ctx context.Context, data time.Time, itens []model.InconsistenciaProcessamento) error
+	SubstituirPorEscopo(ctx context.Context, data time.Time, combos []model.ProdutoDominio, itens []model.InconsistenciaProcessamento) error
 	ListarPorData(ctx context.Context, data time.Time) ([]model.InconsistenciaProcessamento, error)
 }
 
 // ParametrizacaoRepository define o contrato de acesso às opções parametrizáveis
-// (ex: valores possíveis para os combos de Produto e Natureza).
+// (ex: valores possíveis para os combos de Produto e Domínio).
 type ParametrizacaoRepository interface {
 	ListarOpcoes(ctx context.Context, categoria string) ([]string, error)
 	AdicionarOpcao(ctx context.Context, categoria, valor string) error
@@ -53,6 +53,20 @@ type ConfiguracaoRepository interface {
 	Obter(ctx context.Context, chave string) (string, error)
 	Definir(ctx context.Context, chave, valor string) error
 	ListarTodas(ctx context.Context) (map[string]string, error)
+}
+
+// ExecucaoRepository persiste o log de execução do contábil por (data, produto, domínio).
+type ExecucaoRepository interface {
+	RegistrarExecucao(ctx context.Context, e model.MovimentoExecucao) error
+	ListarPorData(ctx context.Context, data time.Time) ([]model.MovimentoExecucao, error)
+}
+
+// NotificacaoRepository persiste as notificações de eventos automáticos.
+type NotificacaoRepository interface {
+	Criar(ctx context.Context, n model.Notificacao) (int64, error)
+	Listar(ctx context.Context, limite int) ([]model.Notificacao, error)
+	ContarNaoLidas(ctx context.Context) (int, error)
+	MarcarTodasLidas(ctx context.Context) error
 }
 
 // MovimentoContabilRepository define o contrato de acesso ao movimento contábil.

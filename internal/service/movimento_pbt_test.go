@@ -85,15 +85,17 @@ func (f *fakeMovimentoRepo) ExcluirPorDataEVersao(ctx context.Context, data time
 
 // fakeMovimentoRepoTracked records the versao assigned to each BulkInsert call.
 type fakeMovimentoRepoTracked struct {
-	versaoAtual    int
-	versoesUsadas  []int
-	ultimaVersao   int
+	versaoAtual   int
+	versoesUsadas []int
+	ultimaVersao  int
+	armazenados   []model.LancamentoContabil
 }
 
 func (f *fakeMovimentoRepoTracked) BulkInsert(ctx context.Context, lancamentos []model.LancamentoContabil) error {
 	if len(lancamentos) > 0 {
 		f.versoesUsadas = append(f.versoesUsadas, lancamentos[0].CodigoVersaoConteudo)
 	}
+	f.armazenados = append(f.armazenados, lancamentos...)
 	return nil
 }
 
@@ -104,7 +106,26 @@ func (f *fakeMovimentoRepoTracked) ObterProximaVersao(ctx context.Context, data 
 }
 
 func (f *fakeMovimentoRepoTracked) BuscarPorDataEIndicador(ctx context.Context, data time.Time, indicadorReversao bool) ([]model.LancamentoContabil, error) {
-	return nil, nil
+	dataStr := data.Format("2006-01-02")
+	maxPorCombo := map[string]int{}
+	for _, l := range f.armazenados {
+		if l.DataLoteContabil.Format("2006-01-02") != dataStr {
+			continue
+		}
+		k := l.Produto + "\x00" + l.Dominio
+		if l.CodigoVersaoConteudo > maxPorCombo[k] {
+			maxPorCombo[k] = l.CodigoVersaoConteudo
+		}
+	}
+	var out []model.LancamentoContabil
+	for _, l := range f.armazenados {
+		if l.DataLoteContabil.Format("2006-01-02") == dataStr &&
+			l.IndicadorReversao == indicadorReversao &&
+			l.CodigoVersaoConteudo == maxPorCombo[l.Produto+"\x00"+l.Dominio] {
+			out = append(out, l)
+		}
+	}
+	return out, nil
 }
 
 func (f *fakeMovimentoRepoTracked) ConsultarPaginado(ctx context.Context, data time.Time, pagina, tamanho int) (*model.PaginaLancamentos, error) {
@@ -563,4 +584,71 @@ func TestP5_VersaoLoteIncrementadaMonotonicamente(t *testing.T) {
 	))
 
 	properties.TestingRun(t)
+}
+
+// TestVersaoIndependentePorCombinacao garante que a versão do movimento contábil é
+// por (produto, domínio): a primeira execução de um novo produto/domínio na data começa
+// na versão 1, mesmo que outras combinações já tenham versões maiores na mesma data.
+func TestVersaoIndependentePorCombinacao(t *testing.T) {
+	eval := evaluator.New()
+
+	novaPosicao := func(produto, dominio string) model.PosicaoCarteira {
+		return model.PosicaoCarteira{
+			DataPosicaoCarteira:  baseDate,
+			CodigoVersaoConteudo: 1,
+			Campos: map[string]interface{}{
+				"produto":                      produto,
+				"dominio":                      dominio,
+				"codigo_identificador_boleto":  "BOL-" + produto,
+				"valor_mtm":                    100.0,
+				"moeda_principal_remanescente": "USD",
+			},
+		}
+	}
+
+	regra := model.RegraContabil{
+		ID: 1, Descricao: "Regra geral", Ativo: true,
+		Condicoes: []model.CondicaoRegra{{
+			ID: 1, Condicao: "valor_mtm > 0",
+			ContaDebito: "1001", ContaCredito: "2001",
+			CampoValor: "valor_mtm", CampoMoeda: "moeda_principal_remanescente", Ativo: true,
+		}},
+	}
+
+	posRepo := &fakePosicaoRepo{registros: []model.PosicaoCarteira{
+		novaPosicao("NDF", "Posição"),
+		novaPosicao("SWAP", "Posição"),
+	}}
+	regraRepo := &fakeRegraRepo{regras: []model.RegraContabil{regra}}
+	movRepo := &fakeMovimentoRepoTracked{}
+	svc := NewMovimentoContabilService(posRepo, regraRepo, movRepo, eval)
+
+	ctx := context.Background()
+	// NDF processado duas vezes → versões 1 e 2 para NDF.
+	if err := svc.GerarMovimentoEscopo(ctx, baseDate, "NDF", "Posição"); err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.GerarMovimentoEscopo(ctx, baseDate, "NDF", "Posição"); err != nil {
+		t.Fatal(err)
+	}
+	// SWAP processado pela primeira vez → deve ser versão 1 (e não 3).
+	if err := svc.GerarMovimentoEscopo(ctx, baseDate, "SWAP", "Posição"); err != nil {
+		t.Fatal(err)
+	}
+
+	maxVersao := func(produto string) int {
+		m := 0
+		for _, l := range movRepo.armazenados {
+			if l.Produto == produto && l.CodigoVersaoConteudo > m {
+				m = l.CodigoVersaoConteudo
+			}
+		}
+		return m
+	}
+	if got := maxVersao("SWAP"); got != 1 {
+		t.Fatalf("SWAP na primeira execução deveria ser versão 1, obteve %d", got)
+	}
+	if got := maxVersao("NDF"); got != 2 {
+		t.Fatalf("NDF deveria estar na versão 2 após dois processamentos, obteve %d", got)
+	}
 }

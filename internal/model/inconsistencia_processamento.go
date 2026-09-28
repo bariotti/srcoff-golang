@@ -18,6 +18,7 @@ type InconsistenciaProcessamento struct {
 	DataLoteContabil          time.Time `json:"data_lote_contabil"`
 	CodigoIdentificadorBoleto string    `json:"codigo_identificador_boleto"`
 	Produto                   string    `json:"produto"`
+	Dominio                   string    `json:"dominio"`
 	IDRegraContabil           int64     `json:"id_regra_contabil"`
 	DescricaoRegraContabil    string    `json:"descricao_regra_contabil"`
 	Tipo                      string    `json:"tipo"`      // PRE_CONDICAO | CONDICAO | CAMPO_VALOR

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"srcoff/internal/model"
@@ -12,9 +13,11 @@ import (
 
 type movimentoContabilSvc interface {
 	GerarMovimento(ctx context.Context, data time.Time) error
+	GerarMovimentoEscopo(ctx context.Context, data time.Time, produto, dominio string) error
 	GerarEstorno(ctx context.Context, data time.Time) error
 	ConsultarLancamentos(ctx context.Context, data time.Time, pagina, tamanho int) (*model.PaginaLancamentos, error)
 	ConsultarLancamentosFiltrado(ctx context.Context, dataInicio, dataFim time.Time, boleto string, versao int, versaoModo string, pagina, tamanho int) (*model.PaginaLancamentos, error)
+	ConsultarLancamentosFiltradoEscopo(ctx context.Context, dataInicio, dataFim time.Time, boleto, produto, dominio string, versao int, versaoModo string, pagina, tamanho int) (*model.PaginaLancamentos, error)
 	ExcluirMovimento(ctx context.Context, data time.Time, versao int) error
 }
 
@@ -36,7 +39,9 @@ func writeJSON(w http.ResponseWriter, status int, v interface{}) {
 }
 
 type dataPayload struct {
-	Data string `json:"data"`
+	Data    string `json:"data"`
+	Produto string `json:"produto"`
+	Dominio string `json:"dominio"`
 }
 
 // GerarMovimento trata POST /api/v1/movimento-contabil.
@@ -58,7 +63,7 @@ func (h *MovimentoContabilHandler) GerarMovimento(w http.ResponseWriter, r *http
 		return
 	}
 
-	if err := h.svc.GerarMovimento(r.Context(), data); err != nil {
+	if err := h.svc.GerarMovimentoEscopo(r.Context(), data, payload.Produto, payload.Dominio); err != nil {
 		writeJSON(w, http.StatusOK, map[string]string{"mensagem": err.Error()})
 		return
 	}
@@ -112,12 +117,14 @@ func (h *MovimentoContabilHandler) ConsultarMovimento(w http.ResponseWriter, r *
 	}
 
 	boleto := q.Get("boleto")
+	produto := strings.TrimSpace(q.Get("produto"))
+	dominio := strings.TrimSpace(q.Get("dominio"))
 	dataInicioStr := q.Get("data_inicio")
 	dataFimStr := q.Get("data_fim")
 	dataStr := q.Get("data")
 
 	// Suporte ao filtro por período
-	if dataInicioStr != "" || dataFimStr != "" || boleto != "" {
+	if dataInicioStr != "" || dataFimStr != "" || boleto != "" || produto != "" || dominio != "" {
 		if dataInicioStr == "" {
 			dataInicioStr = "2000-01-01"
 		}
@@ -142,7 +149,7 @@ func (h *MovimentoContabilHandler) ConsultarMovimento(w http.ResponseWriter, r *
 		if versaoModo == "especifica" {
 			versao, _ = strconv.Atoi(q.Get("versao"))
 		}
-		resultado, err := h.svc.ConsultarLancamentosFiltrado(r.Context(), dataInicio, dataFim, boleto, versao, versaoModo, pagina, tamanho)
+		resultado, err := h.svc.ConsultarLancamentosFiltradoEscopo(r.Context(), dataInicio, dataFim, boleto, produto, dominio, versao, versaoModo, pagina, tamanho)
 		if err != nil {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"erro": err.Error()})
 			return

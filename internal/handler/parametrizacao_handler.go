@@ -12,7 +12,7 @@ type parametrizacaoSvc interface {
 	RemoverOpcao(ctx context.Context, categoria, valor string) error
 }
 
-// ParametrizacaoHandler expõe o CRUD das opções parametrizáveis (combos de Produto/Natureza).
+// ParametrizacaoHandler expõe o CRUD das opções parametrizáveis (combos de Produto/Domínio).
 type ParametrizacaoHandler struct {
 	svc parametrizacaoSvc
 }

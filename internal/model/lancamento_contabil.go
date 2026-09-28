@@ -11,6 +11,8 @@ type LancamentoContabil struct {
 	MoedaLancamentoContabil   string    `json:"moeda_lancamento_contabil"`
 	ContaDebito               string    `json:"conta_debito"`
 	ContaCredito              string    `json:"conta_credito"`
+	Produto                   string    `json:"produto"`
+	Dominio                   string    `json:"dominio"`
 	IndicadorReversao         bool      `json:"indicador_reversao"`
 	DescricaoRegraContabil    string    `json:"descricao_regra_contabil"`
 	DescricaoCondicaoContabil string    `json:"descricao_condicao_contabil"`

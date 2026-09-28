@@ -16,14 +16,18 @@ func NewInconsistenciaRepo(dir string) *InconsistenciaRepo {
 	return &InconsistenciaRepo{st: newStore[model.InconsistenciaProcessamento](dir, "inconsistencias.json")}
 }
 
-// SubstituirPorData remove as inconsistências existentes para a data e grava as novas,
-// refletindo sempre o último processamento daquela data.
-func (r *InconsistenciaRepo) SubstituirPorData(_ context.Context, data time.Time, itens []model.InconsistenciaProcessamento) error {
+// SubstituirPorEscopo remove as inconsistências das combinações (data, produto, domínio)
+// informadas e grava as novas, refletindo o último processamento de cada combinação.
+func (r *InconsistenciaRepo) SubstituirPorEscopo(_ context.Context, data time.Time, combos []model.ProdutoDominio, itens []model.InconsistenciaProcessamento) error {
 	all, err := r.st.load()
 	if err != nil {
 		return err
 	}
 	dataStr := data.Format("2006-01-02")
+	noEscopo := map[string]bool{}
+	for _, c := range combos {
+		noEscopo[c.Produto+"\x00"+c.Dominio] = true
+	}
 
 	maxID := int64(0)
 	var mantidos []model.InconsistenciaProcessamento
@@ -31,9 +35,11 @@ func (r *InconsistenciaRepo) SubstituirPorData(_ context.Context, data time.Time
 		if i.ID > maxID {
 			maxID = i.ID
 		}
-		if i.DataLoteContabil.Format("2006-01-02") != dataStr {
-			mantidos = append(mantidos, i)
+		mesmaData := i.DataLoteContabil.Format("2006-01-02") == dataStr
+		if mesmaData && noEscopo[i.Produto+"\x00"+i.Dominio] {
+			continue // será substituída
 		}
+		mantidos = append(mantidos, i)
 	}
 	for idx := range itens {
 		maxID++

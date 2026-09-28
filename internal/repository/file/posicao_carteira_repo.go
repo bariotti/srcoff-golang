@@ -104,39 +104,44 @@ func (r *PosicaoCarteiraRepo) BuscarPorDataEVersaoMaxima(_ context.Context, data
 	}
 	dataStr := data.Format("2006-01-02")
 
-	// Snapshot vigente = para cada produto, a maior versão daquela data.
-	// Produtos distintos versionam de forma independente e coexistem no resultado.
+	// Snapshot vigente = para cada (produto, domínio), a maior versão daquela data.
+	// Combinações distintas versionam de forma independente e coexistem no resultado.
 	var doDia []model.PosicaoCarteira
-	maxPorProduto := map[string]int{}
+	maxPorCombo := map[string]int{}
 	for _, m := range all {
 		p := mapToPosicao(m)
 		if p.DataPosicaoCarteira.Format("2006-01-02") != dataStr {
 			continue
 		}
 		doDia = append(doDia, p)
-		prod := produtoDaPosicaoMap(p)
-		if p.CodigoVersaoConteudo > maxPorProduto[prod] {
-			maxPorProduto[prod] = p.CodigoVersaoConteudo
+		k := comboKeyPos(p)
+		if p.CodigoVersaoConteudo > maxPorCombo[k] {
+			maxPorCombo[k] = p.CodigoVersaoConteudo
 		}
 	}
 
 	var result []model.PosicaoCarteira
 	for _, p := range doDia {
-		if p.CodigoVersaoConteudo == maxPorProduto[produtoDaPosicaoMap(p)] {
+		if p.CodigoVersaoConteudo == maxPorCombo[comboKeyPos(p)] {
 			result = append(result, p)
 		}
 	}
 	return result, nil
 }
 
-// produtoDaPosicaoMap lê o campo `produto` da posição para efeito de versionamento.
-func produtoDaPosicaoMap(p model.PosicaoCarteira) string {
-	if v, ok := p.Campos["produto"]; ok {
+// campoStrPos lê um campo string da posição.
+func campoStrPos(p model.PosicaoCarteira, campo string) string {
+	if v, ok := p.Campos[campo]; ok {
 		if s, ok := v.(string); ok {
 			return s
 		}
 	}
 	return ""
+}
+
+// comboKeyPos identifica a combinação (produto, domínio) da posição para versionamento.
+func comboKeyPos(p model.PosicaoCarteira) string {
+	return campoStrPos(p, "produto") + "\x00" + campoStrPos(p, "dominio")
 }
 
 func (r *PosicaoCarteiraRepo) ListarPorData(_ context.Context, data time.Time) ([]model.PosicaoCarteira, error) {

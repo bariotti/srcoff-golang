@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"sort"
 	"strings"
 	"time"
 
@@ -33,7 +34,12 @@ type movimentoContabilRepo interface {
 
 // inconsistenciaRepoWriter persiste as inconsistências detectadas no processamento.
 type inconsistenciaRepoWriter interface {
-	SubstituirPorData(ctx context.Context, data time.Time, itens []model.InconsistenciaProcessamento) error
+	SubstituirPorEscopo(ctx context.Context, data time.Time, combos []model.ProdutoDominio, itens []model.InconsistenciaProcessamento) error
+}
+
+// execucaoRepoWriter registra a execução do contábil por combinação.
+type execucaoRepoWriter interface {
+	RegistrarExecucao(ctx context.Context, e model.MovimentoExecucao) error
 }
 
 // MovimentoContabilService implementa a lógica de geração e consulta de movimentos contábeis.
@@ -43,6 +49,7 @@ type MovimentoContabilService struct {
 	movimentoRepo      movimentoContabilRepo
 	evaluator          evaluator.Evaluator
 	inconsistenciaRepo inconsistenciaRepoWriter
+	execucaoRepo       execucaoRepoWriter
 }
 
 // NewMovimentoContabilService cria uma nova instância do serviço com as dependências injetadas.
@@ -68,17 +75,45 @@ func (s *MovimentoContabilService) ComInconsistenciaRepo(r inconsistenciaRepoWri
 	return s
 }
 
-// GerarMovimento processa a posição de carteira para a data informada, avalia as regras
-// contábeis ativas, gera os estornos de D-1 em memória e persiste tudo em um único BulkInsert.
+// ComExecucaoRepo injeta o repositório de log de execução (opcional).
+func (s *MovimentoContabilService) ComExecucaoRepo(r execucaoRepoWriter) *MovimentoContabilService {
+	s.execucaoRepo = r
+	return s
+}
+
+// GerarMovimento processa toda a data (todas as combinações). Mantido para
+// compatibilidade; delega para GerarMovimentoEscopo sem filtro.
 func (s *MovimentoContabilService) GerarMovimento(ctx context.Context, data time.Time) error {
+	return s.GerarMovimentoEscopo(ctx, data, "", "")
+}
+
+// GerarMovimentoEscopo processa a posição de carteira para a data, restrita ao
+// Produto e/ou Domínio informados (vazio = sem filtro naquela dimensão). Avalia as
+// regras ativas do escopo, gera lançamentos e estornos de D-1 (também do escopo),
+// grava produto/domínio em cada lançamento e registra a execução por combinação.
+func (s *MovimentoContabilService) GerarMovimentoEscopo(ctx context.Context, data time.Time, produtoFiltro, dominioFiltro string) error {
 	// 1. Buscar posição com versão máxima para a data
-	posicoes, err := s.posicaoRepo.BuscarPorDataEVersaoMaxima(ctx, data)
+	todasPosicoes, err := s.posicaoRepo.BuscarPorDataEVersaoMaxima(ctx, data)
 	if err != nil {
 		return fmt.Errorf("erro ao buscar posicao_carteira: %w", err)
 	}
 
+	// Filtrar posições pelo escopo (produto/domínio).
+	var posicoes []model.PosicaoCarteira
+	for _, p := range todasPosicoes {
+		prod := campoStrModel(p, "produto")
+		dom := campoStrModel(p, "dominio")
+		if produtoFiltro != "" && prod != produtoFiltro {
+			continue
+		}
+		if dominioFiltro != "" && dom != dominioFiltro {
+			continue
+		}
+		posicoes = append(posicoes, p)
+	}
+
 	if len(posicoes) == 0 {
-		return fmt.Errorf("nenhum registro de posicao_carteira encontrado para a data %s", data.Format("2006-01-02"))
+		return fmt.Errorf("nenhum registro de posicao_carteira encontrado para a data %s no escopo informado", data.Format("2006-01-02"))
 	}
 
 	// 2. Carregar todas as regras e condições ativas
@@ -90,12 +125,14 @@ func (s *MovimentoContabilService) GerarMovimento(ctx context.Context, data time
 	// 3. Gerar lançamentos de D em memória
 	var lancamentos []model.LancamentoContabil
 	var inconsistencias []model.InconsistenciaProcessamento
+	combosSet := map[string]model.ProdutoDominio{}
 	for _, posicao := range posicoes {
 		env := evaluator.PosicaoToEnv(posicao)
 		produto := evaluator.CampoString(env, "produto")
+		dominio := evaluator.CampoString(env, "dominio")
+		combosSet[produto+"\x00"+dominio] = model.ProdutoDominio{Produto: produto, Dominio: dominio}
 		for _, regra := range regras {
-			// Filtrar pelo produto: só aplica a regra se o produto da posição
-			// coincidir com o código da regra.
+			// Só aplica a regra se Produto E Domínio da posição coincidirem com a regra.
 			if !regraAplicaAPosicao(regra, env) {
 				continue
 			}
@@ -106,7 +143,7 @@ func (s *MovimentoContabilService) GerarMovimento(ctx context.Context, data time
 			if strings.TrimSpace(regra.PreCondicao) != "" {
 				if faltantes := camposFaltantes(env, regra.PreCondicao); len(faltantes) > 0 {
 					inconsistencias = append(inconsistencias, novaInconsistencia(
-						data, boleto, produto, regra, model.InconsistenciaPreCondicao, regra.PreCondicao, faltantes))
+						data, boleto, produto, dominio, regra, model.InconsistenciaPreCondicao, regra.PreCondicao, faltantes))
 					continue
 				}
 				ok, err := s.evaluator.EvaluateCondition(regra.PreCondicao, env)
@@ -125,7 +162,7 @@ func (s *MovimentoContabilService) GerarMovimento(ctx context.Context, data time
 				// Condição referenciando campo ausente → inconsistência, sem lançamento.
 				if faltantes := camposFaltantes(env, condicao.Condicao); len(faltantes) > 0 {
 					inconsistencias = append(inconsistencias, novaInconsistencia(
-						data, boleto, produto, regra, model.InconsistenciaCondicao, condicao.Condicao, faltantes))
+						data, boleto, produto, dominio, regra, model.InconsistenciaCondicao, condicao.Condicao, faltantes))
 					continue
 				}
 				ok, err := s.evaluator.EvaluateCondition(condicao.Condicao, env)
@@ -139,7 +176,7 @@ func (s *MovimentoContabilService) GerarMovimento(ctx context.Context, data time
 				// Condição satisfeita: campo_valor referenciando campo ausente → inconsistência.
 				if faltantes := camposFaltantes(env, condicao.CampoValor); len(faltantes) > 0 {
 					inconsistencias = append(inconsistencias, novaInconsistencia(
-						data, boleto, produto, regra, model.InconsistenciaCampoValor, condicao.CampoValor, faltantes))
+						data, boleto, produto, dominio, regra, model.InconsistenciaCampoValor, condicao.CampoValor, faltantes))
 					continue
 				}
 				valor, err := s.evaluator.EvaluateValue(condicao.CampoValor, env)
@@ -156,6 +193,8 @@ func (s *MovimentoContabilService) GerarMovimento(ctx context.Context, data time
 					MoedaLancamentoContabil:   moeda,
 					ContaDebito:               condicao.ContaDebito,
 					ContaCredito:              condicao.ContaCredito,
+					Produto:                   produto,
+					Dominio:                   dominio,
 					IndicadorReversao:         false,
 					DescricaoRegraContabil:    regra.Descricao,
 					DescricaoCondicaoContabil: condicao.Condicao,
@@ -165,10 +204,15 @@ func (s *MovimentoContabilService) GerarMovimento(ctx context.Context, data time
 		}
 	}
 
-	// Persistir inconsistências detectadas (substitui as da data). Sempre chamado —
-	// mesmo vazio — para limpar inconsistências de um processamento anterior da data.
+	// Combinações (produto, domínio) processadas neste escopo.
+	var combos []model.ProdutoDominio
+	for _, c := range combosSet {
+		combos = append(combos, c)
+	}
+
+	// Persistir inconsistências detectadas — substitui apenas as combinações do escopo.
 	if s.inconsistenciaRepo != nil {
-		if err := s.inconsistenciaRepo.SubstituirPorData(ctx, data, inconsistencias); err != nil {
+		if err := s.inconsistenciaRepo.SubstituirPorEscopo(ctx, data, combos, inconsistencias); err != nil {
 			log.Printf("[movimento] falha ao persistir inconsistências para %s: %v", data.Format("2006-01-02"), err)
 		}
 	}
@@ -176,16 +220,7 @@ func (s *MovimentoContabilService) GerarMovimento(ctx context.Context, data time
 		log.Printf("[movimento] %d inconsistência(s) detectada(s) para %s (lançamentos não gerados)", len(inconsistencias), data.Format("2006-01-02"))
 	}
 
-	// 4. Calcular próxima versão para D
-	versao, err := s.movimentoRepo.ObterProximaVersao(ctx, data)
-	if err != nil {
-		return fmt.Errorf("erro ao obter próxima versão: %w", err)
-	}
-	for i := range lancamentos {
-		lancamentos[i].CodigoVersaoConteudo = versao
-	}
-
-	// 5. Gerar estornos de D-1 em memória, considerando os lançamentos de D recém-gerados
+	// 4. Gerar estornos de D-1 em memória, restritos ao escopo (produto/domínio).
 	dMenos1 := data.AddDate(0, 0, -1)
 	lancamentosD1, err := s.movimentoRepo.BuscarPorDataEIndicador(ctx, dMenos1, false)
 	if err != nil {
@@ -194,43 +229,74 @@ func (s *MovimentoContabilService) GerarMovimento(ctx context.Context, data time
 
 	var estornos []model.LancamentoContabil
 	if len(lancamentosD1) > 0 {
-		// Carregar regras para verificar flag posta_reverte
 		regras, err := s.regraRepo.ListarRegrasAtivas(ctx)
 		if err != nil {
 			return fmt.Errorf("erro ao carregar regras para estorno: %w", err)
 		}
-		// Montar mapa de id_regra → posta_reverte
 		regraPostaReverte := make(map[int64]bool, len(regras))
 		for _, reg := range regras {
 			regraPostaReverte[reg.ID] = reg.PostaReverte
 		}
 
-		log.Printf("[movimento+estorno] gerando estornos de D-1 (%s) para D (%s) — total D-1: %d",
-			dMenos1.Format("2006-01-02"), data.Format("2006-01-02"), len(lancamentosD1))
-
 		for _, l1 := range lancamentosD1 {
-			// Só estorna se a regra for posta_reverte=true (ou se não encontrada, estorna por padrão)
+			// Restringe o estorno ao escopo processado.
+			if produtoFiltro != "" && l1.Produto != produtoFiltro {
+				continue
+			}
+			if dominioFiltro != "" && l1.Dominio != dominioFiltro {
+				continue
+			}
 			if pr, found := regraPostaReverte[l1.IDRegraContabil]; found && !pr {
-				log.Printf("[movimento+estorno] lançamento boleto=%s regra_id=%d ignorado (posta_reverte=false)",
-					l1.CodigoIdentificadorBoleto, l1.IDRegraContabil)
 				continue
 			}
 			estornos = append(estornos, model.LancamentoContabil{
 				DataLoteContabil:          data,
-				CodigoVersaoConteudo:      versao,
 				CodigoIdentificadorBoleto: l1.CodigoIdentificadorBoleto,
 				ValorLancamentoContabil:   l1.ValorLancamentoContabil,
 				MoedaLancamentoContabil:   l1.MoedaLancamentoContabil,
 				ContaDebito:               l1.ContaCredito,
 				ContaCredito:              l1.ContaDebito,
+				Produto:                   l1.Produto,
+				Dominio:                   l1.Dominio,
 				IndicadorReversao:         true,
 				DescricaoRegraContabil:    l1.DescricaoRegraContabil,
 				DescricaoCondicaoContabil: l1.DescricaoCondicaoContabil,
 				IDRegraContabil:           l1.IDRegraContabil,
 			})
 		}
-	} else {
-		log.Printf("[movimento+estorno] sem lançamentos em D-1 (%s), estorno não gerado", dMenos1.Format("2006-01-02"))
+		// Garante que combinações vindas do estorno (sem posição hoje) também sejam registradas.
+		for _, e := range estornos {
+			combosSet[e.Produto+"\x00"+e.Dominio] = model.ProdutoDominio{Produto: e.Produto, Dominio: e.Dominio}
+		}
+	}
+
+	// 5. Calcular a próxima versão POR combinação (produto, domínio) e aplicá-la a
+	// lançamentos e estornos. Cada combinação versiona de forma independente, então
+	// a primeira execução de um novo produto/domínio na data começa na versão 1,
+	// mesmo que outras combinações já tenham versões maiores.
+	maxVersaoCombo := map[string]int{}
+	for _, ind := range []bool{false, true} {
+		vigentes, err := s.movimentoRepo.BuscarPorDataEIndicador(ctx, data, ind)
+		if err != nil {
+			return fmt.Errorf("erro ao obter versão vigente: %w", err)
+		}
+		for _, l := range vigentes {
+			k := l.Produto + "\x00" + l.Dominio
+			if l.CodigoVersaoConteudo > maxVersaoCombo[k] {
+				maxVersaoCombo[k] = l.CodigoVersaoConteudo
+			}
+		}
+	}
+	versaoPorCombo := map[string]int{}
+	for _, c := range combosSet {
+		k := c.Produto + "\x00" + c.Dominio
+		versaoPorCombo[k] = maxVersaoCombo[k] + 1
+	}
+	for i := range lancamentos {
+		lancamentos[i].CodigoVersaoConteudo = versaoPorCombo[lancamentos[i].Produto+"\x00"+lancamentos[i].Dominio]
+	}
+	for i := range estornos {
+		estornos[i].CodigoVersaoConteudo = versaoPorCombo[estornos[i].Produto+"\x00"+estornos[i].Dominio]
 	}
 
 	// 6. Persistir movimento + estornos em um único BulkInsert
@@ -239,8 +305,39 @@ func (s *MovimentoContabilService) GerarMovimento(ctx context.Context, data time
 		return fmt.Errorf("erro ao persistir lançamentos: %w", err)
 	}
 
-	log.Printf("[movimento+estorno] persistidos %d lançamentos e %d estornos para %s versão %d",
-		len(lancamentos), len(estornos), data.Format("2006-01-02"), versao)
+	// Contagem por combinação (produto, domínio), usada no registro de execução e no log.
+	qtdLanc := map[string]int{}
+	qtdEst := map[string]int{}
+	for _, l := range lancamentos {
+		qtdLanc[l.Produto+"\x00"+l.Dominio]++
+	}
+	for _, e := range estornos {
+		qtdEst[e.Produto+"\x00"+e.Dominio]++
+	}
+
+	// 7. Registrar a execução por combinação (data, produto, domínio).
+	if s.execucaoRepo != nil {
+		for _, c := range combosSet {
+			k := c.Produto + "\x00" + c.Dominio
+			if err := s.execucaoRepo.RegistrarExecucao(ctx, model.MovimentoExecucao{
+				DataLote: data, Produto: c.Produto, Dominio: c.Dominio,
+				QtdLancamentos: qtdLanc[k], QtdEstornos: qtdEst[k],
+			}); err != nil {
+				log.Printf("[movimento] falha ao registrar execução %s/%s: %v", c.Produto, c.Dominio, err)
+			}
+		}
+	}
+
+	// Detalhamento por combinação (produto/domínio) efetivamente persistida, ordenado para log estável.
+	detalhes := make([]string, 0, len(combosSet))
+	for _, c := range combosSet {
+		k := c.Produto + "\x00" + c.Dominio
+		detalhes = append(detalhes, fmt.Sprintf("%s/%s v%d: %d lançamentos, %d estornos", c.Produto, c.Dominio, versaoPorCombo[k], qtdLanc[k], qtdEst[k]))
+	}
+	sort.Strings(detalhes)
+
+	log.Printf("[movimento+estorno] persistidos %d lançamentos e %d estornos para %s (escopo produto=%q dominio=%q) [%s]",
+		len(lancamentos), len(estornos), data.Format("2006-01-02"), produtoFiltro, dominioFiltro, strings.Join(detalhes, "; "))
 	return nil
 }
 
@@ -253,6 +350,50 @@ func (s *MovimentoContabilService) ConsultarLancamentos(ctx context.Context, dat
 // Elimina lançamentos cujo saldo líquido (normal - reversão) é zero — usado pela página de consulta do frontend.
 func (s *MovimentoContabilService) ConsultarLancamentosFiltrado(ctx context.Context, dataInicio, dataFim time.Time, boleto string, versao int, versaoModo string, pagina, tamanho int) (*model.PaginaLancamentos, error) {
 	return s.movimentoRepo.ConsultarPaginadoFiltradoSemCancelados(ctx, dataInicio, dataFim, boleto, versao, versaoModo, pagina, tamanho)
+}
+
+// ConsultarLancamentosFiltradoEscopo funciona como ConsultarLancamentosFiltrado, mas
+// permite restringir por produto e/ou domínio (ambos opcionais). Quando os dois estão
+// vazios, delega diretamente ao repositório (paginação eficiente). Quando há filtro de
+// escopo, busca todos os lançamentos que atendem aos demais critérios, filtra por
+// produto/domínio e pagina o resultado — mantendo a contagem total correta.
+func (s *MovimentoContabilService) ConsultarLancamentosFiltradoEscopo(ctx context.Context, dataInicio, dataFim time.Time, boleto, produto, dominio string, versao int, versaoModo string, pagina, tamanho int) (*model.PaginaLancamentos, error) {
+	if produto == "" && dominio == "" {
+		return s.movimentoRepo.ConsultarPaginadoFiltradoSemCancelados(ctx, dataInicio, dataFim, boleto, versao, versaoModo, pagina, tamanho)
+	}
+
+	completo, err := s.movimentoRepo.ConsultarPaginadoFiltradoSemCancelados(ctx, dataInicio, dataFim, boleto, versao, versaoModo, 1, 999999)
+	if err != nil {
+		return nil, err
+	}
+
+	filtrados := make([]model.LancamentoContabil, 0, len(completo.Lancamentos))
+	for _, l := range completo.Lancamentos {
+		if produto != "" && l.Produto != produto {
+			continue
+		}
+		if dominio != "" && l.Dominio != dominio {
+			continue
+		}
+		filtrados = append(filtrados, l)
+	}
+
+	total := len(filtrados)
+	if tamanho <= 0 {
+		tamanho = 100
+	}
+	if pagina <= 0 {
+		pagina = 1
+	}
+	offset := (pagina - 1) * tamanho
+	if offset >= total {
+		return &model.PaginaLancamentos{Total: total, Pagina: pagina, Tamanho: tamanho, Lancamentos: []model.LancamentoContabil{}}, nil
+	}
+	end := offset + tamanho
+	if end > total {
+		end = total
+	}
+	return &model.PaginaLancamentos{Total: total, Pagina: pagina, Tamanho: tamanho, Lancamentos: filtrados[offset:end]}, nil
 }
 
 // ExcluirMovimento exclui lançamentos de uma data e opcionalmente de uma versão específica.
@@ -352,7 +493,7 @@ func camposFaltantes(env map[string]interface{}, expressao string) []string {
 }
 
 // novaInconsistencia monta um registro de inconsistência com detalhe legível.
-func novaInconsistencia(data time.Time, boleto, produto string, regra model.RegraContabil, tipo, expressao string, faltantes []string) model.InconsistenciaProcessamento {
+func novaInconsistencia(data time.Time, boleto, produto, dominio string, regra model.RegraContabil, tipo, expressao string, faltantes []string) model.InconsistenciaProcessamento {
 	campos := strings.Join(faltantes, ", ")
 	rotulos := map[string]string{
 		model.InconsistenciaPreCondicao: "pré-condição",
@@ -365,6 +506,7 @@ func novaInconsistencia(data time.Time, boleto, produto string, regra model.Regr
 		DataLoteContabil:          data,
 		CodigoIdentificadorBoleto: boleto,
 		Produto:                   produto,
+		Dominio:                   dominio,
 		IDRegraContabil:           regra.ID,
 		DescricaoRegraContabil:    regra.Descricao,
 		Tipo:                      tipo,
@@ -414,19 +556,28 @@ func boletoDaPosicao(env map[string]interface{}, condicoes []model.CondicaoRegra
 //   - Regra COM produto aplica-se apenas às posições cujo produto coincide — assim,
 //     ao processar uma posição de NDF, somente as regras de NDF são aplicadas.
 func regraAplicaAPosicao(regra model.RegraContabil, env map[string]interface{}) bool {
-	if strings.TrimSpace(regra.CodigoProdutoCorporativo) == "" {
+	campoProd := strings.TrimSpace(regra.CampoProduto)
+	if campoProd == "" {
+		campoProd = "produto"
+	}
+	produtoPosicao := strings.TrimSpace(evaluator.CampoString(env, campoProd))
+	dominioPosicao := strings.TrimSpace(evaluator.CampoString(env, "dominio"))
+	return valorCasaLista(regra.CodigoProdutoCorporativo, produtoPosicao) &&
+		valorCasaLista(regra.Dominio, dominioPosicao)
+}
+
+// valorCasaLista verifica se o valor está na lista separada por vírgula. Lista
+// vazia casa com qualquer valor (regra sem restrição naquela dimensão). Lista
+// preenchida exige valor não-vazio presente na lista.
+func valorCasaLista(lista, valor string) bool {
+	if strings.TrimSpace(lista) == "" {
 		return true
 	}
-	campo := strings.TrimSpace(regra.CampoProduto)
-	if campo == "" {
-		campo = "produto"
-	}
-	produtoPosicao := strings.TrimSpace(evaluator.CampoString(env, campo))
-	if produtoPosicao == "" {
+	if valor == "" {
 		return false
 	}
-	for _, p := range strings.Split(regra.CodigoProdutoCorporativo, ",") {
-		if strings.TrimSpace(p) == produtoPosicao {
+	for _, item := range strings.Split(lista, ",") {
+		if strings.TrimSpace(item) == valor {
 			return true
 		}
 	}

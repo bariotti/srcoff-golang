@@ -36,7 +36,12 @@ func (r *MovimentoContabilRepo) BulkInsert(_ context.Context, lancamentos []mode
 	return r.st.save(all)
 }
 
-// BuscarPorDataEIndicador — equivalente ao SQL Server: filtra pela versão vigente (MAX).
+// comboKeyMov identifica a combinação (data, produto, domínio) de um lançamento.
+func comboKeyMov(l model.LancamentoContabil) string {
+	return l.DataLoteContabil.Format("2006-01-02") + "\x00" + l.Produto + "\x00" + l.Dominio
+}
+
+// BuscarPorDataEIndicador — vigente (MAX versão) por (data, produto, domínio).
 func (r *MovimentoContabilRepo) BuscarPorDataEIndicador(_ context.Context, data time.Time, indicadorReversao bool) ([]model.LancamentoContabil, error) {
 	all, err := r.st.load()
 	if err != nil {
@@ -44,11 +49,15 @@ func (r *MovimentoContabilRepo) BuscarPorDataEIndicador(_ context.Context, data 
 	}
 	dataStr := data.Format("2006-01-02")
 
-	// Calcular versão vigente para a data
-	maxVersao := 0
+	// Versão vigente por combinação (data, produto, domínio)
+	maxPorCombo := map[string]int{}
 	for _, l := range all {
-		if l.DataLoteContabil.Format("2006-01-02") == dataStr && l.CodigoVersaoConteudo > maxVersao {
-			maxVersao = l.CodigoVersaoConteudo
+		if l.DataLoteContabil.Format("2006-01-02") != dataStr {
+			continue
+		}
+		k := comboKeyMov(l)
+		if l.CodigoVersaoConteudo > maxPorCombo[k] {
+			maxPorCombo[k] = l.CodigoVersaoConteudo
 		}
 	}
 
@@ -56,7 +65,7 @@ func (r *MovimentoContabilRepo) BuscarPorDataEIndicador(_ context.Context, data 
 	for _, l := range all {
 		if l.DataLoteContabil.Format("2006-01-02") == dataStr &&
 			l.IndicadorReversao == indicadorReversao &&
-			l.CodigoVersaoConteudo == maxVersao {
+			l.CodigoVersaoConteudo == maxPorCombo[comboKeyMov(l)] {
 			result = append(result, l)
 		}
 	}
@@ -111,18 +120,18 @@ func (r *MovimentoContabilRepo) ConsultarPaginadoFiltradoSemCancelados(ctx conte
 		return nil, err
 	}
 
-	// Calcular versão vigente por data (equivalente ao SQL Server que sempre usa MAX para o filtro de saldo zero)
-	maxVersaoPorData := map[string]int{}
+	// Calcular versão vigente por (data, produto, domínio)
+	maxVersaoPorCombo := map[string]int{}
 	inicioStr := dataInicio.Format("2006-01-02")
 	fimStr := dataFim.Format("2006-01-02")
 	for _, l := range all {
 		d := l.DataLoteContabil.Format("2006-01-02")
-		if d >= inicioStr && d <= fimStr && l.CodigoVersaoConteudo > maxVersaoPorData[d] {
-			maxVersaoPorData[d] = l.CodigoVersaoConteudo
+		if d >= inicioStr && d <= fimStr && l.CodigoVersaoConteudo > maxVersaoPorCombo[comboKeyMov(l)] {
+			maxVersaoPorCombo[comboKeyMov(l)] = l.CodigoVersaoConteudo
 		}
 	}
 
-	// Calcular saldo líquido usando SEMPRE a versão vigente (equivalente ao SQL Server)
+	// Calcular saldo líquido usando SEMPRE a versão vigente por combinação
 	// Chave: boleto + regra + conta_debito + conta_credito
 	type chave struct {
 		data         string
@@ -137,7 +146,7 @@ func (r *MovimentoContabilRepo) ConsultarPaginadoFiltradoSemCancelados(ctx conte
 		if d < inicioStr || d > fimStr {
 			continue
 		}
-		if l.CodigoVersaoConteudo != maxVersaoPorData[d] {
+		if l.CodigoVersaoConteudo != maxVersaoPorCombo[comboKeyMov(l)] {
 			continue
 		}
 
@@ -215,13 +224,13 @@ func paginarFiltrado(all []model.LancamentoContabil, dataInicio, dataFim time.Ti
 	inicioStr := dataInicio.Format("2006-01-02")
 	fimStr := dataFim.Format("2006-01-02")
 
-	// Calcular versão vigente por data para modo vigente
-	maxVersaoPorData := map[string]int{}
+	// Calcular versão vigente por (data, produto, domínio) para modo vigente
+	maxVersaoPorCombo := map[string]int{}
 	if versaoModo == "vigente" {
 		for _, l := range all {
 			d := l.DataLoteContabil.Format("2006-01-02")
-			if d >= inicioStr && d <= fimStr && l.CodigoVersaoConteudo > maxVersaoPorData[d] {
-				maxVersaoPorData[d] = l.CodigoVersaoConteudo
+			if d >= inicioStr && d <= fimStr && l.CodigoVersaoConteudo > maxVersaoPorCombo[comboKeyMov(l)] {
+				maxVersaoPorCombo[comboKeyMov(l)] = l.CodigoVersaoConteudo
 			}
 		}
 	}
@@ -241,7 +250,7 @@ func paginarFiltrado(all []model.LancamentoContabil, dataInicio, dataFim time.Ti
 				continue
 			}
 		case "vigente":
-			if l.CodigoVersaoConteudo != maxVersaoPorData[d] {
+			if l.CodigoVersaoConteudo != maxVersaoPorCombo[comboKeyMov(l)] {
 				continue
 			}
 		}

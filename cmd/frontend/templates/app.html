@@ -19,6 +19,20 @@
     .table-sm td, .table-sm th { font-size: 0.82rem; }
     .spinner-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.3); z-index: 9998; align-items: center; justify-content: center; }
     .spinner-overlay.show { display: flex; }
+    /* Destaque dos agrupadores de funcionalidade */
+    :root { --srcoff-accent: #0d6efd; }
+    .page > h4 { padding-bottom: 10px; border-bottom: 2px solid var(--srcoff-accent); }
+    .page > h4 > i.bi { color: var(--srcoff-accent); }
+    /* Cabeçalhos neutros de card ganham barra de acento, negrito e ícone destacado.
+       Cabeçalhos com cor semântica (bg-*) são preservados. */
+    .card-header:not([class*="bg-"]) {
+      background: #fff;
+      border-left: 3px solid var(--srcoff-accent);
+      font-weight: 600;
+      color: #212529;
+    }
+    .card-header:not([class*="bg-"]) i.bi { color: var(--srcoff-accent); }
+    .card-header .subtitulo { display: block; font-weight: 400; font-size: 0.75rem; color: #6c757d; margin-top: 1px; }
   </style>
 </head>
 <body>
@@ -28,11 +42,26 @@
 <div class="toast-container" id="toastContainer"></div>
 <datalist id="r-campos-datalist"></datalist>
 
+<!-- Sino de notificações -->
+<div style="position:fixed; top:14px; right:20px; z-index:1050">
+  <button class="btn btn-light border position-relative" onclick="toggleNotificacoes()" title="Notificações">
+    <i class="bi bi-bell fs-5"></i>
+    <span id="notif-badge" class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger" style="display:none">0</span>
+  </button>
+  <div id="notif-panel" class="card shadow" style="display:none; position:absolute; right:0; top:48px; width:360px; max-height:420px; overflow:auto">
+    <div class="card-header d-flex justify-content-between align-items-center py-2">
+      <span><i class="bi bi-bell me-1"></i>Notificações</span>
+      <button class="btn btn-sm btn-link text-decoration-none p-0" onclick="marcarNotificacoesLidas()">Marcar como lidas</button>
+    </div>
+    <div id="notif-lista" class="list-group list-group-flush"></div>
+  </div>
+</div>
+
 <div class="container-fluid p-0">
   <div class="row g-0">
     <!-- Sidebar -->
     <div class="col-auto sidebar d-flex flex-column" style="width:220px">
-      <div class="sidebar-brand"><i class="bi bi-bank me-2"></i>SRCOff</div>
+      <div class="sidebar-brand" title="Bariottex" style="cursor:default"><i class="bi bi-bank me-2"></i>SRCOff</div>
       <nav class="nav flex-column mt-2">        <a class="nav-link active" href="#" onclick="showPage('operacao')"><i class="bi bi-play-circle me-2"></i>Operação</a>
         <a class="nav-link" href="#" onclick="showPage('consulta')"><i class="bi bi-search me-2"></i>Consulta</a>
         <a class="nav-link" href="#" onclick="showPage('posicao')"><i class="bi bi-table me-2"></i>Posição</a>
@@ -59,36 +88,63 @@
                   <label class="form-label">Data</label>
                   <input type="date" id="op-data-movimento" class="form-control">
                 </div>
-                <p class="text-muted small">O estorno de D-1 será gerado automaticamente junto com o movimento.</p>
+                <div class="row g-2 mb-2">
+                  <div class="col-6">
+                    <label class="form-label form-label-sm">Produto <small class="text-muted">(opcional)</small></label>
+                    <select id="op-produto" class="form-select form-select-sm"></select>
+                  </div>
+                  <div class="col-6">
+                    <label class="form-label form-label-sm">Domínio <small class="text-muted">(opcional)</small></label>
+                    <select id="op-dominio" class="form-select form-select-sm"></select>
+                  </div>
+                </div>
+                <p class="text-muted small">Sem Produto/Domínio = processa todas as combinações da data. O estorno de D-1 (do escopo) é gerado junto.</p>
                 <button class="btn btn-primary w-100" onclick="gerarMovimento()"><i class="bi bi-play me-1"></i>Processar</button>
                 <div id="op-msg-movimento" class="mt-3"></div>
               </div>
             </div>
           </div>
 
-          <!-- Consulta de inconsistências -->
+          <!-- Processados x Pendentes (ao lado de Gerar Movimento Contábil) -->
           <div class="col-md-6">
             <div class="card shadow-sm">
-              <div class="card-header bg-warning bg-opacity-25 text-dark"><i class="bi bi-exclamation-triangle me-2"></i>Inconsistências do Processamento</div>
+              <div class="card-header"><i class="bi bi-list-check me-2"></i>Processados × Pendentes por Data</div>
               <div class="card-body">
-                <p class="text-muted small">Consulte as inconsistências registradas em um processamento passado, informando a data do movimento.</p>
+                <p class="text-muted small">Para uma data, mostra as combinações Produto/Domínio dos <strong>padrões de arquivo</strong> (Parametrizações) e se o contábil já foi executado.</p>
                 <div class="row g-2 align-items-end">
                   <div class="col-auto">
-                    <label class="form-label form-label-sm">Data do movimento</label>
-                    <input type="date" id="op-inc-data" class="form-control form-control-sm">
+                    <label class="form-label form-label-sm">Data</label>
+                    <input type="date" id="op-status-data" class="form-control form-control-sm">
                   </div>
                   <div class="col-auto">
-                    <button class="btn btn-outline-primary btn-sm" onclick="consultarInconsistencias()"><i class="bi bi-search me-1"></i>Consultar</button>
-                    <button class="btn btn-success btn-sm ms-1" onclick="exportarInconsistencias()"><i class="bi bi-file-earmark-excel me-1"></i>CSV</button>
+                    <button class="btn btn-outline-primary btn-sm" onclick="consultarStatus()"><i class="bi bi-search me-1"></i>Consultar</button>
                   </div>
                 </div>
+                <div id="op-status-resultado" class="mt-3"></div>
               </div>
             </div>
           </div>
         </div>
 
-        <!-- Resultado das inconsistências -->
-        <div id="op-inconsistencias" class="mt-3"></div>
+        <!-- Inconsistências do Processamento (abaixo de Gerar Movimento Contábil) -->
+        <div class="card shadow-sm mt-4">
+          <div class="card-header bg-warning bg-opacity-25 text-dark"><i class="bi bi-exclamation-triangle me-2"></i>Inconsistências do Processamento</div>
+          <div class="card-body">
+            <p class="text-muted small">Consulte as inconsistências registradas em um processamento passado, informando a data do movimento.</p>
+            <div class="row g-2 align-items-end">
+              <div class="col-auto">
+                <label class="form-label form-label-sm">Data do movimento</label>
+                <input type="date" id="op-inc-data" class="form-control form-control-sm">
+              </div>
+              <div class="col-auto">
+                <button class="btn btn-outline-primary btn-sm" onclick="consultarInconsistencias()"><i class="bi bi-search me-1"></i>Consultar</button>
+                <button class="btn btn-success btn-sm ms-1" onclick="exportarInconsistencias()"><i class="bi bi-file-earmark-excel me-1"></i>CSV</button>
+              </div>
+            </div>
+            <!-- Resultado das inconsistências -->
+            <div id="op-inconsistencias" class="mt-3"></div>
+          </div>
+        </div>
       </div>
 
       <!-- ==================== CONSULTA ==================== -->
@@ -106,6 +162,14 @@
               <div class="col-md-2">
                 <label class="form-label form-label-sm">Data fim</label>
                 <input type="date" id="c-data-fim" class="form-control form-control-sm">
+              </div>
+              <div class="col-md-2">
+                <label class="form-label form-label-sm">Produto <small id="c-produto-hint" class="text-muted">(opcional)</small></label>
+                <select id="c-produto" class="form-select form-select-sm"></select>
+              </div>
+              <div class="col-md-2">
+                <label class="form-label form-label-sm">Domínio <small id="c-dominio-hint" class="text-muted">(opcional)</small></label>
+                <select id="c-dominio" class="form-select form-select-sm"></select>
               </div>
               <div class="col-md-2">
                 <label class="form-label form-label-sm">Boleto</label>
@@ -190,12 +254,16 @@
 
         <!-- Consulta -->
         <div class="card shadow-sm mb-3">
-          <div class="card-header">Consultar por Produto e Data</div>
+          <div class="card-header"><i class="bi bi-funnel me-2"></i>Consultar por Produto e Data</div>
           <div class="card-body">
             <div class="row g-2 align-items-end">
               <div class="col-auto">
                 <label class="form-label form-label-sm">Produto <span class="text-danger">*</span></label>
                 <select id="p-consulta-produto" class="form-select form-select-sm"></select>
+              </div>
+              <div class="col-auto">
+                <label class="form-label form-label-sm">Domínio <span class="text-danger">*</span></label>
+                <select id="p-consulta-dominio" class="form-select form-select-sm"></select>
               </div>
               <div class="col-auto">
                 <label class="form-label form-label-sm">Data início</label>
@@ -205,8 +273,16 @@
                 <label class="form-label form-label-sm">Data fim <small class="text-muted">(opcional)</small></label>
                 <input type="date" id="p-data-fim" class="form-control form-control-sm">
               </div>
+              <div class="col-auto">
+                <label class="form-label form-label-sm">Por página</label>
+                <select id="p-tamanho" class="form-select form-select-sm">
+                  <option value="10">10</option>
+                  <option value="50">50</option>
+                  <option value="100" selected>100</option>
+                </select>
+              </div>
               <div class="col-auto d-flex align-items-end">
-                <button class="btn btn-primary btn-sm" onclick="consultarPosicao()"><i class="bi bi-search me-1"></i>Consultar</button>
+                <button class="btn btn-primary btn-sm" onclick="consultarPosicao(1)"><i class="bi bi-search me-1"></i>Consultar</button>
               </div>
             </div>
           </div>
@@ -215,34 +291,11 @@
         <!-- Resultado da consulta -->
         <div id="p-resultado" class="mb-3"></div>
 
-        <!-- Importação de arquivo (CSV/XLSX) -->
-        <div class="card shadow-sm">
-          <div class="card-header bg-success text-white"><i class="bi bi-upload me-2"></i>Importar Posição (CSV / XLSX)</div>
-          <div class="card-body">
-            <p class="text-muted small mb-3">Envie um arquivo <strong>.csv</strong> ou <strong>.xlsx</strong> com a posição de carteira. Informe o <strong>produto</strong> — ele é gravado em cada registro, determina quais regras serão aplicadas e define qual coluna contém a data (via <em>Campo Data</em> da regra do produto). Se a regra não definir, o sistema tenta detectar uma coluna de data automaticamente. A versão é atribuída automaticamente por (data, produto).</p>
-            <div class="row g-2 align-items-end">
-              <div class="col-md-3">
-                <label class="form-label form-label-sm">Produto</label>
-                <select id="p-imp-produto" class="form-select form-select-sm"></select>
-              </div>
-              <div class="col-md-5">
-                <label class="form-label form-label-sm">Arquivo</label>
-                <input type="file" id="p-imp-arquivo" class="form-control form-control-sm" accept=".csv,.xlsx,.xlsm">
-              </div>
-              <div class="col-md-4 d-flex align-items-end gap-2">
-                <button class="btn btn-outline-primary btn-sm" onclick="previewPosicao()"><i class="bi bi-eye me-1"></i>Pré-visualizar</button>
-                <button class="btn btn-success btn-sm" onclick="importarPosicao()"><i class="bi bi-upload me-1"></i>Importar</button>
-              </div>
-            </div>
-            <div id="p-imp-resultado" class="mt-3"></div>
-          </div>
-        </div>
-
         <!-- Importação em lote (por padrão de nome) -->
-        <div class="card shadow-sm mt-3">
-          <div class="card-header bg-success bg-opacity-75 text-white"><i class="bi bi-files me-2"></i>Importar em Lote (produto pelo nome do arquivo)</div>
+        <div class="card shadow-sm">
+          <div class="card-header bg-success text-white"><i class="bi bi-files me-2"></i>Importar Posição em Lote (Produto/Domínio pelo nome do arquivo)</div>
           <div class="card-body">
-            <p class="text-muted small mb-3">Selecione vários arquivos de uma vez. O produto de cada arquivo é identificado pelo <strong>padrão de nome</strong> cadastrado em Parametrizações (ex: <code>posicao_ndf*.csv</code> → NDF). Um arquivo que casa com mais de um padrão é importado para cada produto.</p>
+            <p class="text-muted small mb-3">Selecione um ou vários arquivos de uma vez. O <strong>Produto</strong> e o <strong>Domínio</strong> de cada arquivo são identificados pelo <strong>padrão de nome</strong> cadastrado em Parametrizações (ex: <code>posicao_ndf*.csv</code> → NDF/Posição). Um arquivo que casa com mais de um padrão é importado para cada combinação. A data vem de uma coluna do próprio arquivo.</p>
             <div class="row g-2 align-items-end">
               <div class="col-md-8">
                 <label class="form-label form-label-sm">Arquivos</label>
@@ -335,7 +388,7 @@
         <div class="card shadow-sm">
           <div class="card-header d-flex justify-content-between align-items-center gap-2">
             <div class="d-flex align-items-center gap-2 flex-grow-1">
-              <span>Regras Cadastradas</span>
+              <span><i class="bi bi-list-ul me-2"></i>Regras Cadastradas</span>
               <input type="text" id="r-filtro" class="form-control form-control-sm" style="max-width:300px"
                 placeholder="Pesquisar por descrição, produto, conta, condição..." oninput="filtrarRegras()">
             </div>
@@ -366,17 +419,16 @@
               </div>
             </div>
           </div>
+          <!-- Domínios -->
           <div class="col-md-6">
             <div class="card shadow-sm">
-              <div class="card-header d-flex justify-content-between align-items-center">
-                <span><i class="bi bi-tag me-2"></i>Naturezas da Regra</span>
-              </div>
+              <div class="card-header"><i class="bi bi-diagram-3 me-2"></i>Domínios</div>
               <div class="card-body">
                 <div class="input-group input-group-sm mb-3">
-                  <input type="text" id="param-natureza-novo" class="form-control" placeholder="Nova natureza" onkeydown="if(event.key==='Enter')adicionarOpcao('natureza')">
-                  <button class="btn btn-primary" onclick="adicionarOpcao('natureza')"><i class="bi bi-plus"></i> Adicionar</button>
+                  <input type="text" id="param-dominio-novo" class="form-control" placeholder="Novo domínio (ex: Posição)" onkeydown="if(event.key==='Enter')adicionarOpcao('dominio')">
+                  <button class="btn btn-primary" onclick="adicionarOpcao('dominio')"><i class="bi bi-plus"></i> Adicionar</button>
                 </div>
-                <ul class="list-group list-group-flush" id="param-natureza-lista"></ul>
+                <ul class="list-group list-group-flush" id="param-dominio-lista"></ul>
               </div>
             </div>
           </div>
@@ -384,13 +436,26 @@
           <!-- Padrões de arquivo -->
           <div class="col-md-6">
             <div class="card shadow-sm">
-              <div class="card-header"><i class="bi bi-file-earmark-ruled me-2"></i>Padrões de Arquivo → Produto</div>
+              <div class="card-header"><i class="bi bi-file-earmark-ruled me-2"></i>Padrões de Arquivo<span class="subtitulo">associação → produto / domínio</span></div>
               <div class="card-body">
-                <p class="text-muted small mb-3">Associe um padrão de nome de arquivo a um produto (ex: <code>posicao_ndf*.csv</code> → NDF). Usado na importação em lote e no monitoramento de pasta. Um arquivo pode casar com mais de um padrão.</p>
-                <div class="row g-2 mb-3">
-                  <div class="col-7"><input type="text" id="param-padrao-novo" class="form-control form-control-sm" placeholder="ex: posicao_ndf*.csv"></div>
-                  <div class="col-3"><select id="param-padrao-produto" class="form-select form-select-sm"></select></div>
-                  <div class="col-2"><button class="btn btn-primary btn-sm w-100" onclick="adicionarPadrao()"><i class="bi bi-plus"></i></button></div>
+                <p class="text-muted small mb-3">Associe um padrão de nome de arquivo a um Produto/Domínio (ex: <code>posicao_ndf*.csv</code> → NDF/Posição). Opcionalmente, defina os separadores do CSV (vazio = automático).</p>
+                <div class="row g-2 mb-2">
+                  <div class="col-12"><input type="text" id="param-padrao-novo" class="form-control form-control-sm" placeholder="Padrão do nome (ex: posicao_ndf*.csv)"></div>
+                  <div class="col-6"><label class="form-label form-label-sm mb-0">Produto</label><select id="param-padrao-produto" class="form-select form-select-sm"></select></div>
+                  <div class="col-6"><label class="form-label form-label-sm mb-0">Domínio</label><select id="param-padrao-dominio" class="form-select form-select-sm"></select></div>
+                  <div class="col-4"><label class="form-label form-label-sm mb-0">Delimitador</label>
+                    <select id="param-padrao-delim" class="form-select form-select-sm">
+                      <option value="">auto</option><option value=";">; (ponto e vírgula)</option><option value=",">, (vírgula)</option>
+                    </select></div>
+                  <div class="col-4"><label class="form-label form-label-sm mb-0">Decimal</label>
+                    <select id="param-padrao-decimal" class="form-select form-select-sm">
+                      <option value="">auto</option><option value=",">, (vírgula)</option><option value=".">. (ponto)</option>
+                    </select></div>
+                  <div class="col-4"><label class="form-label form-label-sm mb-0">Milhar</label>
+                    <select id="param-padrao-milhar" class="form-select form-select-sm">
+                      <option value="">nenhum</option><option value=".">. (ponto)</option><option value=",">, (vírgula)</option>
+                    </select></div>
+                  <div class="col-12"><button class="btn btn-primary btn-sm w-100" onclick="adicionarPadrao()"><i class="bi bi-plus"></i> Adicionar padrão</button></div>
                 </div>
                 <ul class="list-group list-group-flush" id="param-padrao-lista"></ul>
               </div>
@@ -459,6 +524,11 @@
           <small class="text-muted">A regra só é aplicada às posições cujo produto (informado no upload) coincide.</small>
         </div>
         <div class="mb-3">
+          <label class="form-label">Domínios <small class="text-muted">(selecione um ou mais; nenhum = todos os domínios)</small></label>
+          <select id="r-nova-dominio" class="form-select" multiple size="4"></select>
+          <small class="text-muted">A regra só é aplicada às posições cujo domínio coincide.</small>
+        </div>
+        <div class="mb-3">
           <label class="form-label">Campo Data <small class="text-muted">(coluna do arquivo que contém a data da posição)</small></label>
           <input type="text" id="r-nova-campo-data" class="form-control" list="r-campos-datalist" placeholder="ex: data_posicao_carteira">
         </div>
@@ -467,10 +537,6 @@
           <input type="text" id="r-nova-pre-condicao" class="form-control" placeholder='ex: descricao_veiculo == "NASSAU"'
             oninput="validarCondicao(this.value, 'condicao', 'r-nova-pre-validacao')">
           <div id="r-nova-pre-validacao" class="mt-1"></div>
-        </div>
-        <div class="mb-3">
-          <label class="form-label">Natureza da Regra <small class="text-muted">(informativo, opcional)</small></label>
-          <select id="r-nova-natureza" class="form-select"></select>
         </div>
         <div class="mb-3 form-check">
           <input type="checkbox" class="form-check-input" id="r-nova-posta-reverte" checked>
@@ -538,8 +604,10 @@ function showPage(name) {
   });
   currentPage = name;
   if (name === 'regras') { carregarRegras(); carregarCamposPosicao(); preencherCombosRegra(); }
-  if (name === 'posicao') { preencherSelectOpcoes('p-imp-produto', 'produto'); preencherSelectOpcoes('p-consulta-produto', 'produto', { incluirVazio: true }); }
+  if (name === 'posicao') { preencherSelectOpcoes('p-consulta-produto', 'produto', { incluirVazio: true }); preencherSelectOpcoes('p-consulta-dominio', 'dominio', { incluirVazio: true }); }
+  if (name === 'consulta') { preencherSelectOpcoes('c-produto', 'produto', { incluirVazio: true }); preencherSelectOpcoes('c-dominio', 'dominio', { incluirVazio: true }); }
   if (name === 'parametrizacoes') { renderParametrizacoes(); }
+  if (name === 'operacao') { preencherSelectOpcoes('op-produto', 'produto', { incluirVazio: true }); preencherSelectOpcoes('op-dominio', 'dominio', { incluirVazio: true }); }
 }
 
 // ── PARAMETRIZAÇÕES / OPÇÕES ───────────────────────────────
@@ -562,8 +630,9 @@ async function preencherSelectOpcoes(selectId, categoria, opts = {}) {
 
 async function renderParametrizacoes() {
   renderOpcaoLista('produto', 'param-produto-lista');
-  renderOpcaoLista('natureza', 'param-natureza-lista');
+  renderOpcaoLista('dominio', 'param-dominio-lista');
   preencherSelectOpcoes('param-padrao-produto', 'produto');
+  preencherSelectOpcoes('param-padrao-dominio', 'dominio');
   renderPadroes();
   carregarPastas();
 }
@@ -574,8 +643,15 @@ async function renderPadroes() {
   const ul = document.getElementById('param-padrao-lista');
   const lista = Array.isArray(r) ? r : [];
   if (!lista.length) { ul.innerHTML = '<li class="list-group-item text-muted">Nenhum padrão cadastrado.</li>'; return; }
+  const sep = p => {
+    const d = p.delimitador ? `delim '${p.delimitador}'` : 'delim auto';
+    const dec = p.separador_decimal ? `dec '${p.separador_decimal}'` : 'dec auto';
+    const mil = p.separador_milhar ? `milhar '${p.separador_milhar}'` : 'sem milhar';
+    return `${d} · ${dec} · ${mil}`;
+  };
   ul.innerHTML = lista.map(p => `<li class="list-group-item d-flex justify-content-between align-items-center py-1">
-    <span><code>${p.padrao}</code> <i class="bi bi-arrow-right mx-1"></i> <span class="badge bg-secondary">${p.produto}</span></span>
+    <span><code>${p.padrao}</code> <i class="bi bi-arrow-right mx-1"></i> <span class="badge bg-secondary">${p.produto}</span> <span class="badge bg-info text-dark">${p.dominio || '—'}</span>
+      <small class="text-muted ms-2">${sep(p)}</small></span>
     <button class="btn btn-sm btn-outline-danger py-0 px-1" onclick="excluirPadrao(${p.id})"><i class="bi bi-trash"></i></button>
   </li>`).join('');
 }
@@ -583,10 +659,22 @@ async function renderPadroes() {
 async function adicionarPadrao() {
   const padrao = document.getElementById('param-padrao-novo').value.trim();
   const produto = document.getElementById('param-padrao-produto').value;
-  if (!padrao || !produto) { toast('Informe o padrão e o produto', 'warning'); return; }
-  const r = await api('POST', '/v1/parametrizacoes/padroes', { padrao, produto });
-  if (r?.id) { document.getElementById('param-padrao-novo').value = ''; renderPadroes(); }
-  else if (r?.erro) toast(r.erro, 'danger');
+  const dominio = document.getElementById('param-padrao-dominio').value;
+  if (!padrao || !produto || !dominio) { toast('Informe o padrão, o produto e o domínio', 'warning'); return; }
+  const payload = {
+    padrao, produto, dominio,
+    delimitador: document.getElementById('param-padrao-delim').value,
+    separador_decimal: document.getElementById('param-padrao-decimal').value,
+    separador_milhar: document.getElementById('param-padrao-milhar').value,
+  };
+  const r = await api('POST', '/v1/parametrizacoes/padroes', payload);
+  if (r?.id) {
+    document.getElementById('param-padrao-novo').value = '';
+    document.getElementById('param-padrao-delim').value = '';
+    document.getElementById('param-padrao-decimal').value = '';
+    document.getElementById('param-padrao-milhar').value = '';
+    renderPadroes();
+  } else if (r?.erro) toast(r.erro, 'danger');
 }
 
 async function excluirPadrao(id) {
@@ -627,19 +715,29 @@ async function renderOpcaoLista(categoria, ulId) {
   </li>`).join('');
 }
 
+// Atualiza os combos que consomem as opções de uma categoria (para refletir add/remove).
+function atualizarCombosDaCategoria(categoria) {
+  renderOpcaoLista(categoria, 'param-' + categoria + '-lista');
+  if (categoria === 'produto') {
+    preencherSelectOpcoes('param-padrao-produto', 'produto');
+  } else if (categoria === 'dominio') {
+    preencherSelectOpcoes('param-padrao-dominio', 'dominio');
+  }
+}
+
 async function adicionarOpcao(categoria) {
   const input = document.getElementById('param-' + categoria + '-novo');
   const valor = input.value.trim();
   if (!valor) { toast('Informe o valor', 'warning'); return; }
   const r = await api('POST', '/v1/parametrizacoes/opcoes', { categoria, valor });
-  if (r?.mensagem) { input.value = ''; renderOpcaoLista(categoria, 'param-' + categoria + '-lista'); }
+  if (r?.mensagem) { input.value = ''; atualizarCombosDaCategoria(categoria); }
   else if (r?.erro) toast(r.erro, 'danger');
 }
 
 async function removerOpcao(categoria, valor) {
   if (!confirm('Remover a opção "' + valor + '"?')) return;
   const r = await api('DELETE', '/v1/parametrizacoes/opcoes?categoria=' + encodeURIComponent(categoria) + '&valor=' + encodeURIComponent(valor));
-  if (r?.mensagem) { renderOpcaoLista(categoria, 'param-' + categoria + '-lista'); }
+  if (r?.mensagem) { atualizarCombosDaCategoria(categoria); }
   else if (r?.erro) toast(r.erro, 'danger');
 }
 
@@ -700,7 +798,9 @@ async function gerarMovimento() {
       </div>
     </div>`);
 
-  const r = await api('POST', '/v1/movimento-contabil', { data });
+  const produto = document.getElementById('op-produto')?.value || '';
+  const dominio = document.getElementById('op-dominio')?.value || '';
+  const r = await api('POST', '/v1/movimento-contabil', { data, produto, dominio });
 
   // Remover toast de progresso
   document.getElementById(toastId)?.remove();
@@ -709,9 +809,12 @@ async function gerarMovimento() {
   if (r?.mensagem) {
     el.innerHTML = `<div class="alert alert-success"><i class="bi bi-check-circle me-2"></i>${r.mensagem}</div>`;
     toast(r.mensagem);
-    // Após processar, listar as inconsistências detectadas para a data.
+    // Após processar, listar as inconsistências e o status da data.
     document.getElementById('op-inc-data').value = data;
     consultarInconsistencias();
+    document.getElementById('op-status-data').value = data;
+    consultarStatus();
+    atualizarNotificacoes();
   } else if (r?.erro) {
     el.innerHTML = `<div class="alert alert-danger"><i class="bi bi-x-circle me-2"></i>${r.erro}</div>`;
     toast(r.erro, 'danger');
@@ -763,6 +866,30 @@ function exportarInconsistencias() {
   window.open('/api/v1/inconsistencias/export?data=' + data, '_blank');
 }
 
+// ── PROCESSADOS × PENDENTES ────────────────────────────────
+async function consultarStatus() {
+  const data = document.getElementById('op-status-data').value;
+  if (!data) { toast('Informe a data', 'warning'); return; }
+  const r = await api('GET', '/v1/movimento-contabil/status?data=' + data);
+  const el = document.getElementById('op-status-resultado');
+  if (!r || r.erro) { el.innerHTML = `<div class="alert alert-danger">${r?.erro || 'Erro'}</div>`; return; }
+  const lista = Array.isArray(r) ? r : [];
+  if (lista.length === 0) {
+    el.innerHTML = `<div class="alert alert-info">Nenhuma combinação com regra ativa.</div>`;
+    return;
+  }
+  const rows = lista.map(s => `<tr>
+    <td><span class="badge bg-secondary">${s.produto || 'Todos'}</span></td>
+    <td><span class="badge bg-info text-dark">${s.dominio || 'Todos'}</span></td>
+    <td>${s.processado
+      ? `<span class="badge bg-success"><i class="bi bi-check-circle me-1"></i>Processado</span> <small class="text-muted">${s.qtd_lancamentos} lanç. / ${s.qtd_estornos} est.</small>`
+      : '<span class="badge bg-warning text-dark"><i class="bi bi-hourglass-split me-1"></i>Pendente</span>'}</td>
+  </tr>`).join('');
+  el.innerHTML = `<div class="table-responsive"><table class="table table-sm table-hover mb-0">
+    <thead class="table-dark"><tr><th>Produto</th><th>Domínio</th><th>Status</th></tr></thead>
+    <tbody>${rows}</tbody></table></div>`;
+}
+
 async function gerarEstorno() {
   const data = document.getElementById('op-data-estorno').value;
   if (!data) { toast('Informe a data', 'warning'); return; }
@@ -775,13 +902,24 @@ async function gerarEstorno() {
 // ── CONSULTA ───────────────────────────────────────────────
 function toggleVersaoEspecifica() {
   const v = document.getElementById('c-versao-modo').value;
-  document.getElementById('c-versao-num-col').style.display = v === 'especifica' ? '' : 'none';
+  const especifica = v === 'especifica';
+  document.getElementById('c-versao-num-col').style.display = especifica ? '' : 'none';
+  // Na versão específica, Produto e Domínio passam a ser obrigatórios.
+  for (const campo of ['produto', 'dominio']) {
+    const hint = document.getElementById('c-' + campo + '-hint');
+    if (hint) {
+      hint.textContent = especifica ? '(obrigatório)' : '(opcional)';
+      hint.className = especifica ? 'text-danger' : 'text-muted';
+    }
+  }
 }
 
 function buildConsultaParams(pagina) {
   const di = document.getElementById('c-data-inicio').value;
   const df = document.getElementById('c-data-fim').value;
   const boleto = document.getElementById('c-boleto').value;
+  const produto = document.getElementById('c-produto').value;
+  const dominio = document.getElementById('c-dominio').value;
   const modo = document.getElementById('c-versao-modo').value;
   const versao = document.getElementById('c-versao-num').value;
   const tamanho = document.getElementById('c-tamanho').value;
@@ -789,11 +927,22 @@ function buildConsultaParams(pagina) {
   if (di) p += `&data_inicio=${di}`;
   if (df) p += `&data_fim=${df}`;
   if (boleto) p += `&boleto=${encodeURIComponent(boleto)}`;
+  if (produto) p += `&produto=${encodeURIComponent(produto)}`;
+  if (dominio) p += `&dominio=${encodeURIComponent(dominio)}`;
   if (modo === 'especifica' && versao) p += `&versao=${versao}`;
   return p;
 }
 
 async function consultarMovimento(pagina) {
+  // Versão específica exige Produto e Domínio para identificar a combinação versionada.
+  if (document.getElementById('c-versao-modo').value === 'especifica') {
+    const produto = document.getElementById('c-produto').value;
+    const dominio = document.getElementById('c-dominio').value;
+    if (!produto || !dominio) {
+      toast('Para consultar por versão específica, selecione o Produto e o Domínio', 'warning');
+      return;
+    }
+  }
   consultaPagina = pagina;
   const params = buildConsultaParams(pagina);
   const r = await api('GET', '/v1/movimento-contabil' + params);
@@ -806,6 +955,8 @@ async function consultarMovimento(pagina) {
 
   let rows = r.lancamentos.map(l => `<tr>
     <td>${l.data_lote_contabil?.substring(0,10) || ''}</td>
+    <td>${l.produto || '—'}</td>
+    <td>${l.dominio || '—'}</td>
     <td>${l.codigo_versao_conteudo}</td>
     <td>${l.codigo_identificador_boleto}</td>
     <td>${l.conta_debito}</td>
@@ -829,7 +980,7 @@ async function consultarMovimento(pagina) {
 
   el.innerHTML = `<div class="card shadow-sm"><div class="card-body p-0">
     <div class="table-responsive"><table class="table table-sm table-hover table-striped mb-0">
-      <thead class="table-dark"><tr><th>Data</th><th>Versão</th><th>Boleto</th><th>Débito</th><th>Crédito</th><th>Valor</th><th>Moeda</th><th>Reversão</th><th>Regra</th></tr></thead>
+      <thead class="table-dark"><tr><th>Data</th><th>Produto</th><th>Domínio</th><th>Versão</th><th>Boleto</th><th>Débito</th><th>Crédito</th><th>Valor</th><th>Moeda</th><th>Reversão</th><th>Regra</th></tr></thead>
       <tbody>${rows}</tbody>
     </table></div>
     <div class="px-3 py-2">${pag}</div>
@@ -837,6 +988,14 @@ async function consultarMovimento(pagina) {
 }
 
 function exportarCSV() {
+  if (document.getElementById('c-versao-modo').value === 'especifica') {
+    const produto = document.getElementById('c-produto').value;
+    const dominio = document.getElementById('c-dominio').value;
+    if (!produto || !dominio) {
+      toast('Para exportar por versão específica, selecione o Produto e o Domínio', 'warning');
+      return;
+    }
+  }
   const params = buildConsultaParams(1).replace('pagina=1&', '');
   window.open('/consulta/export' + params, '_blank');
 }
@@ -865,14 +1024,19 @@ async function excluirMovimento() {
 }
 
 // ── POSIÇÃO ────────────────────────────────────────────────
-async function consultarPosicao() {
+async function consultarPosicao(pagina) {
+  pagina = pagina || 1;
   const produto = document.getElementById('p-consulta-produto').value;
+  const dominio = document.getElementById('p-consulta-dominio').value;
   const dataInicio = document.getElementById('p-data-inicio').value;
   const dataFim = document.getElementById('p-data-fim').value;
   if (!produto) { toast('Selecione o produto para consultar', 'warning'); return; }
+  if (!dominio) { toast('Selecione o domínio para consultar', 'warning'); return; }
   if (!dataInicio) { toast('Informe ao menos a data início', 'warning'); return; }
 
-  let url = '/v1/posicao?produto=' + encodeURIComponent(produto) + '&data_inicio=' + dataInicio;
+  const tamanho = document.getElementById('p-tamanho').value;
+  let url = '/v1/posicao?produto=' + encodeURIComponent(produto) + '&dominio=' + encodeURIComponent(dominio)
+    + '&data_inicio=' + dataInicio + '&pagina=' + pagina + '&tamanho=' + tamanho;
   if (dataFim) url += '&data_fim=' + dataFim;
 
   const r = await api('GET', url);
@@ -880,31 +1044,18 @@ async function consultarPosicao() {
   if (!r) { el.innerHTML = ''; return; }
   if (r.erro) { el.innerHTML = `<div class="alert alert-danger">${r.erro}</div>`; return; }
 
-  // API pode retornar null quando não há registros
-  const lista = Array.isArray(r) ? r : [];
+  const lista = r.registros || [];
   if (lista.length === 0) {
     el.innerHTML = `<div class="alert alert-info"><i class="bi bi-info-circle me-2"></i>Nenhum registro de posição encontrado para ${dataInicio}.</div>`;
     return;
   }
 
   const campos = lista[0].campos || {};
+  // O grid apresenta os nomes das colunas exatamente como estão na posição
+  // (as chaves persistidas em Campos), sem renomear para rótulos amigáveis.
   const cols = Object.keys(campos);
 
-  // Mapa de nomes técnicos → nomes amigáveis (iguais ao formulário)
-  const nomeAmigavel = {
-    'id': 'ID',
-    'data_posicao_carteira': 'Data',
-    'codigo_versao_conteudo': 'Versão',
-    'codigo_identificador_boleto': 'Boleto',
-    'descricao_veiculo': 'Veículo',
-    'indicador_contraparte_afiliada': 'Afiliada',
-    'valor_mtm': 'MTM',
-    'principal_remanescente': 'Principal',
-    'moeda_principal_remanescente': 'Moeda',
-    'produto': 'Produto'
-  };
-
-  const headers = cols.map(c => `<th class="text-nowrap">${nomeAmigavel[c] || c}</th>`).join('');
+  const headers = cols.map(c => `<th class="text-nowrap">${c}</th>`).join('');
   const rows = lista.map(item => {
     const c = item.campos || {};
     const cells = cols.map(col => {
@@ -914,84 +1065,28 @@ async function consultarPosicao() {
     return `<tr>${cells}</tr>`;
   }).join('');
 
+  const totalPages = Math.ceil(r.total / parseInt(tamanho));
+  let pag = '';
+  if (totalPages > 1) {
+    pag = `<nav><ul class="pagination pagination-sm mt-2">
+      ${pagina > 1 ? `<li class="page-item"><a class="page-link" href="#" onclick="consultarPosicao(${pagina-1})">«</a></li>` : ''}
+      <li class="page-item disabled"><a class="page-link">${pagina} / ${totalPages} (${r.total} registros)</a></li>
+      ${pagina < totalPages ? `<li class="page-item"><a class="page-link" href="#" onclick="consultarPosicao(${pagina+1})">»</a></li>` : ''}
+    </ul></nav>`;
+  } else {
+    pag = `<small class="text-muted">${r.total} registro(s)</small>`;
+  }
+
   el.innerHTML = `<div class="card shadow-sm" style="max-width:100%;overflow:hidden">
-    <div class="card-header"><span>Resultado — ${lista.length} registro(s)</span></div>
+    <div class="card-header"><span>Resultado — ${r.total} registro(s)</span></div>
     <div style="overflow-x:auto;width:100%">
       <table class="table table-sm table-hover table-striped mb-0">
         <thead class="table-dark"><tr>${headers}</tr></thead>
         <tbody>${rows}</tbody>
       </table>
     </div>
+    <div class="px-3 py-2">${pag}</div>
   </div>`;
-}
-
-// Envia o arquivo de posição; preview=true só pré-visualiza sem persistir.
-async function enviarArquivoPosicao(preview) {
-  const produto = document.getElementById('p-imp-produto').value.trim();
-  const input = document.getElementById('p-imp-arquivo');
-  if (!preview && !produto) { toast('Informe o produto da posição', 'warning'); return null; }
-  if (!input.files || input.files.length === 0) { toast('Selecione um arquivo', 'warning'); return null; }
-
-  const fd = new FormData();
-  if (produto) fd.append('produto', produto);
-  fd.append('arquivo', input.files[0]);
-  if (preview) fd.append('preview', '1');
-
-  spin(true);
-  try {
-    const r = await fetch('/api/v1/posicao/upload', { method: 'POST', body: fd });
-    return await r.json();
-  } catch (e) {
-    toast('Erro de comunicação: ' + e.message, 'danger');
-    return null;
-  } finally {
-    spin(false);
-  }
-}
-
-async function previewPosicao() {
-  const r = await enviarArquivoPosicao(true);
-  const el = document.getElementById('p-imp-resultado');
-  if (!r) { return; }
-  if (r.erro) { el.innerHTML = `<div class="alert alert-danger">${r.erro}</div>`; return; }
-
-  const cols = r.colunas.filter(c => c);
-  const headers = cols.map(c => `<th class="text-nowrap">${c}</th>`).join('');
-  const rows = (r.amostra || []).map(item => {
-    const cells = cols.map(col => {
-      const v = item[col];
-      return `<td class="text-nowrap">${v !== null && v !== undefined ? v : ''}</td>`;
-    }).join('');
-    return `<tr>${cells}</tr>`;
-  }).join('');
-
-  el.innerHTML = `<div class="alert alert-info py-2 mb-2"><i class="bi bi-info-circle me-1"></i>Pré-visualização — ${r.total} registro(s), mostrando ${(r.amostra||[]).length}. Coluna de data detectada: <code>${r.coluna_data}</code>. Clique em <strong>Importar</strong> para confirmar.</div>
-    <div style="overflow-x:auto"><table class="table table-sm table-striped table-bordered mb-0">
-      <thead class="table-dark"><tr>${headers}</tr></thead><tbody>${rows}</tbody>
-    </table></div>`;
-}
-
-async function importarPosicao() {
-  const r = await enviarArquivoPosicao(false);
-  const el = document.getElementById('p-imp-resultado');
-  if (!r) { return; }
-  if (r.erro) { el.innerHTML = `<div class="alert alert-danger">${r.erro}</div>`; return; }
-  const lotes = (r.lotes || []).map(l => `${l.data} (v${l.versao}, ${l.total})`).join(', ');
-  el.innerHTML = `<div class="alert alert-success"><i class="bi bi-check-circle me-2"></i>${r.mensagem} — produto <strong>${r.produto}</strong>, ${r.total} registro(s). Lotes: ${lotes}.</div>`;
-  toast('Posição importada!');
-  // Recarrega a consulta na primeira data importada, com o produto informado.
-  const primeira = (r.lotes || [])[0];
-  const dataInicio = document.getElementById('p-data-inicio');
-  const comboProduto = document.getElementById('p-consulta-produto');
-  if (primeira && dataInicio) {
-    dataInicio.value = primeira.data;
-    if (comboProduto && r.produto) {
-      // Garante que o produto esteja nas opções antes de selecionar.
-      await preencherSelectOpcoes('p-consulta-produto', 'produto', { incluirVazio: true });
-      comboProduto.value = r.produto;
-    }
-    consultarPosicao();
-  }
 }
 
 // ── IMPORTAÇÃO EM LOTE / PASTA ─────────────────────────────
@@ -999,16 +1094,17 @@ function renderResultadosLote(el, resultados) {
   if (!resultados || !resultados.length) { el.innerHTML = '<div class="alert alert-info">Nenhum arquivo processado.</div>'; return; }
   const linhas = resultados.map(a => {
     if (a.sem_padrao) {
-      return `<tr><td>${a.arquivo}</td><td colspan="2"><span class="badge bg-secondary">Sem padrão correspondente</span></td></tr>`;
+      return `<tr><td>${a.arquivo}</td><td colspan="3"><span class="badge bg-secondary">Sem padrão correspondente</span></td></tr>`;
     }
     return (a.produtos || []).map(p => {
-      if (p.erro) return `<tr><td>${a.arquivo}</td><td>${p.produto || '—'}</td><td><span class="text-danger">${p.erro}</span></td></tr>`;
+      const pd = `<span class="badge bg-secondary">${p.produto || '—'}</span> <span class="badge bg-info text-dark">${p.dominio || '—'}</span>`;
+      if (p.erro) return `<tr><td>${a.arquivo}</td><td>${pd}</td><td><span class="text-danger">${p.erro}</span></td></tr>`;
       const lotes = (p.lotes || []).map(l => `${l.data} (v${l.versao}, ${l.total})`).join(', ');
-      return `<tr><td>${a.arquivo}</td><td><span class="badge bg-secondary">${p.produto}</span></td><td><span class="text-success"><i class="bi bi-check-circle me-1"></i>${lotes}</span></td></tr>`;
+      return `<tr><td>${a.arquivo}</td><td>${pd}</td><td><span class="text-success"><i class="bi bi-check-circle me-1"></i>${lotes}</span></td></tr>`;
     }).join('');
   }).join('');
   el.innerHTML = `<div class="table-responsive"><table class="table table-sm table-hover mb-0">
-    <thead class="table-dark"><tr><th>Arquivo</th><th>Produto</th><th>Resultado</th></tr></thead>
+    <thead class="table-dark"><tr><th>Arquivo</th><th>Produto / Domínio</th><th>Resultado</th></tr></thead>
     <tbody>${linhas}</tbody></table></div>`;
 }
 
@@ -1208,7 +1304,7 @@ async function carregarRegras() {
 // Independente da existência de regras — chamado ao abrir a página e o modal.
 function preencherCombosRegra() {
   preencherSelectOpcoes('r-nova-produto', 'produto');
-  preencherSelectOpcoes('r-nova-natureza', 'natureza', { incluirVazio: true });
+  preencherSelectOpcoes('r-nova-dominio', 'dominio');
 }
 
 function filtrarRegras() {
@@ -1217,7 +1313,7 @@ function filtrarRegras() {
   const filtradas = todasRegras.filter(reg =>
     reg.descricao?.toLowerCase().includes(termo) ||
     reg.codigo_produto_corporativo?.toLowerCase().includes(termo) ||
-    reg.natureza?.toLowerCase().includes(termo) ||
+    reg.dominio?.toLowerCase().includes(termo) ||
     reg.pre_condicao?.toLowerCase().includes(termo) ||
     (reg.condicoes || []).some(c =>
       c.condicao?.toLowerCase().includes(termo) ||
@@ -1230,14 +1326,23 @@ function filtrarRegras() {
   renderizarRegras(filtradas);
 }
 
+// Monta o rótulo "Regra" concatenando Produto - Domínio - Descrição (partes vazias são omitidas).
+function rotuloRegra(reg) {
+  return [reg.codigo_produto_corporativo, reg.dominio, reg.descricao]
+    .map(x => (x || '').trim())
+    .filter(Boolean)
+    .join(' - ');
+}
+
 function renderizarRegras(regras) {
   const el = document.getElementById('r-lista');
   if (!regras.length) { el.innerHTML = '<div class="p-3 text-muted">Nenhuma regra encontrada.</div>'; return; }
   const rows = regras.map(reg => `<tr>
     <td>${reg.id}</td>
-    <td><strong>${reg.descricao}</strong></td>
+    <td><strong>${rotuloRegra(reg)}</strong></td>
+    <td>${reg.descricao}</td>
     <td>${reg.codigo_produto_corporativo ? reg.codigo_produto_corporativo.split(',').map(p => `<span class="badge bg-secondary me-1">${p.trim()}</span>`).join('') : '<span class="text-muted">Todos</span>'}</td>
-    <td>${reg.natureza ? reg.natureza : '<span class="text-muted">—</span>'}</td>
+    <td>${reg.dominio ? reg.dominio.split(',').map(d => `<span class="badge bg-info text-dark me-1">${d.trim()}</span>`).join('') : '<span class="text-muted">Todos</span>'}</td>
     <td>${reg.pre_condicao ? `<code>${reg.pre_condicao}</code>` : '<span class="text-muted">—</span>'}</td>
     <td>${reg.posta_reverte ? '<span class="badge bg-success">Sim</span>' : '<span class="badge bg-warning text-dark">Não</span>'}</td>
     <td>
@@ -1247,7 +1352,7 @@ function renderizarRegras(regras) {
     </td>
   </tr>`).join('');
   el.innerHTML = `<div class="table-responsive"><table class="table table-sm table-hover mb-0">
-    <thead class="table-dark"><tr><th>ID</th><th>Descrição</th><th>Produtos</th><th>Natureza</th><th>Pré Condição</th><th>Posta/Reverte</th><th></th></tr></thead>
+    <thead class="table-dark"><tr><th>ID</th><th>Regra</th><th>Descrição</th><th>Produtos</th><th>Domínios</th><th>Pré Condição</th><th>Posta/Reverte</th><th></th></tr></thead>
     <tbody>${rows}</tbody>
   </table></div>`;
 }
@@ -1277,7 +1382,7 @@ async function selecionarRegra(id, nome) {
     </table></div>`;
   }
 
-  new bootstrap.Modal(document.getElementById('modalCondicoes')).show();
+  bootstrap.Modal.getOrCreateInstance(document.getElementById('modalCondicoes')).show();
 }
 
 // ── VALIDAÇÃO DE EXPRESSÃO ─────────────────────────────────
@@ -1306,8 +1411,8 @@ function validarCondicao(valor, tipo, elId) {
 }
 
 function showNovaCondicaoModal() {
-  bootstrap.Modal.getInstance(document.getElementById('modalCondicoes')).hide();
-  setTimeout(() => new bootstrap.Modal(document.getElementById('modalNovaCondicao')).show(), 300);
+  bootstrap.Modal.getOrCreateInstance(document.getElementById('modalCondicoes')).hide();
+  setTimeout(() => bootstrap.Modal.getOrCreateInstance(document.getElementById('modalNovaCondicao')).show(), 300);
 }
 
 async function excluirCondicao(id, nomeRegra) {
@@ -1328,16 +1433,17 @@ async function criarRegra() {
 
   const produtosSel = [...document.getElementById('r-nova-produto').selectedOptions].map(o => o.value);
   const codigoProduto = produtosSel.join(',');
+  const dominiosSel = [...document.getElementById('r-nova-dominio').selectedOptions].map(o => o.value);
+  const dominio = dominiosSel.join(',');
   const campoData = document.getElementById('r-nova-campo-data').value.trim();
   const preCondicao = document.getElementById('r-nova-pre-condicao').value.trim();
-  const natureza = document.getElementById('r-nova-natureza').value.trim();
 
   const r = await api('POST', '/v1/regras', {
     descricao: desc,
     codigo_produto_corporativo: codigoProduto,
+    dominio: dominio,
     campo_data: campoData,
     pre_condicao: preCondicao,
-    natureza: natureza,
     posta_reverte: postaReverte,
   });
   if (r?.id) {
@@ -1345,9 +1451,9 @@ async function criarRegra() {
     bootstrap.Modal.getInstance(document.getElementById('modalNovaRegra')).hide();
     document.getElementById('r-nova-desc').value = '';
     [...document.getElementById('r-nova-produto').options].forEach(o => o.selected = false);
+    [...document.getElementById('r-nova-dominio').options].forEach(o => o.selected = false);
     document.getElementById('r-nova-campo-data').value = '';
     document.getElementById('r-nova-pre-condicao').value = '';
-    document.getElementById('r-nova-natureza').value = '';
     document.getElementById('r-nova-pre-validacao').innerHTML = '';
     document.getElementById('r-nova-posta-reverte').checked = true;
     carregarRegras();
@@ -1376,6 +1482,52 @@ async function criarCondicao() {
 // Repopula os combos sempre que o modal de nova regra é aberto — garante que
 // opções recém-cadastradas em Parametrizações apareçam sem trocar de página.
 document.getElementById('modalNovaRegra').addEventListener('show.bs.modal', preencherCombosRegra);
+
+// ── NOTIFICAÇÕES (sino) ────────────────────────────────────
+let notifCache = { nao_lidas: 0, itens: [] };
+
+function rotuloTipoNotif(t) {
+  return { POSICAO_IMPORTADA: 'Posição importada', CONTABIL_EXECUTADO: 'Contábil executado' }[t] || t;
+}
+
+async function atualizarNotificacoes() {
+  const r = await api('GET', '/v1/notificacoes');
+  if (!r || r.erro) return;
+  notifCache = r;
+  const badge = document.getElementById('notif-badge');
+  if (r.nao_lidas > 0) { badge.textContent = r.nao_lidas > 99 ? '99+' : r.nao_lidas; badge.style.display = ''; }
+  else { badge.style.display = 'none'; }
+  renderNotificacoes();
+}
+
+function renderNotificacoes() {
+  const el = document.getElementById('notif-lista');
+  const itens = notifCache.itens || [];
+  if (!itens.length) { el.innerHTML = '<div class="list-group-item text-muted small">Nenhuma notificação.</div>'; return; }
+  el.innerHTML = itens.map(n => `<div class="list-group-item ${n.lida ? '' : 'bg-light'}">
+    <div class="d-flex justify-content-between">
+      <strong class="small">${rotuloTipoNotif(n.tipo)}</strong>
+      <small class="text-muted">${(n.criado_em || '').substring(0,16).replace('T',' ')}</small>
+    </div>
+    <div class="small">${n.mensagem}</div>
+  </div>`).join('');
+}
+
+function toggleNotificacoes() {
+  const p = document.getElementById('notif-panel');
+  const mostrar = p.style.display === 'none';
+  p.style.display = mostrar ? '' : 'none';
+  if (mostrar) { renderNotificacoes(); if (notifCache.nao_lidas > 0) marcarNotificacoesLidas(); }
+}
+
+async function marcarNotificacoesLidas() {
+  await api('POST', '/v1/notificacoes');
+  atualizarNotificacoes();
+}
+
+// Atualiza o contador periodicamente e na carga inicial.
+atualizarNotificacoes();
+setInterval(atualizarNotificacoes, 15000);
 </script>
 </body>
 </html>

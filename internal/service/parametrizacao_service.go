@@ -8,8 +8,8 @@ import (
 
 // Categorias de parametrização suportadas atualmente.
 const (
-	CategoriaProduto  = "produto"
-	CategoriaNatureza = "natureza"
+	CategoriaProduto = "produto"
+	CategoriaDominio = "dominio"
 )
 
 type parametrizacaoRepo interface {
@@ -29,7 +29,7 @@ func NewParametrizacaoService(repo parametrizacaoRepo) *ParametrizacaoService {
 
 func categoriaValida(categoria string) bool {
 	switch categoria {
-	case CategoriaProduto, CategoriaNatureza:
+	case CategoriaProduto, CategoriaDominio:
 		return true
 	}
 	return false

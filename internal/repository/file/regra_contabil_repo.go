@@ -81,10 +81,10 @@ func (r *RegraContabilRepo) EditarRegra(_ context.Context, regra model.RegraCont
 		if reg.ID == regra.ID {
 			s.Regras[i].Descricao = regra.Descricao
 			s.Regras[i].CodigoProdutoCorporativo = regra.CodigoProdutoCorporativo
+			s.Regras[i].Dominio = regra.Dominio
 			s.Regras[i].CampoProduto = regra.CampoProduto
 			s.Regras[i].CampoData = regra.CampoData
 			s.Regras[i].PreCondicao = regra.PreCondicao
-			s.Regras[i].Natureza = regra.Natureza
 			s.Regras[i].Ativo = regra.Ativo
 			return r.save(s)
 		}

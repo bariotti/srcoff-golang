@@ -31,6 +31,8 @@ func main() {
 		inconsistenciaRepo repository.InconsistenciaRepository
 		padraoArquivoRepo  repository.PadraoArquivoRepository
 		configuracaoRepo   repository.ConfiguracaoRepository
+		execucaoRepo       repository.ExecucaoRepository
+		notificacaoRepo    repository.NotificacaoRepository
 	)
 
 	var rawSQLDB *sql.DB
@@ -49,6 +51,8 @@ func main() {
 		inconsistenciaRepo = filerepo.NewInconsistenciaRepo(dir)
 		padraoArquivoRepo = filerepo.NewPadraoArquivoRepo(dir)
 		configuracaoRepo = filerepo.NewConfiguracaoRepo(dir)
+		execucaoRepo = filerepo.NewExecucaoRepo(dir)
+		notificacaoRepo = filerepo.NewNotificacaoRepo(dir)
 
 	default: // sqlserver
 		rawSQLDB = db.Connect()
@@ -61,6 +65,8 @@ func main() {
 		inconsistenciaRepo = repository.NewInconsistenciaRepo(rawSQLDB)
 		padraoArquivoRepo = repository.NewPadraoArquivoRepo(rawSQLDB)
 		configuracaoRepo = repository.NewConfiguracaoRepo(rawSQLDB)
+		execucaoRepo = repository.NewExecucaoRepo(rawSQLDB)
+		notificacaoRepo = repository.NewNotificacaoRepo(rawSQLDB)
 	}
 
 	// 2. Instanciar avaliador de expressões
@@ -68,8 +74,11 @@ func main() {
 
 	// 3. Instanciar serviços
 	movimentoSvc := service.NewMovimentoContabilService(posicaoRepo, regraRepo, movimentoRepo, eval).
-		ComInconsistenciaRepo(inconsistenciaRepo)
+		ComInconsistenciaRepo(inconsistenciaRepo).
+		ComExecucaoRepo(execucaoRepo)
 	inconsistenciaSvc := service.NewInconsistenciaService(inconsistenciaRepo)
+	execucaoSvc := service.NewExecucaoService(execucaoRepo, padraoArquivoRepo)
+	notificacaoSvc := service.NewNotificacaoService(notificacaoRepo)
 	regraSvc := service.NewRegraContabilService(regraRepo)
 	conciliacaoSvc := service.NewConciliacaoService(posicaoRepo, movimentoRepo)
 	posicaoSvc := service.NewPosicaoCarteiraService(posicaoRepo, regraRepo)
@@ -87,12 +96,15 @@ func main() {
 	padraoArquivoHandler := handler.NewPadraoArquivoHandler(padraoArquivoSvc)
 	configuracaoHandler := handler.NewConfiguracaoHandler(configuracaoSvc)
 	inconsistenciaHandler := handler.NewInconsistenciaHandler(inconsistenciaSvc)
+	execucaoHandler := handler.NewExecucaoHandler(execucaoSvc)
+	notificacaoHandler := handler.NewNotificacaoHandler(notificacaoSvc)
 	exportHandler := handler.NewExportHandler(movimentoSvc)
 	nlQueryHandler := handler.NewNLQueryHandler(rawSQLDB)
 
 	// Watcher de pasta monitorada (varredura periódica em segundo plano).
 	// O intervalo (em minutos) é parametrizável; sem parametrização, não varre.
-	pastaWatcher := handler.NewPastaWatcher(posicaoSvc, padraoArquivoSvc, configuracaoSvc)
+	// A importação automática dispara o contábil automaticamente e gera notificações.
+	pastaWatcher := handler.NewPastaWatcher(posicaoSvc, padraoArquivoSvc, configuracaoSvc, movimentoSvc, notificacaoSvc)
 	pastaWatcher.Start(context.Background())
 
 	// 5. Registrar rotas
@@ -169,6 +181,8 @@ func main() {
 	http.HandleFunc("/api/v1/configuracoes", configuracaoHandler.Configuracoes)
 	http.HandleFunc("/api/v1/inconsistencias", inconsistenciaHandler.Listar)
 	http.HandleFunc("/api/v1/inconsistencias/export", inconsistenciaHandler.Export)
+	http.HandleFunc("/api/v1/movimento-contabil/status", execucaoHandler.Status)
+	http.HandleFunc("/api/v1/notificacoes", notificacaoHandler.Notificacoes)
 
 	// 6. Ler porta
 	port := os.Getenv("API_PORT")

@@ -5,18 +5,32 @@ import (
 	"fmt"
 	"io"
 
+	"srcoff/internal/model"
 	"srcoff/internal/service"
 )
 
-// padraoArquivoResolver resolve os produtos de um arquivo pelo seu nome.
+// padraoArquivoResolver resolve os padrões (produto, domínio, config de parsing) de
+// um arquivo pelo seu nome.
 type padraoArquivoResolver interface {
-	ResolverProdutos(ctx context.Context, nomeArquivo string) ([]string, error)
+	ResolverPadroes(ctx context.Context, nomeArquivo string) ([]model.PadraoArquivo, error)
+}
+
+// configDoPadrao converte os separadores textuais do padrão em parseConfig.
+func configDoPadrao(p model.PadraoArquivo) parseConfig {
+	cfg := parseConfig{sepDecimal: p.SeparadorDecimal, sepMilhar: p.SeparadorMilhar}
+	switch p.Delimitador {
+	case ";":
+		cfg.delimitador = ';'
+	case ",":
+		cfg.delimitador = ','
+	}
+	return cfg
 }
 
 // importarConteudoParaProduto resolve a coluna de data (via campo_data da regra do
-// produto ou detecção), preenche data e produto em cada registro e importa o lote.
-// Cada produto recebe uma cópia dos registros para não compartilhar mutações.
-func importarConteudoParaProduto(ctx context.Context, svc posicaoCarteiraSvc, registros []map[string]interface{}, colunas []string, produto string) ([]service.LoteImportado, error) {
+// produto ou detecção), preenche data, produto e domínio em cada registro e importa
+// o lote. Cada combinação recebe uma cópia dos registros para não compartilhar mutações.
+func importarConteudoParaProduto(ctx context.Context, svc posicaoCarteiraSvc, registros []map[string]interface{}, colunas []string, produto, dominio string) ([]service.LoteImportado, error) {
 	colunaData := ""
 	if produto != "" {
 		if c, _ := svc.ResolverCampoData(ctx, produto); c != "" {
@@ -35,7 +49,7 @@ func importarConteudoParaProduto(ctx context.Context, svc posicaoCarteiraSvc, re
 
 	clones := make([]map[string]interface{}, len(registros))
 	for i, reg := range registros {
-		m := make(map[string]interface{}, len(reg)+2)
+		m := make(map[string]interface{}, len(reg)+3)
 		for k, v := range reg {
 			m[k] = v
 		}
@@ -45,61 +59,83 @@ func importarConteudoParaProduto(ctx context.Context, svc posicaoCarteiraSvc, re
 		}
 		m["data_posicao_carteira"] = data.Format("2006-01-02")
 		m["produto"] = produto
+		m["dominio"] = dominio
 		clones[i] = m
 	}
 	return svc.ImportarArquivo(ctx, clones)
 }
 
-// ResultadoImportacaoProduto descreve o resultado da importação de um arquivo para um produto.
+// ResultadoImportacaoProduto descreve o resultado da importação de um arquivo para uma combinação produto+domínio.
 type ResultadoImportacaoProduto struct {
-	Produto string                   `json:"produto"`
-	Lotes   []service.LoteImportado  `json:"lotes,omitempty"`
-	Erro    string                   `json:"erro,omitempty"`
+	Produto string                  `json:"produto"`
+	Dominio string                  `json:"dominio"`
+	Lotes   []service.LoteImportado `json:"lotes,omitempty"`
+	Erro    string                  `json:"erro,omitempty"`
 }
 
-// ResultadoImportacaoArquivo agrupa os resultados de um arquivo (um por produto casado).
+// ResultadoImportacaoArquivo agrupa os resultados de um arquivo (um por combinação casada).
 type ResultadoImportacaoArquivo struct {
 	Arquivo   string                       `json:"arquivo"`
 	Produtos  []ResultadoImportacaoProduto `json:"produtos"`
 	SemPadrao bool                         `json:"sem_padrao,omitempty"`
 }
 
-// importarArquivoPorPadrao faz o parse do arquivo, resolve o(s) produto(s) pelo nome
-// (via padrões) e importa para cada produto casado. Um arquivo pode casar com vários
-// padrões: nesse caso a posição é inserida para cada produto distinto.
+// importarArquivoPorPadrao faz o parse do arquivo, resolve o(s) par(es) produto+domínio
+// pelo nome (via padrões) e importa para cada um. Um arquivo pode casar com vários
+// padrões: nesse caso a posição é inserida para cada combinação distinta.
 func importarArquivoPorPadrao(ctx context.Context, svc posicaoCarteiraSvc, padraoSvc padraoArquivoResolver, reader io.Reader, filename string) ResultadoImportacaoArquivo {
 	res := ResultadoImportacaoArquivo{Arquivo: filename}
 
-	produtos, err := padraoSvc.ResolverProdutos(ctx, filename)
+	padroes, err := padraoSvc.ResolverPadroes(ctx, filename)
 	if err != nil {
 		res.Produtos = append(res.Produtos, ResultadoImportacaoProduto{Erro: "erro ao resolver padrões: " + err.Error()})
 		return res
 	}
-	if len(produtos) == 0 {
+	if len(padroes) == 0 {
 		res.SemPadrao = true
 		return res
 	}
 
-	registros, colunas, err := parsePosicaoArquivo(reader, filename)
+	// A configuração de parsing vem do primeiro padrão casado (formato do arquivo é único).
+	cfg := configDoPadrao(padroes[0])
+	registros, colunas, err := parsePosicaoArquivoCfg(reader, filename, cfg)
 	if err != nil {
-		for _, p := range produtos {
-			res.Produtos = append(res.Produtos, ResultadoImportacaoProduto{Produto: p, Erro: err.Error()})
+		for _, pd := range padroes {
+			res.Produtos = append(res.Produtos, ResultadoImportacaoProduto{Produto: pd.Produto, Dominio: pd.Dominio, Erro: err.Error()})
 		}
 		return res
 	}
 
-	for _, produto := range produtos {
-		lotes, err := importarConteudoParaProduto(ctx, svc, registros, colunas, produto)
-		if err != nil {
-			res.Produtos = append(res.Produtos, ResultadoImportacaoProduto{Produto: produto, Erro: err.Error()})
+	// Importa para cada combinação (produto, domínio) distinta dos padrões casados.
+	visto := map[string]bool{}
+	for _, pd := range padroes {
+		chave := pd.Produto + "\x00" + pd.Dominio
+		if visto[chave] {
 			continue
 		}
-		res.Produtos = append(res.Produtos, ResultadoImportacaoProduto{Produto: produto, Lotes: lotes})
+		visto[chave] = true
+		lotes, err := importarConteudoParaProduto(ctx, svc, registros, colunas, pd.Produto, pd.Dominio)
+		if err != nil {
+			res.Produtos = append(res.Produtos, ResultadoImportacaoProduto{Produto: pd.Produto, Dominio: pd.Dominio, Erro: err.Error()})
+			continue
+		}
+		res.Produtos = append(res.Produtos, ResultadoImportacaoProduto{Produto: pd.Produto, Dominio: pd.Dominio, Lotes: lotes})
 	}
 	return res
 }
 
-// sucesso indica se o arquivo foi importado com sucesso para todos os produtos casados.
+// combosImportados retorna as combinações (produto, domínio) importadas com sucesso.
+func (r ResultadoImportacaoArquivo) combosImportados() []service.ProdutoDominio {
+	var combos []service.ProdutoDominio
+	for _, p := range r.Produtos {
+		if p.Erro == "" {
+			combos = append(combos, service.ProdutoDominio{Produto: p.Produto, Dominio: p.Dominio})
+		}
+	}
+	return combos
+}
+
+// sucesso indica se o arquivo foi importado com sucesso para todas as combinações casadas.
 func (r ResultadoImportacaoArquivo) sucesso() bool {
 	if r.SemPadrao || len(r.Produtos) == 0 {
 		return false

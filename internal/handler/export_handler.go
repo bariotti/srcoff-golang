@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"srcoff/internal/model"
@@ -14,6 +15,7 @@ import (
 
 type exportMovimentoSvc interface {
 	ConsultarLancamentosFiltrado(ctx context.Context, dataInicio, dataFim time.Time, boleto string, versao int, versaoModo string, pagina, tamanho int) (*model.PaginaLancamentos, error)
+	ConsultarLancamentosFiltradoEscopo(ctx context.Context, dataInicio, dataFim time.Time, boleto, produto, dominio string, versao int, versaoModo string, pagina, tamanho int) (*model.PaginaLancamentos, error)
 }
 
 type ExportHandler struct {
@@ -32,6 +34,8 @@ func (h *ExportHandler) ExportMovimentoCSV(w http.ResponseWriter, r *http.Reques
 	dataInicioStr := q.Get("data_inicio")
 	dataFimStr := q.Get("data_fim")
 	boleto := q.Get("boleto")
+	produto := strings.TrimSpace(q.Get("produto"))
+	dominio := strings.TrimSpace(q.Get("dominio"))
 	versaoModo := q.Get("versao_modo")
 	if versaoModo == "" {
 		versaoModo = "vigente"
@@ -59,7 +63,7 @@ func (h *ExportHandler) ExportMovimentoCSV(w http.ResponseWriter, r *http.Reques
 	}
 
 	// Buscar todos os registros sem paginação
-	resultado, err := h.svc.ConsultarLancamentosFiltrado(r.Context(), dataInicio, dataFim, boleto, versao, versaoModo, 1, 999999)
+	resultado, err := h.svc.ConsultarLancamentosFiltradoEscopo(r.Context(), dataInicio, dataFim, boleto, produto, dominio, versao, versaoModo, 1, 999999)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"erro": err.Error()})
 		return

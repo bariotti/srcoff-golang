@@ -9,7 +9,7 @@ import (
 )
 
 // parametrizacaoStore persiste as opções parametrizáveis por categoria em JSON,
-// no formato {"produto": ["NDF","SWAP"], "natureza": [...]}.
+// no formato {"produto": ["NDF","SWAP"], "dominio": [...]}.
 type parametrizacaoStore struct {
 	mu   sync.Mutex
 	path string
@@ -22,8 +22,8 @@ type ParametrizacaoRepo struct {
 
 // opcoesPadrao são criadas na primeira execução para que os combos não iniciem vazios.
 var opcoesPadrao = map[string][]string{
-	"produto":  {"NDF", "SWAP", "FXO"},
-	"natureza": {"Registro de principal", "Registro de MTM"},
+	"produto": {"NDF", "SWAP", "FXO"},
+	"dominio": {"Posição", "Liquidação"},
 }
 
 func NewParametrizacaoRepo(dir string) *ParametrizacaoRepo {
@@ -34,6 +34,18 @@ func NewParametrizacaoRepo(dir string) *ParametrizacaoRepo {
 	// Semeia opções padrão se o arquivo ainda não existe.
 	if _, err := os.Stat(st.path); os.IsNotExist(err) {
 		_ = st.save(opcoesPadrao)
+	} else if m, err := st.load(); err == nil {
+		// Instalação existente: acrescenta categorias padrão que ainda não existam.
+		alterado := false
+		for cat, vals := range opcoesPadrao {
+			if _, ok := m[cat]; !ok {
+				m[cat] = vals
+				alterado = true
+			}
+		}
+		if alterado {
+			_ = st.save(m)
+		}
 	}
 	return &ParametrizacaoRepo{st: st}
 }

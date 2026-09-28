@@ -7,4 +7,9 @@ type PadraoArquivo struct {
 	ID      int64  `json:"id"`
 	Padrao  string `json:"padrao"`
 	Produto string `json:"produto"`
+	Dominio string `json:"dominio"`
+	// Parâmetros opcionais de parsing do CSV. Vazios = comportamento automático.
+	Delimitador      string `json:"delimitador"`       // ";" ou "," (vazio = auto-detecta)
+	SeparadorDecimal string `json:"separador_decimal"` // "," ou "." (vazio = auto)
+	SeparadorMilhar  string `json:"separador_milhar"`  // "." , "," ou "" (nenhum)
 }

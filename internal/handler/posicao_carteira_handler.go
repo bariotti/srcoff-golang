@@ -3,6 +3,7 @@ package handler
 import (
 	"context"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -33,10 +34,17 @@ func (h *PosicaoCarteiraHandler) Listar(w http.ResponseWriter, r *http.Request) 
 	dataFimStr := q.Get("data_fim")
 	dataStr := q.Get("data") // retrocompatibilidade
 	produto := strings.TrimSpace(q.Get("produto"))
+	dominio := strings.TrimSpace(q.Get("dominio"))
 
 	// Produto é obrigatório para consultar a posição.
 	if produto == "" {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"erro": "informe o produto para consultar a posição"})
+		return
+	}
+
+	// Domínio é obrigatório para consultar a posição.
+	if dominio == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"erro": "informe o domínio para consultar a posição"})
 		return
 	}
 
@@ -75,14 +83,38 @@ func (h *PosicaoCarteiraHandler) Listar(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	// Filtrar pelo produto informado.
+	// Filtrar pelo produto e domínio informados.
 	filtradas := make([]model.PosicaoCarteira, 0, len(posicoes))
 	for _, p := range posicoes {
-		if pv, ok := p.Campos["produto"].(string); ok && pv == produto {
+		pv, okP := p.Campos["produto"].(string)
+		dv, okD := p.Campos["dominio"].(string)
+		if okP && pv == produto && okD && dv == dominio {
 			filtradas = append(filtradas, p)
 		}
 	}
-	writeJSON(w, http.StatusOK, filtradas)
+
+	// Paginação (idêntica à consulta de movimento contábil).
+	pagina := 1
+	if v, err := strconv.Atoi(q.Get("pagina")); err == nil && v > 0 {
+		pagina = v
+	}
+	tamanho := 100
+	if v, err := strconv.Atoi(q.Get("tamanho")); err == nil && v > 0 {
+		tamanho = v
+	}
+	total := len(filtradas)
+	offset := (pagina - 1) * tamanho
+	registros := []model.PosicaoCarteira{}
+	if offset < total {
+		end := offset + tamanho
+		if end > total {
+			end = total
+		}
+		registros = filtradas[offset:end]
+	}
+	writeJSON(w, http.StatusOK, model.PaginaPosicoes{
+		Total: total, Pagina: pagina, Tamanho: tamanho, Registros: registros,
+	})
 }
 
 // Campos trata GET /api/v1/posicao/campos?data=YYYY-MM-DD
@@ -126,8 +158,13 @@ func (h *PosicaoCarteiraHandler) Upload(w http.ResponseWriter, r *http.Request) 
 
 	preview := r.FormValue("preview") == "1"
 	produto := strings.TrimSpace(r.FormValue("produto"))
+	dominio := strings.TrimSpace(r.FormValue("dominio"))
 	if !preview && produto == "" {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"erro": "informe o produto da posição"})
+		return
+	}
+	if !preview && dominio == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"erro": "informe o domínio da posição"})
 		return
 	}
 
@@ -173,7 +210,7 @@ func (h *PosicaoCarteiraHandler) Upload(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	lotes, err := importarConteudoParaProduto(r.Context(), h.svc, registros, colunas, produto)
+	lotes, err := importarConteudoParaProduto(r.Context(), h.svc, registros, colunas, produto, dominio)
 	if err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"erro": err.Error()})
 		return
@@ -185,6 +222,7 @@ func (h *PosicaoCarteiraHandler) Upload(w http.ResponseWriter, r *http.Request) 
 	writeJSON(w, http.StatusOK, map[string]interface{}{
 		"mensagem": "posição importada com sucesso",
 		"produto":  produto,
+		"dominio":  dominio,
 		"total":    total,
 		"lotes":    lotes,
 	})

@@ -12,12 +12,23 @@ import (
 	"sync"
 	"time"
 
+	"srcoff/internal/model"
 	"srcoff/internal/service"
 )
 
 // configLeitura expõe a leitura de configurações necessárias ao watcher.
 type configLeitura interface {
 	Obter(ctx context.Context, chave string) (string, error)
+}
+
+// movimentoExecutor executa o contábil para um escopo (usado no auto-contábil).
+type movimentoExecutor interface {
+	GerarMovimentoEscopo(ctx context.Context, data time.Time, produto, dominio string) error
+}
+
+// notificador cria notificações de eventos automáticos.
+type notificador interface {
+	Criar(ctx context.Context, n model.Notificacao) (int64, error)
 }
 
 // PastaWatcher monitora periodicamente uma pasta parametrizada, importando os
@@ -32,6 +43,8 @@ type PastaWatcher struct {
 	posicaoSvc posicaoCarteiraSvc
 	padraoSvc  padraoArquivoResolver
 	configSvc  configLeitura
+	movSvc     movimentoExecutor
+	notifSvc   notificador
 
 	mu              sync.Mutex
 	ultimaVarredura time.Time
@@ -49,8 +62,8 @@ type ResumoVarredura struct {
 	UltimaVarredura  string                       `json:"ultima_varredura,omitempty"`
 }
 
-func NewPastaWatcher(posicaoSvc posicaoCarteiraSvc, padraoSvc padraoArquivoResolver, configSvc configLeitura) *PastaWatcher {
-	return &PastaWatcher{posicaoSvc: posicaoSvc, padraoSvc: padraoSvc, configSvc: configSvc}
+func NewPastaWatcher(posicaoSvc posicaoCarteiraSvc, padraoSvc padraoArquivoResolver, configSvc configLeitura, movSvc movimentoExecutor, notifSvc notificador) *PastaWatcher {
+	return &PastaWatcher{posicaoSvc: posicaoSvc, padraoSvc: padraoSvc, configSvc: configSvc, movSvc: movSvc, notifSvc: notifSvc}
 }
 
 // intervaloConfigurado lê o intervalo de varredura (em minutos) da configuração.
@@ -151,11 +164,60 @@ func (pw *PastaWatcher) Scan(ctx context.Context) (ResumoVarredura, error) {
 			} else {
 				resumo.Movidos++
 			}
+			// Importação automática → notifica e executa o contábil automaticamente.
+			pw.posImportacaoAutomatica(ctx, res)
 		} else {
 			log.Printf("[watcher] falha ao importar %q (mantido na pasta): %+v", e.Name(), res.Produtos)
 		}
 	}
 	return pw.registrar(resumo), nil
+}
+
+// posImportacaoAutomatica, após uma importação automática bem-sucedida, notifica a
+// importação e executa o contábil (também automaticamente) para cada (data, produto,
+// domínio) importado, notificando cada execução.
+func (pw *PastaWatcher) posImportacaoAutomatica(ctx context.Context, res ResultadoImportacaoArquivo) {
+	for _, p := range res.Produtos {
+		if p.Erro != "" {
+			continue
+		}
+		for _, lote := range p.Lotes {
+			// Notifica a importação da posição.
+			pw.notificar(ctx, model.Notificacao{
+				Tipo: model.NotificacaoPosicaoImportada, DataLote: lote.Data, Produto: p.Produto, Dominio: p.Dominio,
+				Mensagem: fmt.Sprintf("Posição %s/%s importada automaticamente para %s (%d registro(s)).", p.Produto, p.Dominio, lote.Data, lote.Total),
+			})
+			// Executa o contábil automaticamente para o escopo importado.
+			if pw.movSvc == nil {
+				continue
+			}
+			data, err := time.Parse("2006-01-02", lote.Data)
+			if err != nil {
+				continue
+			}
+			if err := pw.movSvc.GerarMovimentoEscopo(ctx, data, p.Produto, p.Dominio); err != nil {
+				log.Printf("[watcher] auto-contábil %s/%s %s falhou: %v", p.Produto, p.Dominio, lote.Data, err)
+				pw.notificar(ctx, model.Notificacao{
+					Tipo: model.NotificacaoContabilExecutado, DataLote: lote.Data, Produto: p.Produto, Dominio: p.Dominio,
+					Mensagem: fmt.Sprintf("Contábil de %s/%s para %s NÃO executado: %v", p.Produto, p.Dominio, lote.Data, err),
+				})
+				continue
+			}
+			pw.notificar(ctx, model.Notificacao{
+				Tipo: model.NotificacaoContabilExecutado, DataLote: lote.Data, Produto: p.Produto, Dominio: p.Dominio,
+				Mensagem: fmt.Sprintf("Contábil de %s/%s executado automaticamente para %s.", p.Produto, p.Dominio, lote.Data),
+			})
+		}
+	}
+}
+
+func (pw *PastaWatcher) notificar(ctx context.Context, n model.Notificacao) {
+	if pw.notifSvc == nil {
+		return
+	}
+	if _, err := pw.notifSvc.Criar(ctx, n); err != nil {
+		log.Printf("[watcher] falha ao criar notificação: %v", err)
+	}
 }
 
 // UltimoResumo retorna o resumo da última varredura (para status na UI).

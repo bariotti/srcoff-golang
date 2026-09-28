@@ -114,10 +114,11 @@ func (s *PosicaoCarteiraService) ImportarArquivo(ctx context.Context, registros 
 		if err != nil {
 			return nil, fmt.Errorf("data inválida no arquivo: %q", d)
 		}
-		// Um upload corresponde a um produto; a versão é por (data, produto) para
-		// que produtos distintos da mesma data coexistam no snapshot vigente.
+		// Um upload corresponde a um produto+domínio; a versão é por (data, produto,
+		// domínio) para que combinações distintas da mesma data coexistam no vigente.
 		produto, _ := grupos[d][0]["produto"].(string)
-		versao, err := s.proximaVersao(ctx, data, produto)
+		dominio, _ := grupos[d][0]["dominio"].(string)
+		versao, err := s.proximaVersao(ctx, data, produto, dominio)
 		if err != nil {
 			return nil, err
 		}
@@ -154,14 +155,14 @@ func (s *PosicaoCarteiraService) CamposDisponiveis(ctx context.Context, data tim
 // proximaVersao calcula a próxima versão disponível para a combinação (data, produto),
 // preservando as versões anteriores desse mesmo produto. Produtos distintos versionam
 // de forma independente, permitindo que coexistam no snapshot vigente da data.
-func (s *PosicaoCarteiraService) proximaVersao(ctx context.Context, data time.Time, produto string) (int, error) {
+func (s *PosicaoCarteiraService) proximaVersao(ctx context.Context, data time.Time, produto, dominio string) (int, error) {
 	existentes, err := s.repo.ListarPorData(ctx, data)
 	if err != nil {
 		return 0, err
 	}
 	max := 0
 	for _, p := range existentes {
-		if produtoDaPosicao(p) != produto {
+		if produtoDaPosicao(p) != produto || dominioDaPosicao(p) != dominio {
 			continue
 		}
 		if p.CodigoVersaoConteudo > max {
@@ -173,7 +174,16 @@ func (s *PosicaoCarteiraService) proximaVersao(ctx context.Context, data time.Ti
 
 // produtoDaPosicao lê o campo `produto` de uma posição.
 func produtoDaPosicao(p model.PosicaoCarteira) string {
-	if v, ok := p.Campos["produto"]; ok {
+	return campoStrModel(p, "produto")
+}
+
+// dominioDaPosicao lê o campo `dominio` de uma posição.
+func dominioDaPosicao(p model.PosicaoCarteira) string {
+	return campoStrModel(p, "dominio")
+}
+
+func campoStrModel(p model.PosicaoCarteira, campo string) string {
+	if v, ok := p.Campos[campo]; ok {
 		if s, ok := v.(string); ok {
 			return s
 		}

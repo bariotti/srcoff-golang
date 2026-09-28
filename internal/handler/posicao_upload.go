@@ -40,6 +40,30 @@ func colunaExiste(colunas []string, coluna string) bool {
 	return false
 }
 
+// formatosData são os formatos de data reconhecidos na importação.
+var formatosData = []string{
+	"2006-01-02",
+	"02/01/2006",
+	"2006-01-02T15:04:05Z07:00",
+	"2006-01-02 15:04:05",
+	"02-01-2006",
+	"2006/01/02",
+}
+
+// parseDataString tenta interpretar uma string como data em um dos formatos conhecidos.
+func parseDataString(s string) (time.Time, bool) {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return time.Time{}, false
+	}
+	for _, f := range formatosData {
+		if t, err := time.Parse(f, s); err == nil {
+			return t, true
+		}
+	}
+	return time.Time{}, false
+}
+
 // parseDataCampo converte o valor de uma célula em data. Aceita strings em vários
 // formatos comuns e o número serial de data do Excel.
 func parseDataCampo(v interface{}) (time.Time, error) {
@@ -54,47 +78,52 @@ func parseDataCampo(v interface{}) (time.Time, error) {
 		if s == "" {
 			return time.Time{}, fmt.Errorf("data vazia")
 		}
-		formatos := []string{
-			"2006-01-02",
-			"02/01/2006",
-			"2006-01-02T15:04:05Z07:00",
-			"2006-01-02 15:04:05",
-			"02-01-2006",
-			"2006/01/02",
-		}
-		for _, f := range formatos {
-			if t, err := time.Parse(f, s); err == nil {
-				return t, nil
-			}
+		if t, ok := parseDataString(s); ok {
+			return t, nil
 		}
 		return time.Time{}, fmt.Errorf("formato de data não reconhecido: %q", s)
 	}
 	return time.Time{}, fmt.Errorf("valor de data inválido: %v", v)
 }
 
-// parsePosicaoArquivo lê um arquivo de posição (.csv ou .xlsx) e retorna os
-// registros como mapas campo→valor (com nomes de coluna normalizados) e a lista
-// ordenada de colunas encontradas no cabeçalho.
+// parseConfig carrega os parâmetros opcionais de parsing do CSV (vindos do padrão
+// de arquivo). Campos vazios/zero significam comportamento automático.
+type parseConfig struct {
+	delimitador rune   // 0 = auto-detecta
+	sepDecimal  string // "" = auto
+	sepMilhar   string // "" = nenhum
+}
+
+// parsePosicaoArquivo lê um arquivo de posição (.csv ou .xlsx) com detecção automática.
 func parsePosicaoArquivo(r io.Reader, filename string) ([]map[string]interface{}, []string, error) {
+	return parsePosicaoArquivoCfg(r, filename, parseConfig{})
+}
+
+// parsePosicaoArquivoCfg lê um arquivo de posição aplicando a configuração de parsing
+// informada (delimitador, separador decimal e de milhar).
+func parsePosicaoArquivoCfg(r io.Reader, filename string, cfg parseConfig) ([]map[string]interface{}, []string, error) {
 	lower := strings.ToLower(filename)
 	switch {
 	case strings.HasSuffix(lower, ".xlsx") || strings.HasSuffix(lower, ".xlsm"):
-		return parseXLSX(r)
+		return parseXLSX(r, cfg)
 	case strings.HasSuffix(lower, ".csv") || strings.HasSuffix(lower, ".txt"):
-		return parseCSV(r)
+		return parseCSV(r, cfg)
 	default:
 		return nil, nil, fmt.Errorf("formato não suportado: use .csv ou .xlsx")
 	}
 }
 
-func parseCSV(r io.Reader) ([]map[string]interface{}, []string, error) {
+func parseCSV(r io.Reader, cfg parseConfig) ([]map[string]interface{}, []string, error) {
 	data, err := io.ReadAll(r)
 	if err != nil {
 		return nil, nil, err
 	}
 	data = bytes.TrimPrefix(data, []byte{0xEF, 0xBB, 0xBF}) // remove BOM UTF-8
 
-	delim := detectDelimiter(data)
+	delim := cfg.delimitador
+	if delim == 0 {
+		delim = detectDelimiter(data)
+	}
 	reader := csv.NewReader(bytes.NewReader(data))
 	reader.Comma = delim
 	reader.FieldsPerRecord = -1
@@ -123,14 +152,14 @@ func parseCSV(r io.Reader) ([]map[string]interface{}, []string, error) {
 			if i < len(linha) {
 				celula = strings.TrimSpace(linha[i])
 			}
-			reg[col] = inferirValor(celula)
+			reg[col] = inferirValorCfg(celula, cfg)
 		}
 		registros = append(registros, reg)
 	}
 	return registros, colunas, nil
 }
 
-func parseXLSX(r io.Reader) ([]map[string]interface{}, []string, error) {
+func parseXLSX(r io.Reader, cfg parseConfig) ([]map[string]interface{}, []string, error) {
 	f, err := excelize.OpenReader(r)
 	if err != nil {
 		return nil, nil, fmt.Errorf("erro ao abrir XLSX: %v", err)
@@ -164,7 +193,7 @@ func parseXLSX(r io.Reader) ([]map[string]interface{}, []string, error) {
 			if i < len(linha) {
 				celula = strings.TrimSpace(linha[i])
 			}
-			reg[col] = inferirValor(celula)
+			reg[col] = inferirValorCfg(celula, cfg)
 		}
 		registros = append(registros, reg)
 	}
@@ -245,9 +274,11 @@ func removerAcentos(s string) string {
 	return b.String()
 }
 
-// inferirValor converte o texto de uma célula para bool, float64 ou string.
-// Célula vazia vira nil (tratada como 0 pelo avaliador).
-func inferirValor(s string) interface{} {
+// inferirValorCfg converte o texto de uma célula para bool, float64 ou string,
+// aplicando os separadores configurados no padrão de arquivo. Se os separadores
+// não estiverem configurados, usa a heurística automática. Se o valor não puder ser
+// convertido para número, é mantido como texto (comportamento padrão).
+func inferirValorCfg(s string, cfg parseConfig) interface{} {
 	if s == "" {
 		return nil
 	}
@@ -257,13 +288,31 @@ func inferirValor(s string) interface{} {
 	case "false", "falso", "nao", "não":
 		return false
 	}
+
 	num := s
-	// Aceita vírgula decimal quando não houver ponto (formato brasileiro).
-	if strings.Contains(num, ",") && !strings.Contains(num, ".") {
-		num = strings.ReplaceAll(num, ",", ".")
+	if cfg.sepDecimal != "" || cfg.sepMilhar != "" {
+		// Configuração explícita: remove o separador de milhar e normaliza o decimal para ".".
+		if cfg.sepMilhar != "" {
+			num = strings.ReplaceAll(num, cfg.sepMilhar, "")
+		}
+		if cfg.sepDecimal == "," {
+			num = strings.ReplaceAll(num, ",", ".")
+		}
+		// sepDecimal == "." → já está no formato esperado.
+	} else {
+		// Heurística automática: vírgula decimal quando não houver ponto (formato BR).
+		if strings.Contains(num, ",") && !strings.Contains(num, ".") {
+			num = strings.ReplaceAll(num, ",", ".")
+		}
 	}
 	if f, err := strconv.ParseFloat(num, 64); err == nil {
 		return f
+	}
+	// Datas em qualquer coluna são normalizadas para ISO (AAAA-MM-DD), para que
+	// comparações entre colunas de data (ex: data_posicao_carteira == data_efetiva)
+	// funcionem independentemente do formato de origem.
+	if t, ok := parseDataString(s); ok {
+		return t.Format("2006-01-02")
 	}
 	return s
 }

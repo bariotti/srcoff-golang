@@ -18,7 +18,7 @@ func NewRegraContabilRepo(db *sql.DB) *RegraContabilRepo {
 }
 
 func (r *RegraContabilRepo) ListarRegrasAtivas(ctx context.Context) ([]model.RegraContabil, error) {
-	rows, err := r.db.QueryContext(ctx, "SELECT id, descricao, codigo_produto_corporativo, ISNULL(campo_produto, ''), ISNULL(campo_data, ''), ISNULL(pre_condicao, ''), ISNULL(natureza, ''), ativo, ISNULL(posta_reverte, 1) FROM regra_contabil WHERE ativo = 1")
+	rows, err := r.db.QueryContext(ctx, "SELECT id, descricao, codigo_produto_corporativo, ISNULL(dominio, ''), ISNULL(campo_produto, ''), ISNULL(campo_data, ''), ISNULL(pre_condicao, ''), ativo, ISNULL(posta_reverte, 1) FROM regra_contabil WHERE ativo = 1")
 	if err != nil {
 		return nil, err
 	}
@@ -27,7 +27,7 @@ func (r *RegraContabilRepo) ListarRegrasAtivas(ctx context.Context) ([]model.Reg
 	var regras []model.RegraContabil
 	for rows.Next() {
 		var reg model.RegraContabil
-		if err := rows.Scan(&reg.ID, &reg.Descricao, &reg.CodigoProdutoCorporativo, &reg.CampoProduto, &reg.CampoData, &reg.PreCondicao, &reg.Natureza, &reg.Ativo, &reg.PostaReverte); err != nil {
+		if err := rows.Scan(&reg.ID, &reg.Descricao, &reg.CodigoProdutoCorporativo, &reg.Dominio, &reg.CampoProduto, &reg.CampoData, &reg.PreCondicao, &reg.Ativo, &reg.PostaReverte); err != nil {
 			return nil, err
 		}
 		regras = append(regras, reg)
@@ -58,7 +58,7 @@ func (r *RegraContabilRepo) CriarRegra(ctx context.Context, regra model.RegraCon
 		postaReverte = 0
 	}
 	err := r.db.QueryRowContext(ctx,
-		"INSERT INTO regra_contabil (descricao, codigo_produto_corporativo, campo_produto, campo_data, pre_condicao, natureza, ativo, posta_reverte) VALUES ('"+esc(regra.Descricao)+"', '"+esc(regra.CodigoProdutoCorporativo)+"', '"+esc(regra.CampoProduto)+"', '"+esc(regra.CampoData)+"', '"+esc(regra.PreCondicao)+"', '"+esc(regra.Natureza)+"', 1, "+fmt.Sprintf("%d", postaReverte)+"); SELECT SCOPE_IDENTITY()",
+		"INSERT INTO regra_contabil (descricao, codigo_produto_corporativo, dominio, campo_produto, campo_data, pre_condicao, ativo, posta_reverte) VALUES ('"+esc(regra.Descricao)+"', '"+esc(regra.CodigoProdutoCorporativo)+"', '"+esc(regra.Dominio)+"', '"+esc(regra.CampoProduto)+"', '"+esc(regra.CampoData)+"', '"+esc(regra.PreCondicao)+"', 1, "+fmt.Sprintf("%d", postaReverte)+"); SELECT SCOPE_IDENTITY()",
 	).Scan(&id)
 	if err != nil {
 		return 0, err
@@ -76,8 +76,8 @@ func (r *RegraContabilRepo) EditarRegra(ctx context.Context, regra model.RegraCo
 		postaReverte = 1
 	}
 	_, err := r.db.ExecContext(ctx,
-		fmt.Sprintf("UPDATE regra_contabil SET descricao = '%s', codigo_produto_corporativo = '%s', campo_produto = '%s', campo_data = '%s', pre_condicao = '%s', natureza = '%s', ativo = %d, posta_reverte = %d WHERE id = %d",
-			esc(regra.Descricao), esc(regra.CodigoProdutoCorporativo), esc(regra.CampoProduto), esc(regra.CampoData), esc(regra.PreCondicao), esc(regra.Natureza), ativo, postaReverte, regra.ID),
+		fmt.Sprintf("UPDATE regra_contabil SET descricao = '%s', codigo_produto_corporativo = '%s', dominio = '%s', campo_produto = '%s', campo_data = '%s', pre_condicao = '%s', ativo = %d, posta_reverte = %d WHERE id = %d",
+			esc(regra.Descricao), esc(regra.CodigoProdutoCorporativo), esc(regra.Dominio), esc(regra.CampoProduto), esc(regra.CampoData), esc(regra.PreCondicao), ativo, postaReverte, regra.ID),
 	)
 	return err
 }

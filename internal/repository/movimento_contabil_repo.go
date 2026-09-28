@@ -25,7 +25,7 @@ func (r *MovimentoContabilRepo) BulkInsert(ctx context.Context, lancamentos []mo
 	}
 
 	var sb strings.Builder
-	sb.WriteString("INSERT INTO movimento_contabil (data_lote_contabil, codigo_versao_conteudo, codigo_identificador_boleto, valor_lancamento_contabil, moeda_lancamento_contabil, conta_debito, conta_credito, indicador_reversao, descricao_regra_contabil, descricao_condicao_contabil, id_regra_contabil) VALUES ")
+	sb.WriteString("INSERT INTO movimento_contabil (data_lote_contabil, codigo_versao_conteudo, codigo_identificador_boleto, valor_lancamento_contabil, moeda_lancamento_contabil, conta_debito, conta_credito, produto, dominio, indicador_reversao, descricao_regra_contabil, descricao_condicao_contabil, id_regra_contabil) VALUES ")
 
 	for i, l := range lancamentos {
 		if i > 0 {
@@ -35,14 +35,16 @@ func (r *MovimentoContabilRepo) BulkInsert(ctx context.Context, lancamentos []mo
 		if l.IndicadorReversao {
 			reversao = 1
 		}
-		sb.WriteString(fmt.Sprintf("('%s', %d, '%s', %f, '%s', '%s', '%s', %d, '%s', '%s', %d)",
+		sb.WriteString(fmt.Sprintf("('%s', %d, '%s', %f, '%s', '%s', '%s', '%s', '%s', %d, '%s', '%s', %d)",
 			l.DataLoteContabil.Format("2006-01-02"),
 			l.CodigoVersaoConteudo,
-			l.CodigoIdentificadorBoleto,
+			strings.ReplaceAll(l.CodigoIdentificadorBoleto, "'", "''"),
 			l.ValorLancamentoContabil,
 			l.MoedaLancamentoContabil,
 			l.ContaDebito,
 			l.ContaCredito,
+			strings.ReplaceAll(l.Produto, "'", "''"),
+			strings.ReplaceAll(l.Dominio, "'", "''"),
 			reversao,
 			strings.ReplaceAll(l.DescricaoRegraContabil, "'", "''"),
 			strings.ReplaceAll(l.DescricaoCondicaoContabil, "'", "''"),
@@ -60,8 +62,8 @@ func (r *MovimentoContabilRepo) BuscarPorDataEIndicador(ctx context.Context, dat
 	if indicadorReversao {
 		ind = 1
 	}
-	// Sempre usa a versão vigente (MAX) para o estorno
-	query := "SELECT id, data_lote_contabil, codigo_versao_conteudo, codigo_identificador_boleto, valor_lancamento_contabil, moeda_lancamento_contabil, conta_debito, conta_credito, indicador_reversao, descricao_regra_contabil, descricao_condicao_contabil, id_regra_contabil FROM movimento_contabil WHERE data_lote_contabil = '" + dataStr + "' AND indicador_reversao = " + fmt.Sprintf("%d", ind) + " AND codigo_versao_conteudo = (SELECT MAX(codigo_versao_conteudo) FROM movimento_contabil WHERE data_lote_contabil = '" + dataStr + "')"
+	// Vigente (MAX) por (data, produto, domínio) — cada combinação versiona de forma independente.
+	query := "SELECT m.id, m.data_lote_contabil, m.codigo_versao_conteudo, m.codigo_identificador_boleto, m.valor_lancamento_contabil, m.moeda_lancamento_contabil, m.conta_debito, m.conta_credito, ISNULL(m.produto,''), ISNULL(m.dominio,''), m.indicador_reversao, m.descricao_regra_contabil, m.descricao_condicao_contabil, m.id_regra_contabil FROM movimento_contabil m WHERE m.data_lote_contabil = '" + dataStr + "' AND m.indicador_reversao = " + fmt.Sprintf("%d", ind) + " AND m.codigo_versao_conteudo = (SELECT MAX(m2.codigo_versao_conteudo) FROM movimento_contabil m2 WHERE m2.data_lote_contabil = m.data_lote_contabil AND ISNULL(m2.produto,'') = ISNULL(m.produto,'') AND ISNULL(m2.dominio,'') = ISNULL(m.dominio,''))"
 
 	rows, err := r.db.QueryContext(ctx, query)
 	if err != nil {
@@ -72,7 +74,7 @@ func (r *MovimentoContabilRepo) BuscarPorDataEIndicador(ctx context.Context, dat
 	var result []model.LancamentoContabil
 	for rows.Next() {
 		var l model.LancamentoContabil
-		if err := rows.Scan(&l.ID, &l.DataLoteContabil, &l.CodigoVersaoConteudo, &l.CodigoIdentificadorBoleto, &l.ValorLancamentoContabil, &l.MoedaLancamentoContabil, &l.ContaDebito, &l.ContaCredito, &l.IndicadorReversao, &l.DescricaoRegraContabil, &l.DescricaoCondicaoContabil, &l.IDRegraContabil); err != nil {
+		if err := rows.Scan(&l.ID, &l.DataLoteContabil, &l.CodigoVersaoConteudo, &l.CodigoIdentificadorBoleto, &l.ValorLancamentoContabil, &l.MoedaLancamentoContabil, &l.ContaDebito, &l.ContaCredito, &l.Produto, &l.Dominio, &l.IndicadorReversao, &l.DescricaoRegraContabil, &l.DescricaoCondicaoContabil, &l.IDRegraContabil); err != nil {
 			return nil, err
 		}
 		result = append(result, l)
@@ -110,7 +112,7 @@ func (r *MovimentoContabilRepo) ConsultarPaginado(ctx context.Context, data time
 
 	offset := (pagina - 1) * tamanho
 	query := fmt.Sprintf(
-		"SELECT id, data_lote_contabil, codigo_versao_conteudo, codigo_identificador_boleto, valor_lancamento_contabil, moeda_lancamento_contabil, conta_debito, conta_credito, indicador_reversao, descricao_regra_contabil, descricao_condicao_contabil, id_regra_contabil FROM movimento_contabil WHERE data_lote_contabil = '%s' ORDER BY id OFFSET %d ROWS FETCH NEXT %d ROWS ONLY",
+		"SELECT id, data_lote_contabil, codigo_versao_conteudo, codigo_identificador_boleto, valor_lancamento_contabil, moeda_lancamento_contabil, conta_debito, conta_credito, ISNULL(produto,''), ISNULL(dominio,''), indicador_reversao, descricao_regra_contabil, descricao_condicao_contabil, id_regra_contabil FROM movimento_contabil WHERE data_lote_contabil = '%s' ORDER BY id OFFSET %d ROWS FETCH NEXT %d ROWS ONLY",
 		dataStr, offset, tamanho,
 	)
 
@@ -123,7 +125,7 @@ func (r *MovimentoContabilRepo) ConsultarPaginado(ctx context.Context, data time
 	lancamentos := []model.LancamentoContabil{}
 	for rows.Next() {
 		var l model.LancamentoContabil
-		if err := rows.Scan(&l.ID, &l.DataLoteContabil, &l.CodigoVersaoConteudo, &l.CodigoIdentificadorBoleto, &l.ValorLancamentoContabil, &l.MoedaLancamentoContabil, &l.ContaDebito, &l.ContaCredito, &l.IndicadorReversao, &l.DescricaoRegraContabil, &l.DescricaoCondicaoContabil, &l.IDRegraContabil); err != nil {
+		if err := rows.Scan(&l.ID, &l.DataLoteContabil, &l.CodigoVersaoConteudo, &l.CodigoIdentificadorBoleto, &l.ValorLancamentoContabil, &l.MoedaLancamentoContabil, &l.ContaDebito, &l.ContaCredito, &l.Produto, &l.Dominio, &l.IndicadorReversao, &l.DescricaoRegraContabil, &l.DescricaoCondicaoContabil, &l.IDRegraContabil); err != nil {
 			return nil, err
 		}
 		lancamentos = append(lancamentos, l)
@@ -155,13 +157,13 @@ func (r *MovimentoContabilRepo) consultarFiltrado(ctx context.Context, dataInici
 	case "especifica":
 		where += fmt.Sprintf(" AND m.codigo_versao_conteudo = %d", versao)
 	case "vigente":
-		where += " AND m.codigo_versao_conteudo = (SELECT MAX(m2.codigo_versao_conteudo) FROM movimento_contabil m2 WHERE m2.data_lote_contabil = m.data_lote_contabil)"
+		where += " AND m.codigo_versao_conteudo = (SELECT MAX(m2.codigo_versao_conteudo) FROM movimento_contabil m2 WHERE m2.data_lote_contabil = m.data_lote_contabil AND ISNULL(m2.produto,'') = ISNULL(m.produto,'') AND ISNULL(m2.dominio,'') = ISNULL(m.dominio,''))"
 	}
 
 	filtroSaldoZero := ""
 	if excluirSaldoZero {
 		// Elimina grupos cujo saldo líquido é zero.
-		// Chave: boleto + regra + conta_debito + conta_credito (versão vigente por data)
+		// Chave: boleto + regra + conta_debito + conta_credito (versão vigente por data/produto/domínio)
 		filtroSaldoZero = `AND (
 			SELECT SUM(CASE WHEN m2.indicador_reversao = 0
 			                THEN  m2.valor_lancamento_contabil
@@ -173,7 +175,7 @@ func (r *MovimentoContabilRepo) consultarFiltrado(ctx context.Context, dataInici
 			  AND m2.id_regra_contabil           = m.id_regra_contabil
 			  AND m2.conta_debito                = m.conta_debito
 			  AND m2.conta_credito               = m.conta_credito
-			  AND m2.codigo_versao_conteudo      = (SELECT MAX(m3.codigo_versao_conteudo) FROM movimento_contabil m3 WHERE m3.data_lote_contabil = m.data_lote_contabil)
+			  AND m2.codigo_versao_conteudo      = (SELECT MAX(m3.codigo_versao_conteudo) FROM movimento_contabil m3 WHERE m3.data_lote_contabil = m.data_lote_contabil AND ISNULL(m3.produto,'') = ISNULL(m.produto,'') AND ISNULL(m3.dominio,'') = ISNULL(m.dominio,''))
 		) <> 0`
 	}
 
@@ -186,6 +188,7 @@ func (r *MovimentoContabilRepo) consultarFiltrado(ctx context.Context, dataInici
 	query := fmt.Sprintf(`
 		SELECT m.id, m.data_lote_contabil, m.codigo_versao_conteudo, m.codigo_identificador_boleto,
 		       m.valor_lancamento_contabil, m.moeda_lancamento_contabil, m.conta_debito, m.conta_credito,
+		       ISNULL(m.produto,''), ISNULL(m.dominio,''),
 		       m.indicador_reversao, m.descricao_regra_contabil, m.descricao_condicao_contabil, m.id_regra_contabil
 		FROM movimento_contabil m
 		%s %s
@@ -203,7 +206,7 @@ func (r *MovimentoContabilRepo) consultarFiltrado(ctx context.Context, dataInici
 	lancamentos := []model.LancamentoContabil{}
 	for rows.Next() {
 		var l model.LancamentoContabil
-		if err := rows.Scan(&l.ID, &l.DataLoteContabil, &l.CodigoVersaoConteudo, &l.CodigoIdentificadorBoleto, &l.ValorLancamentoContabil, &l.MoedaLancamentoContabil, &l.ContaDebito, &l.ContaCredito, &l.IndicadorReversao, &l.DescricaoRegraContabil, &l.DescricaoCondicaoContabil, &l.IDRegraContabil); err != nil {
+		if err := rows.Scan(&l.ID, &l.DataLoteContabil, &l.CodigoVersaoConteudo, &l.CodigoIdentificadorBoleto, &l.ValorLancamentoContabil, &l.MoedaLancamentoContabil, &l.ContaDebito, &l.ContaCredito, &l.Produto, &l.Dominio, &l.IndicadorReversao, &l.DescricaoRegraContabil, &l.DescricaoCondicaoContabil, &l.IDRegraContabil); err != nil {
 			return nil, err
 		}
 		lancamentos = append(lancamentos, l)

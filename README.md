@@ -208,11 +208,14 @@ Armazena os lançamentos contábeis gerados.
 Página principal para acionar o processamento diário.
 
 **Gerar Movimento Contábil:**
-- Informe uma data e clique em "Processar"
-- O sistema busca a posição de carteira (versão máxima) para a data
-- Avalia todas as regras e condições ativas
-- Persiste os lançamentos gerados em lote
-- Exibe mensagem de confirmação ou erro
+- Informe uma data e, opcionalmente, um **Produto** e/ou **Domínio** para restringir o escopo
+- O sistema busca a posição de carteira (versão máxima) para a data, filtrando pelo escopo
+- Avalia as regras ativas do escopo (regra casa por **Produto E Domínio**) e persiste os lançamentos
+- Cada lançamento guarda o **Produto** e o **Domínio**; o estorno de D-1 também é restrito ao escopo
+- Sem Produto/Domínio, processa todas as combinações da data
+
+**Processados × Pendentes:**
+- Para uma data, lista as combinações (Produto, Domínio) dos **padrões de arquivo** cadastrados em Parametrizações e o status: **Processado** (contábil já executado) ou **Pendente**
 - **Inconsistências:** se a pré-condição, condição ou campo_valor de uma regra referenciar um campo que **não existe** na posição, o lançamento **não é gerado** e uma inconsistência é registrada. Após o processamento, as inconsistências da data são listadas na tela.
 
 **Inconsistências do Processamento:**
@@ -283,6 +286,9 @@ Página **somente leitura + importação** — não há mais inserção nem excl
 - O **intervalo de varredura é parametrizável em minutos**; se estiver vazio ou 0, o monitoramento automático fica **desativado** (o botão "Escanear agora" continua funcionando)
 - Arquivos que casam com um padrão são importados e **movidos** para a **pasta de processados** (também parametrizada)
 - Arquivos **sem padrão** correspondente **permanecem intactos** na pasta monitorada
+- **Após a importação automática, o contábil é executado automaticamente** para o (Produto, Domínio, data) importado — e o usuário é **notificado** (sino no topo). A importação **manual** não dispara o contábil nem notifica.
+
+> **Domínio** é uma dimensão paralela ao Produto: parametrizável em Parametrizações, presente no cadastro da regra (lista, como o Produto), na importação da posição e no padrão de arquivo (`nome → Produto + Domínio`). O contábil e o versionamento passam a considerar a combinação (Produto, Domínio).
 
 > A importação (individual, em lote ou por varredura) apenas **persiste a posição** — não avalia as regras contábeis. As regras (condições, pré-condições) só são aplicadas ao **Gerar Movimento Contábil**. O único uso das regras na importação é ler o `campo_data` para localizar a coluna de data.
 - O produto informado é gravado no campo `produto` de cada registro e determina quais regras serão aplicadas
@@ -302,7 +308,7 @@ Menu para manter as opções disponíveis nos combos do sistema (extensível par
 
 Os campos Produto (upload e regra) e Natureza (regra) deixam de ser texto livre e passam a ser selecionados a partir dessas listas.
 
-- **Padrões de Arquivo → Produto** — mapeia um padrão de nome de arquivo (glob, ex: `posicao_ndf*.csv`) a um produto. Usado na importação em lote e no monitoramento de pasta. Um arquivo pode casar com mais de um padrão (importa para cada produto).
+- **Padrões de Arquivo → Produto/Domínio** — mapeia um padrão de nome de arquivo (glob, ex: `posicao_ndf*.csv`) a um Produto e Domínio. Usado na importação em lote e no monitoramento de pasta. Um arquivo pode casar com mais de um padrão (importa para cada combinação). Opcionalmente, define os **separadores do CSV** — **delimitador** (`;`/`,`/auto), **separador decimal** (`,`/`.`/auto) e **separador de milhar** (`.`/`,`/nenhum) — resolvendo formatos como `1.500.000,50`. Vazios = detecção automática.
 - **Pastas de Importação** — configura a **pasta monitorada** (varrida automaticamente) e a **pasta de processados** (para onde os arquivos importados são movidos).
 
 ---
@@ -371,6 +377,8 @@ Página para cadastrar e manter as regras de roteamento contábil.
 | POST   | `/api/v1/posicao/upload`                | Importa posição de CSV/XLSX (multipart: `produto` + `arquivo`; data vem de coluna do arquivo; `preview=1` só pré-visualiza) |
 | POST   | `/api/v1/posicao/upload-lote`           | Importa vários arquivos (multipart `arquivos`); produto por padrão de nome |
 | GET/POST | `/api/v1/posicao/scan-pasta`          | Status (GET) / varredura imediata (POST) da pasta monitorada |
+| GET    | `/api/v1/movimento-contabil/status`     | Processados × pendentes por data (`?data=YYYY-MM-DD`) |
+| GET/POST | `/api/v1/notificacoes`                | Lista notificações e contador (GET) / marca todas como lidas (POST) |
 | GET/POST/DELETE | `/api/v1/parametrizacoes/padroes` | CRUD dos padrões nome-de-arquivo → produto |
 | GET/PUT | `/api/v1/configuracoes`                | Lê todas / define uma configuração (`{chave, valor}`) — ex: pastas |
 | GET    | `/api/v1/posicao/campos`                | Lista os campos disponíveis na posição da data |
@@ -471,6 +479,12 @@ sqlcmd -S localhost\SQLEXPRESS -d srcoff -i migrations/005_inconsistencia.sql
 
 # Padrões de arquivo → produto e configurações (pastas)
 sqlcmd -S localhost\SQLEXPRESS -d srcoff -i migrations/006_padrao_arquivo.sql
+
+# Domínio (regra/padrão/movimento), log de execução e notificações
+sqlcmd -S localhost\SQLEXPRESS -d srcoff -i migrations/007_dominio.sql
+
+# Separadores do CSV por padrão de arquivo (delimitador/decimal/milhar)
+sqlcmd -S localhost\SQLEXPRESS -d srcoff -i migrations/008_padrao_csv_config.sql
 ```
 
 
