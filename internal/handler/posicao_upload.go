@@ -92,6 +92,7 @@ type parseConfig struct {
 	delimitador rune   // 0 = auto-detecta
 	sepDecimal  string // "" = auto
 	sepMilhar   string // "" = nenhum
+	formatoData string // layout Go das datas (ex: "02/01/2006"); "" = automático (lista multi-formato)
 }
 
 // parsePosicaoArquivo lê um arquivo de posição (.csv ou .xlsx) com detecção automática.
@@ -311,7 +312,13 @@ func inferirValorCfg(s string, cfg parseConfig) interface{} {
 	// Datas em qualquer coluna são normalizadas para ISO (AAAA-MM-DD), para que
 	// comparações entre colunas de data (ex: data_posicao_carteira == data_efetiva)
 	// funcionem independentemente do formato de origem.
-	if t, ok := parseDataString(s); ok {
+	// Com formato configurado no padrão, ele é a única forma aceita (determinístico,
+	// resolve a ambiguidade DD/MM vs MM/DD); sem formato, tenta a lista automática.
+	if cfg.formatoData != "" {
+		if t, err := time.Parse(cfg.formatoData, s); err == nil {
+			return t.Format("2006-01-02")
+		}
+	} else if t, ok := parseDataString(s); ok {
 		return t.Format("2006-01-02")
 	}
 	return s

@@ -1,0 +1,46 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="820" height="330" viewBox="0 0 820 330" font-family="Segoe UI, Arial, sans-serif">
+  <rect width="820" height="330" fill="#f8f9fa"/>
+  <rect x="0" y="0" width="150" height="330" fill="#212529"/>
+  <text x="18" y="34" fill="#ffffff" font-size="15" font-weight="700">SRCOff</text>
+  <text x="18" y="76" fill="#adb5bd" font-size="12">Operação</text>
+  <rect x="8" y="90" width="134" height="26" rx="6" fill="#0d6efd"/>
+  <text x="18" y="107" fill="#ffffff" font-size="12" font-weight="600">Consulta</text>
+  <text x="18" y="134" fill="#adb5bd" font-size="12">Posição</text>
+  <text x="18" y="162" fill="#adb5bd" font-size="12">Regras</text>
+  <text x="18" y="190" fill="#adb5bd" font-size="12">Parametrizações</text>
+
+  <text x="170" y="40" fill="#212529" font-size="18" font-weight="700">Consulta de Movimento Contábil</text>
+
+  <!-- Filtros -->
+  <rect x="170" y="58" width="630" height="66" rx="10" fill="#ffffff" stroke="#dee2e6"/>
+  <text x="184" y="80" fill="#495057" font-size="10">Data início</text>
+  <rect x="184" y="86" width="96" height="26" rx="4" fill="#fff" stroke="#ced4da"/><text x="192" y="103" fill="#212529" font-size="11">01/01/2026</text>
+  <text x="288" y="80" fill="#495057" font-size="10">Data fim</text>
+  <rect x="288" y="86" width="96" height="26" rx="4" fill="#fff" stroke="#ced4da"/><text x="296" y="103" fill="#212529" font-size="11">01/01/2026</text>
+  <text x="392" y="80" fill="#495057" font-size="10">Produto</text>
+  <rect x="392" y="86" width="96" height="26" rx="4" fill="#fff" stroke="#ced4da"/><text x="400" y="103" fill="#212529" font-size="11">FXO</text>
+  <text x="496" y="80" fill="#495057" font-size="10">Domínio</text>
+  <rect x="496" y="86" width="96" height="26" rx="4" fill="#fff" stroke="#ced4da"/><text x="504" y="103" fill="#212529" font-size="11">Posição</text>
+  <circle cx="392" cy="76" r="11" fill="#fd7e14"/><text x="392" y="80" fill="#fff" font-size="11" font-weight="700" text-anchor="middle">1</text>
+  <rect x="600" y="86" width="96" height="26" rx="6" fill="#0d6efd"/><text x="648" y="103" fill="#fff" font-size="11" font-weight="600" text-anchor="middle">Consultar</text>
+  <circle cx="608" cy="82" r="11" fill="#fd7e14"/><text x="608" y="86" fill="#fff" font-size="11" font-weight="700" text-anchor="middle">2</text>
+
+  <!-- Grid -->
+  <rect x="170" y="134" width="630" height="176" rx="10" fill="#ffffff" stroke="#dee2e6"/>
+  <rect x="170" y="134" width="630" height="26" fill="#212529"/>
+  <text x="182" y="151" fill="#fff" font-size="10">Data</text>
+  <text x="250" y="151" fill="#fff" font-size="10">Produto</text>
+  <text x="316" y="151" fill="#fff" font-size="10">Domínio</text>
+  <text x="386" y="151" fill="#fff" font-size="10">Versão</text>
+  <text x="446" y="151" fill="#fff" font-size="10">Boleto</text>
+  <text x="524" y="151" fill="#fff" font-size="10">Débito</text>
+  <text x="596" y="151" fill="#fff" font-size="10">Crédito</text>
+  <text x="676" y="151" fill="#fff" font-size="10">Valor</text>
+  <text x="740" y="151" fill="#fff" font-size="10">Moeda</text>
+
+  <text x="182" y="180" fill="#212529" font-size="10">2026-01-01</text><text x="250" y="180" fill="#212529" font-size="10">FXO</text><text x="316" y="180" fill="#212529" font-size="10">Posição</text><text x="392" y="180" fill="#212529" font-size="10">1</text><text x="446" y="180" fill="#212529" font-size="10">BOL-1</text><text x="524" y="180" fill="#212529" font-size="10">111</text><text x="596" y="180" fill="#212529" font-size="10">222</text><text x="676" y="180" fill="#212529" font-size="10">1.000,00</text><text x="740" y="180" fill="#212529" font-size="10">USD</text>
+  <rect x="170" y="188" width="630" height="20" fill="#f8f9fa"/>
+  <text x="182" y="202" fill="#212529" font-size="10">2026-01-01</text><text x="250" y="202" fill="#212529" font-size="10">FXO</text><text x="316" y="202" fill="#212529" font-size="10">Posição</text><text x="392" y="202" fill="#212529" font-size="10">1</text><text x="446" y="202" fill="#212529" font-size="10">BOL-2</text><text x="524" y="202" fill="#212529" font-size="10">111</text><text x="596" y="202" fill="#212529" font-size="10">222</text><text x="676" y="202" fill="#212529" font-size="10">2.500,00</text><text x="740" y="202" fill="#212529" font-size="10">USD</text>
+
+  <text x="182" y="240" fill="#6c757d" font-size="11">1 / 1 (2 registros)</text>
+</svg>

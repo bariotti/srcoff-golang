@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="820" height="430" viewBox="0 0 820 430" font-family="Segoe UI, Arial, sans-serif">
+  <rect width="820" height="430" fill="#f8f9fa"/>
+  <rect x="0" y="0" width="150" height="430" fill="#212529"/>
+  <text x="18" y="34" fill="#ffffff" font-size="15" font-weight="700">SRCOff</text>
+  <text x="18" y="76" fill="#adb5bd" font-size="12">Operação</text>
+  <text x="18" y="104" fill="#adb5bd" font-size="12">Consulta</text>
+  <text x="18" y="132" fill="#adb5bd" font-size="12">Posição</text>
+  <rect x="8" y="148" width="134" height="26" rx="6" fill="#0d6efd"/>
+  <text x="18" y="165" fill="#ffffff" font-size="12" font-weight="600">Regras</text>
+  <text x="18" y="192" fill="#adb5bd" font-size="12">Parametrizações</text>
+
+  <text x="170" y="40" fill="#212529" font-size="16" font-weight="700">Condições da Regra — FXO - Registro de Notional</text>
+
+  <rect x="210" y="56" width="560" height="360" rx="12" fill="#ffffff" stroke="#dee2e6"/>
+  <text x="234" y="86" fill="#212529" font-size="15" font-weight="700">Nova Condição</text>
+  <text x="234" y="102" fill="#6c757d" font-size="11">Abra "Ver Condições" na regra e clique em "Nova Condição".</text>
+  <line x1="210" y1="112" x2="770" y2="112" stroke="#eee"/>
+
+  <text x="234" y="134" fill="#495057" font-size="11">Condição (expressão avaliada sobre a posição)</text>
+  <rect x="234" y="140" width="512" height="30" rx="4" fill="#fff" stroke="#ced4da"/>
+  <text x="246" y="159" fill="#212529" font-size="12">status_liquidacao == 'Liquidado'</text>
+  <circle cx="242" cy="155" r="12" fill="#fd7e14"/><text x="242" y="159" fill="#fff" font-size="12" font-weight="700" text-anchor="middle">1</text>
+
+  <text x="234" y="192" fill="#495057" font-size="11">Conta Débito</text>
+  <rect x="234" y="198" width="250" height="30" rx="4" fill="#fff" stroke="#ced4da"/><text x="246" y="217" fill="#212529" font-size="12">111</text>
+  <text x="512" y="192" fill="#495057" font-size="11">Conta Crédito</text>
+  <rect x="512" y="198" width="234" height="30" rx="4" fill="#fff" stroke="#ced4da"/><text x="524" y="217" fill="#212529" font-size="12">222</text>
+  <circle cx="484" cy="213" r="12" fill="#fd7e14"/><text x="484" y="217" fill="#fff" font-size="12" font-weight="700" text-anchor="middle">2</text>
+
+  <text x="234" y="250" fill="#495057" font-size="11">Campo Valor</text>
+  <rect x="234" y="256" width="250" height="30" rx="4" fill="#fff" stroke="#ced4da"/><text x="246" y="275" fill="#212529" font-size="12">valor_liquidacao</text>
+  <text x="512" y="250" fill="#495057" font-size="11">Campo Moeda</text>
+  <rect x="512" y="256" width="234" height="30" rx="4" fill="#fff" stroke="#ced4da"/><text x="524" y="275" fill="#212529" font-size="12">moeda_liquidacao</text>
+  <circle cx="484" cy="271" r="12" fill="#fd7e14"/><text x="484" y="275" fill="#fff" font-size="12" font-weight="700" text-anchor="middle">3</text>
+
+  <text x="234" y="308" fill="#495057" font-size="11">Campo Boleto (identificador do lançamento)</text>
+  <rect x="234" y="314" width="512" height="30" rx="4" fill="#fff" stroke="#ced4da"/><text x="246" y="333" fill="#212529" font-size="12">codigo_identificador_boleto</text>
+
+  <line x1="210" y1="356" x2="770" y2="356" stroke="#eee"/>
+  <rect x="620" y="370" width="126" height="32" rx="6" fill="#0d6efd"/>
+  <text x="683" y="391" fill="#fff" font-size="12" font-weight="600" text-anchor="middle">Adicionar</text>
+  <circle cx="628" cy="366" r="12" fill="#fd7e14"/><text x="628" y="370" fill="#fff" font-size="12" font-weight="700" text-anchor="middle">4</text>
+</svg>

@@ -12,4 +12,8 @@ type PadraoArquivo struct {
 	Delimitador      string `json:"delimitador"`       // ";" ou "," (vazio = auto-detecta)
 	SeparadorDecimal string `json:"separador_decimal"` // "," ou "." (vazio = auto)
 	SeparadorMilhar  string `json:"separador_milhar"`  // "." , "," ou "" (nenhum)
+	// Formato de data de TODAS as colunas de data do arquivo (obrigatório no cadastro).
+	// Guarda o rótulo escolhido (ex.: "DD/MM/AAAA", "MM/DD/AAAA"). Vazio = automático
+	// (mantido apenas para padrões legados cadastrados antes deste campo).
+	FormatoData string `json:"formato_data"`
 }

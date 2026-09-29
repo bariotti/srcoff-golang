@@ -7,6 +7,7 @@ Sistema desenvolvido em Go para geração, estorno, conciliação e consulta do 
 ## Sumário
 
 - [Visão Geral](#visão-geral)
+- [Passo a Passo: Parametrizar um Roteiro Contábil](#passo-a-passo-parametrizar-um-roteiro-contábil-novo-produtodomínio)
 - [Tecnologias](#tecnologias)
 - [Estrutura do Projeto](#estrutura-do-projeto)
 - [Configuração e Execução](#configuração-e-execução)
@@ -27,6 +28,92 @@ O SRCOff processa em lote os registros de posição de carteira offshore para um
 2. Aciona geração do movimento contábil para uma data
 3. Aciona geração do estorno (reverte lançamentos de D-1)
 4. Consulta e exporta o lote contábil consolidado
+
+---
+
+## Passo a Passo: Parametrizar um Roteiro Contábil (Novo Produto/Domínio)
+
+> **Roteiro contábil** = o conjunto de **todas as regras contábeis** de um determinado Produto (por exemplo, todas as regras do produto **FXO**). Este guia mostra, do zero, como habilitar um novo Produto/Domínio e deixar o movimento contábil sendo gerado a partir dos arquivos de posição.
+
+Neste exemplo vamos criar o roteiro do produto **FXO**, domínio **Posição**.
+
+### Passo 1 — Cadastrar o Produto e o Domínio
+
+Menu **Parametrizações**. Nos cartões **Produtos** e **Domínios**, cadastre os valores novos (eles passam a aparecer em todos os combos do sistema).
+
+![Passo 1 — Parametrizações: Produtos e Domínios](docs/img/passo1-parametrizacoes.svg)
+
+1. Digite o novo produto (ex.: `FXO`) no campo.
+2. Clique em **Adicionar**. Repita no cartão **Domínios** (ex.: `Posição`).
+
+### Passo 2 — Associar o padrão do nome do arquivo
+
+Ainda em **Parametrizações**, no cartão **Padrões de Arquivo**, diga ao sistema como reconhecer o Produto/Domínio pelo **nome do arquivo** e quais são os **separadores** do CSV.
+
+![Passo 2 — Padrões de Arquivo](docs/img/passo2-padrao-arquivo.svg)
+
+1. Informe o padrão do nome com curinga `*` (ex.: `posicao_fxo*.csv`).
+2. Selecione o **Produto** (`FXO`) e o **Domínio** (`Posição`).
+3. Escolha os separadores do arquivo — **Delimitador**, **Decimal** e **Milhar** (deixe em "auto/nenhum" se não souber).
+4. Clique em **Adicionar padrão**.
+
+> A partir daqui, qualquer arquivo cujo nome case com o padrão é reconhecido como `FXO / Posição` na importação.
+
+### Passo 3 — Importar a posição
+
+Menu **Posição**, cartão **Importar Posição em Lote**. Isso carrega os dados e faz o sistema conhecer as **colunas** do arquivo (que você vai referenciar nas regras).
+
+![Passo 3 — Importar Posição em Lote](docs/img/passo3-importar-posicao.svg)
+
+1. Selecione um ou vários arquivos (ex.: `posicao_fxo_20260101.csv`).
+2. Clique em **Importar em lote**. O Produto/Domínio e a data são detectados automaticamente (pelo padrão do nome e por uma coluna de data do arquivo).
+
+### Passo 4 — Criar as regras do roteiro
+
+Menu **Regras** → **Nova Regra**. Cada regra é uma peça do roteiro contábil do Produto/Domínio.
+
+![Passo 4 — Nova Regra](docs/img/passo4-nova-regra.svg)
+
+1. Preencha a **Descrição** (ex.: `FXO - Registro de Notional`).
+2. Selecione o(s) **Produto(s)** e **Domínio(s)** a que a regra se aplica (`FXO` / `Posição`).
+3. Informe o **Campo Data** (coluna do arquivo com a data) e, opcionalmente, uma **Pré Condição** e a flag **Posta/Reverte**. Clique em **Criar**.
+
+> Repita este passo para **cada** regra do produto — juntas, elas formam o roteiro contábil.
+
+### Passo 5 — Definir as condições de cada regra
+
+Na lista de regras, clique em **Ver Condições** e depois em **Nova Condição**. A condição diz **quando** lançar e **em quais contas**.
+
+![Passo 5 — Nova Condição](docs/img/passo5-nova-condicao.svg)
+
+1. **Condição** — expressão avaliada sobre a posição (ex.: `status_liquidacao == 'Liquidado'`).
+2. **Conta Débito** e **Conta Crédito**.
+3. **Campo Valor** e **Campo Moeda** — colunas do arquivo com o valor e a moeda.
+4. **Campo Boleto** (identificador do lançamento) e clique em **Adicionar**.
+
+### Passo 6 — Gerar o movimento contábil
+
+Menu **Operação** → **Gerar Movimento Contábil**. Você pode processar toda a data ou só o escopo `FXO / Posição`.
+
+![Passo 6 — Operação: gerar movimento e status](docs/img/passo6-operacao.svg)
+
+1. Informe a **Data**.
+2. (Opcional) Selecione **Produto** e **Domínio** para processar só o escopo novo.
+3. Clique em **Processar**.
+4. Confira em **Processados × Pendentes** se a combinação `FXO / Posição` ficou como **Processado**.
+
+> A versão do movimento é **por Produto/Domínio**: a primeira execução de `FXO / Posição` começa na **versão 1**, independente das versões de outros produtos.
+
+### Passo 7 — Consultar o resultado
+
+Menu **Consulta**. Filtre por **Produto** e **Domínio** para ver os lançamentos gerados pelo roteiro.
+
+![Passo 7 — Consulta de Movimento Contábil](docs/img/passo7-consulta.svg)
+
+1. Selecione **Produto** (`FXO`) e **Domínio** (`Posição`) e o período.
+2. Clique em **Consultar**. Use **Excel/TXT** para exportar.
+
+> **Automação (opcional):** em **Parametrizações → Pastas de Importação**, configure a pasta monitorada e o intervalo de varredura. Arquivos que casam com o padrão são importados e o contábil do escopo é gerado automaticamente — sem precisar repetir os passos 3 e 6.
 
 ---
 
