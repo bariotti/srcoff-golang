@@ -47,9 +47,14 @@ func configDoPadrao(p model.PadraoArquivo) parseConfig {
 // importarConteudoParaProduto resolve a coluna de data (via campo_data da regra do
 // produto ou detecção), preenche data, produto e domínio em cada registro e importa
 // o lote. Cada combinação recebe uma cópia dos registros para não compartilhar mutações.
-func importarConteudoParaProduto(ctx context.Context, svc posicaoCarteiraSvc, registros []map[string]interface{}, colunas []string, produto, dominio string) ([]service.LoteImportado, error) {
+func importarConteudoParaProduto(ctx context.Context, svc posicaoCarteiraSvc, registros []map[string]interface{}, colunas []string, produto, dominio, colunaDataPadrao string) ([]service.LoteImportado, error) {
+	// Prioridade: coluna de data informada no padrão de arquivo; senão (legado),
+	// resolve pela regra do produto ou tenta detectar automaticamente.
 	colunaData := ""
-	if produto != "" {
+	if colunaDataPadrao != "" {
+		colunaData = normalizarNome(colunaDataPadrao)
+	}
+	if colunaData == "" && produto != "" {
 		if c, _ := svc.ResolverCampoData(ctx, produto); c != "" {
 			colunaData = normalizarNome(c)
 		}
@@ -58,10 +63,10 @@ func importarConteudoParaProduto(ctx context.Context, svc posicaoCarteiraSvc, re
 		colunaData = detectarColunaData(colunas)
 	}
 	if colunaData == "" {
-		return nil, fmt.Errorf("não foi possível determinar a coluna de data — configure o Campo Data na regra do produto %q ou inclua uma coluna de data no arquivo", produto)
+		return nil, fmt.Errorf("não foi possível determinar a coluna de data — informe a coluna de data base no padrão de arquivo do produto %q", produto)
 	}
 	if !colunaExiste(colunas, colunaData) {
-		return nil, fmt.Errorf("coluna de data %q (configurada na regra) não existe no arquivo", colunaData)
+		return nil, fmt.Errorf("coluna de data base %q (do padrão de arquivo) não existe no arquivo", colunaData)
 	}
 
 	clones := make([]map[string]interface{}, len(registros))
@@ -131,7 +136,7 @@ func importarArquivoPorPadrao(ctx context.Context, svc posicaoCarteiraSvc, padra
 			continue
 		}
 		visto[chave] = true
-		lotes, err := importarConteudoParaProduto(ctx, svc, registros, colunas, pd.Produto, pd.Dominio)
+		lotes, err := importarConteudoParaProduto(ctx, svc, registros, colunas, pd.Produto, pd.Dominio, pd.ColunaData)
 		if err != nil {
 			res.Produtos = append(res.Produtos, ResultadoImportacaoProduto{Produto: pd.Produto, Dominio: pd.Dominio, Erro: err.Error()})
 			continue

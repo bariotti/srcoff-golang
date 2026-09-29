@@ -1,6 +1,6 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="820" height="360" viewBox="0 0 820 360" font-family="Segoe UI, Arial, sans-serif">
-  <rect width="820" height="360" fill="#f8f9fa"/>
-  <rect x="0" y="0" width="150" height="360" fill="#212529"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="820" height="470" viewBox="0 0 820 470" font-family="Segoe UI, Arial, sans-serif">
+  <rect width="820" height="470" fill="#f8f9fa"/>
+  <rect x="0" y="0" width="150" height="470" fill="#212529"/>
   <text x="18" y="34" fill="#ffffff" font-size="15" font-weight="700">SRCOff</text>
   <text x="18" y="76" fill="#adb5bd" font-size="12">Operação</text>
   <text x="18" y="104" fill="#adb5bd" font-size="12">Consulta</text>
@@ -11,40 +11,40 @@
 
   <text x="170" y="40" fill="#212529" font-size="18" font-weight="700">Padrões de Arquivo</text>
 
-  <rect x="170" y="58" width="630" height="280" rx="10" fill="#ffffff" stroke="#dee2e6"/>
+  <rect x="170" y="58" width="630" height="392" rx="10" fill="#ffffff" stroke="#dee2e6"/>
   <rect x="170" y="58" width="4" height="46" fill="#0d6efd"/>
   <text x="188" y="80" fill="#212529" font-size="14" font-weight="700">Padrões de Arquivo</text>
   <text x="188" y="96" fill="#6c757d" font-size="11">associação → produto / domínio</text>
   <line x1="170" y1="104" x2="800" y2="104" stroke="#eee"/>
 
-  <!-- padrao -->
-  <text x="188" y="128" fill="#495057" font-size="11">Padrão do nome do arquivo</text>
-  <rect x="188" y="134" width="594" height="30" rx="4" fill="#fff" stroke="#ced4da"/>
-  <text x="200" y="153" fill="#495057" font-size="12">posicao_fxo*.csv</text>
-  <circle cx="770" cy="149" r="12" fill="#fd7e14"/><text x="770" y="153" fill="#fff" font-size="12" font-weight="700" text-anchor="middle">1</text>
+  <text x="188" y="126" fill="#495057" font-size="11">Padrão do nome do arquivo</text>
+  <rect x="188" y="132" width="594" height="28" rx="4" fill="#fff" stroke="#ced4da"/>
+  <text x="200" y="150" fill="#495057" font-size="12">posicao_fxo*.csv</text>
+  <circle cx="770" cy="146" r="11" fill="#fd7e14"/><text x="770" y="150" fill="#fff" font-size="11" font-weight="700" text-anchor="middle">1</text>
 
-  <!-- produto / dominio -->
-  <text x="188" y="188" fill="#495057" font-size="11">Produto</text>
-  <rect x="188" y="194" width="290" height="30" rx="4" fill="#fff" stroke="#ced4da"/>
-  <text x="200" y="213" fill="#212529" font-size="12">FXO</text>
-  <text x="492" y="188" fill="#495057" font-size="11">Domínio</text>
-  <rect x="492" y="194" width="290" height="30" rx="4" fill="#fff" stroke="#ced4da"/>
-  <text x="504" y="213" fill="#212529" font-size="12">Posição</text>
-  <circle cx="466" cy="209" r="12" fill="#fd7e14"/><text x="466" y="213" fill="#fff" font-size="12" font-weight="700" text-anchor="middle">2</text>
+  <text x="188" y="182" fill="#495057" font-size="11">Produto</text>
+  <rect x="188" y="188" width="290" height="28" rx="4" fill="#fff" stroke="#ced4da"/><text x="200" y="206" fill="#212529" font-size="12">FXO</text>
+  <text x="492" y="182" fill="#495057" font-size="11">Domínio</text>
+  <rect x="492" y="188" width="290" height="28" rx="4" fill="#fff" stroke="#ced4da"/><text x="504" y="206" fill="#212529" font-size="12">Posição</text>
+  <circle cx="466" cy="202" r="11" fill="#fd7e14"/><text x="466" y="206" fill="#fff" font-size="11" font-weight="700" text-anchor="middle">2</text>
 
-  <!-- separadores -->
-  <text x="188" y="248" fill="#495057" font-size="11">Delimitador</text>
-  <rect x="188" y="254" width="185" height="28" rx="4" fill="#fff" stroke="#ced4da"/><text x="200" y="272" fill="#212529" font-size="12">; (ponto e vírgula)</text>
-  <text x="392" y="248" fill="#495057" font-size="11">Decimal</text>
-  <rect x="392" y="254" width="185" height="28" rx="4" fill="#fff" stroke="#ced4da"/><text x="404" y="272" fill="#212529" font-size="12">, (vírgula)</text>
-  <text x="596" y="248" fill="#495057" font-size="11">Milhar</text>
-  <rect x="596" y="254" width="186" height="28" rx="4" fill="#fff" stroke="#ced4da"/><text x="608" y="272" fill="#212529" font-size="12">nenhum</text>
-  <circle cx="360" cy="242" r="12" fill="#fd7e14"/><text x="360" y="246" fill="#fff" font-size="12" font-weight="700" text-anchor="middle">3</text>
+  <text x="188" y="238" fill="#495057" font-size="11">Coluna da Data Base da Posição <tspan fill="#dc3545">*</tspan></text>
+  <rect x="188" y="244" width="594" height="28" rx="4" fill="#fff" stroke="#ced4da"/><text x="200" y="262" fill="#212529" font-size="12">data_posicao_carteira</text>
+  <circle cx="770" cy="258" r="11" fill="#fd7e14"/><text x="770" y="262" fill="#fff" font-size="11" font-weight="700" text-anchor="middle">3</text>
 
-  <rect x="188" y="296" width="150" height="30" rx="6" fill="#0d6efd"/>
-  <text x="263" y="315" fill="#fff" font-size="12" font-weight="600" text-anchor="middle">+ Adicionar padrão</text>
-  <circle cx="196" cy="311" r="12" fill="#fd7e14"/><text x="196" y="315" fill="#fff" font-size="12" font-weight="700" text-anchor="middle">4</text>
-  <text x="360" y="315" fill="#495057" font-size="12">posicao_fxo_*.csv</text>
-  <rect x="470" y="301" width="42" height="20" rx="4" fill="#6c757d"/><text x="491" y="315" fill="#fff" font-size="11" text-anchor="middle">FXO</text>
-  <rect x="518" y="301" width="60" height="20" rx="4" fill="#cff4fc"/><text x="548" y="315" fill="#055160" font-size="11" text-anchor="middle">Posição</text>
+  <text x="188" y="294" fill="#495057" font-size="11">Formato de Data <tspan fill="#dc3545">*</tspan></text>
+  <rect x="188" y="300" width="594" height="28" rx="4" fill="#fff" stroke="#ced4da"/><text x="200" y="318" fill="#212529" font-size="12">DD/MM/AAAA  (padrão Brasil)</text>
+  <circle cx="770" cy="314" r="11" fill="#fd7e14"/><text x="770" y="318" fill="#fff" font-size="11" font-weight="700" text-anchor="middle">4</text>
+
+  <text x="188" y="350" fill="#495057" font-size="11">Delimitador</text>
+  <rect x="188" y="356" width="185" height="26" rx="4" fill="#fff" stroke="#ced4da"/><text x="200" y="373" fill="#212529" font-size="11">; (ponto e vírgula)</text>
+  <text x="392" y="350" fill="#495057" font-size="11">Decimal</text>
+  <rect x="392" y="356" width="185" height="26" rx="4" fill="#fff" stroke="#ced4da"/><text x="404" y="373" fill="#212529" font-size="11">, (vírgula)</text>
+  <text x="596" y="350" fill="#495057" font-size="11">Milhar</text>
+  <rect x="596" y="356" width="186" height="26" rx="4" fill="#fff" stroke="#ced4da"/><text x="608" y="373" fill="#212529" font-size="11">nenhum</text>
+  <text x="188" y="398" fill="#adb5bd" font-size="10">(separadores opcionais — vazio = automático)</text>
+
+  <rect x="188" y="408" width="160" height="30" rx="6" fill="#0d6efd"/>
+  <text x="268" y="428" fill="#fff" font-size="12" font-weight="600" text-anchor="middle">+ Adicionar padrão</text>
+  <circle cx="196" cy="423" r="11" fill="#fd7e14"/><text x="196" y="427" fill="#fff" font-size="11" font-weight="700" text-anchor="middle">5</text>
 </svg>

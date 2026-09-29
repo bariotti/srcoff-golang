@@ -210,7 +210,7 @@ func (h *PosicaoCarteiraHandler) Upload(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	lotes, err := importarConteudoParaProduto(r.Context(), h.svc, registros, colunas, produto, dominio)
+	lotes, err := importarConteudoParaProduto(r.Context(), h.svc, registros, colunas, produto, dominio, "")
 	if err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"erro": err.Error()})
 		return

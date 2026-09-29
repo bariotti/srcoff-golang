@@ -438,11 +438,13 @@
             <div class="card shadow-sm">
               <div class="card-header"><i class="bi bi-file-earmark-ruled me-2"></i>Padrões de Arquivo<span class="subtitulo">associação → produto / domínio</span></div>
               <div class="card-body">
-                <p class="text-muted small mb-3">Associe um padrão de nome de arquivo a um Produto/Domínio (ex: <code>posicao_ndf*.csv</code> → NDF/Posição). O <strong>Formato de Data</strong> é obrigatório e vale para <strong>todas</strong> as colunas de data do arquivo. Os separadores do CSV são opcionais (vazio = automático).</p>
+                <p class="text-muted small mb-3">Associe um padrão de nome de arquivo a um Produto/Domínio (ex: <code>posicao_ndf*.csv</code> → NDF/Posição). Informe a <strong>Coluna da Data Base</strong> (a coluna do arquivo que define a data do lote) e o <strong>Formato de Data</strong> (vale para <strong>todas</strong> as colunas de data). Os separadores do CSV são opcionais (vazio = automático).</p>
                 <div class="row g-2 mb-2">
                   <div class="col-12"><input type="text" id="param-padrao-novo" class="form-control form-control-sm" placeholder="Padrão do nome (ex: posicao_ndf*.csv)"></div>
                   <div class="col-6"><label class="form-label form-label-sm mb-0">Produto</label><select id="param-padrao-produto" class="form-select form-select-sm"></select></div>
                   <div class="col-6"><label class="form-label form-label-sm mb-0">Domínio</label><select id="param-padrao-dominio" class="form-select form-select-sm"></select></div>
+                  <div class="col-12"><label class="form-label form-label-sm mb-0">Coluna da Data Base da Posição <span class="text-danger">*</span></label>
+                    <input type="text" id="param-padrao-coluna-data" class="form-control form-control-sm" placeholder="nome da coluna do arquivo (ex: data_posicao_carteira)"></div>
                   <div class="col-12"><label class="form-label form-label-sm mb-0">Formato de Data <span class="text-danger">*</span></label>
                     <select id="param-padrao-formato" class="form-select form-select-sm">
                       <option value="">Selecione…</option>
@@ -660,11 +662,12 @@ async function renderPadroes() {
   const lista = Array.isArray(r) ? r : [];
   if (!lista.length) { ul.innerHTML = '<li class="list-group-item text-muted">Nenhum padrão cadastrado.</li>'; return; }
   const sep = p => {
+    const col = p.coluna_data ? `col.data '${p.coluna_data}'` : 'col.data auto';
     const fmt = p.formato_data ? `data ${p.formato_data}` : 'data auto';
     const d = p.delimitador ? `delim '${p.delimitador}'` : 'delim auto';
     const dec = p.separador_decimal ? `dec '${p.separador_decimal}'` : 'dec auto';
     const mil = p.separador_milhar ? `milhar '${p.separador_milhar}'` : 'sem milhar';
-    return `${fmt} · ${d} · ${dec} · ${mil}`;
+    return `${col} · ${fmt} · ${d} · ${dec} · ${mil}`;
   };
   ul.innerHTML = lista.map(p => `<li class="list-group-item d-flex justify-content-between align-items-center py-1">
     <span><code>${p.padrao}</code> <i class="bi bi-arrow-right mx-1"></i> <span class="badge bg-secondary">${p.produto}</span> <span class="badge bg-info text-dark">${p.dominio || '—'}</span>
@@ -678,10 +681,13 @@ async function adicionarPadrao() {
   const produto = document.getElementById('param-padrao-produto').value;
   const dominio = document.getElementById('param-padrao-dominio').value;
   const formato = document.getElementById('param-padrao-formato').value;
+  const colunaData = document.getElementById('param-padrao-coluna-data').value.trim();
   if (!padrao || !produto || !dominio) { toast('Informe o padrão, o produto e o domínio', 'warning'); return; }
+  if (!colunaData) { toast('Informe a coluna da data base da posição', 'warning'); return; }
   if (!formato) { toast('Selecione o Formato de Data do arquivo', 'warning'); return; }
   const payload = {
     padrao, produto, dominio,
+    coluna_data: colunaData,
     formato_data: formato,
     delimitador: document.getElementById('param-padrao-delim').value,
     separador_decimal: document.getElementById('param-padrao-decimal').value,
@@ -690,6 +696,7 @@ async function adicionarPadrao() {
   const r = await api('POST', '/v1/parametrizacoes/padroes', payload);
   if (r?.id) {
     document.getElementById('param-padrao-novo').value = '';
+    document.getElementById('param-padrao-coluna-data').value = '';
     document.getElementById('param-padrao-formato').value = '';
     document.getElementById('param-padrao-delim').value = '';
     document.getElementById('param-padrao-decimal').value = '';

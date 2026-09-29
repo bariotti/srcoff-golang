@@ -7,12 +7,12 @@ Sistema desenvolvido em Go para geração, estorno, conciliação e consulta do 
 ## Sumário
 
 - [Visão Geral](#visão-geral)
+- [Funcionalidades da Solução](#funcionalidades-da-solução)
 - [Passo a Passo: Parametrizar um Roteiro Contábil](#passo-a-passo-parametrizar-um-roteiro-contábil-novo-produtodomínio)
 - [Tecnologias](#tecnologias)
 - [Estrutura do Projeto](#estrutura-do-projeto)
 - [Configuração e Execução](#configuração-e-execução)
 - [Estrutura do Banco de Dados](#estrutura-do-banco-de-dados)
-- [Páginas do Sistema](#páginas-do-sistema)
 - [API REST](#api-rest)
 - [Regras Contábeis — Expressões](#regras-contábeis--expressões)
 - [Formato do Arquivo TXT](#formato-do-arquivo-txt)
@@ -48,16 +48,17 @@ Menu **Parametrizações**. Nos cartões **Produtos** e **Domínios**, cadastre 
 
 ### Passo 2 — Associar o padrão do nome do arquivo
 
-Ainda em **Parametrizações**, no cartão **Padrões de Arquivo**, diga ao sistema como reconhecer o Produto/Domínio pelo **nome do arquivo** e quais são os **separadores** do CSV.
+Ainda em **Parametrizações**, no cartão **Padrões de Arquivo**, diga ao sistema como reconhecer o Produto/Domínio pelo **nome do arquivo**, qual é a **coluna de data base** e o **formato de data** do arquivo.
 
 ![Passo 2 — Padrões de Arquivo](docs/img/passo2-padrao-arquivo.svg)
 
 1. Informe o padrão do nome com curinga `*` (ex.: `posicao_fxo*.csv`).
 2. Selecione o **Produto** (`FXO`) e o **Domínio** (`Posição`).
-3. Escolha os separadores do arquivo — **Delimitador**, **Decimal** e **Milhar** (deixe em "auto/nenhum" se não souber).
-4. Clique em **Adicionar padrão**.
+3. **Coluna da Data Base da Posição** (obrigatório): o nome da coluna do arquivo que define a **data do lote** (ex.: `data_posicao_carteira`).
+4. **Formato de Data** (obrigatório): o formato das colunas de data do arquivo — agrupado em **Padrão Brasil** (`DD/MM/AAAA`…) e **Padrão EUA** (`MM/DD/AAAA`…). Vale para **todas** as colunas de data e resolve a ambiguidade DD/MM vs MM/DD.
+5. (Opcional) Ajuste os **separadores** do CSV — Delimitador, Decimal e Milhar (deixe em "auto/nenhum" se não souber). Clique em **Adicionar padrão**.
 
-> A partir daqui, qualquer arquivo cujo nome case com o padrão é reconhecido como `FXO / Posição` na importação.
+> A partir daqui, qualquer arquivo cujo nome case com o padrão é reconhecido como `FXO / Posição` na importação, com a data e os números interpretados conforme o formato configurado.
 
 ### Passo 3 — Importar a posição
 
@@ -66,7 +67,7 @@ Menu **Posição**, cartão **Importar Posição em Lote**. Isso carrega os dado
 ![Passo 3 — Importar Posição em Lote](docs/img/passo3-importar-posicao.svg)
 
 1. Selecione um ou vários arquivos (ex.: `posicao_fxo_20260101.csv`).
-2. Clique em **Importar em lote**. O Produto/Domínio e a data são detectados automaticamente (pelo padrão do nome e por uma coluna de data do arquivo).
+2. Clique em **Importar em lote**. O Produto/Domínio, a coluna de data base e o formato de data vêm do **padrão de arquivo** cadastrado no passo 2.
 
 ### Passo 4 — Criar as regras do roteiro
 
@@ -242,7 +243,8 @@ Define as regras de roteamento contábil.
 | `campo_produto` | VARCHAR(100) | Campo da posição comparado com o produto (default: `produto`) |
 | `campo_data` | VARCHAR(100) | Nome da coluna do arquivo que contém a data da posição (usado na importação) |
 | `pre_condicao` | VARCHAR(1000) | Expressão opcional combinada com **E** a cada condição da regra |
-| `natureza` | VARCHAR(255) | Texto informativo (combo parametrizável) sobre a natureza da regra |
+| `dominio` | VARCHAR(255) | Domínio(s) da regra, separados por vírgula (ex: `Posição,Liquidação`) — opcional |
+| `posta_reverte` | BIT | Se os lançamentos da regra são estornados no dia seguinte |
 | `ativo` | BIT | Se a regra está ativa |
 
 > A regra só é aplicada às posições cujo **produto** (informado no upload e gravado no campo `produto`) coincide com `codigo_produto_corporativo`. Ex.: ao processar uma posição de NDF, apenas as regras de NDF são aplicadas. Regra sem produto aplica-se a todas as posições.
@@ -288,11 +290,17 @@ Armazena os lançamentos contábeis gerados.
 
 ---
 
-## Páginas do Sistema
+## Funcionalidades da Solução
+
+O sistema é uma SPA com menu lateral. Abaixo, cada funcionalidade em detalhe, com a tela correspondente. Para configurar tudo do zero, veja o [Passo a Passo](#passo-a-passo-parametrizar-um-roteiro-contábil-novo-produtodomínio).
+
+Menus: **Operação**, **Consulta**, **Posição**, **Regras**, **Parametrizações** — mais o **sino de Notificações** (topo direito).
 
 ### Operação (`/operacao`)
 
-Página principal para acionar o processamento diário.
+Página principal para acionar o processamento diário do contábil. Reúne três blocos: gerar o movimento, acompanhar o que já foi processado e consultar inconsistências.
+
+![Operação — gerar movimento e status](docs/img/passo6-operacao.svg)
 
 **Gerar Movimento Contábil:**
 - Informe uma data e, opcionalmente, um **Produto** e/ou **Domínio** para restringir o escopo
@@ -300,6 +308,7 @@ Página principal para acionar o processamento diário.
 - Avalia as regras ativas do escopo (regra casa por **Produto E Domínio**) e persiste os lançamentos
 - Cada lançamento guarda o **Produto** e o **Domínio**; o estorno de D-1 também é restrito ao escopo
 - Sem Produto/Domínio, processa todas as combinações da data
+- A **versão** do movimento é por **(data, Produto, Domínio)**: a primeira execução de um Produto/Domínio começa na **versão 1**, independente das versões de outros produtos; reprocessar cria uma nova versão
 
 **Processados × Pendentes:**
 - Para uma data, lista as combinações (Produto, Domínio) dos **padrões de arquivo** cadastrados em Parametrizações e o status: **Processado** (contábil já executado) ou **Pendente**
@@ -323,16 +332,19 @@ Página principal para acionar o processamento diário.
 
 Página para consultar, exportar e excluir lançamentos.
 
+![Consulta de Movimento Contábil](docs/img/passo7-consulta.svg)
+
 **Filtros disponíveis:**
 - Data início / Data fim
+- **Produto** e **Domínio** (opcionais)
 - Número do boleto (busca parcial)
-- Versão: Vigente (maior por data), Todas, Específica
+- Versão: **Vigente** (maior por combinação), **Todas** ou **Específica**. Na opção **Específica**, o **Produto e o Domínio passam a ser obrigatórios** (a versão é por combinação)
 - Registros por página: 10, 50, 100
 
 **Grid de resultados:**
-- Exibe: Data, Versão, Boleto, Conta Débito, Conta Crédito, Valor, Moeda, Reversão, Regra
+- Exibe: Data, **Produto**, **Domínio**, Versão, Boleto, Conta Débito, Conta Crédito, Valor, Moeda, Reversão, Regra
 - Lançamentos com saldo líquido zero (par lançamento + estorno) são automaticamente ocultados
-- Paginação com navegação anterior/próxima
+- Paginação com navegação anterior/próxima e contagem total
 
 **Exportar Excel (CSV):**
 - Botão "⬇ Excel" ao lado do "Consultar"
@@ -355,56 +367,61 @@ Página para consultar, exportar e excluir lançamentos.
 
 Página **somente leitura + importação** — não há mais inserção nem exclusão manual de registros.
 
+![Importar Posição em Lote](docs/img/passo3-importar-posicao.svg)
+
 **Consultar:**
-- **Selecione o produto (obrigatório)** e informe uma data (ou período), depois clique em "Consultar"
-- Exibe grid dinâmico com todas as colunas do arquivo importado (inclusive colunas adicionais), filtrado pelo produto
+- **Produto** e **Domínio** são **obrigatórios**; informe uma data (ou período) e clique em "Consultar"
+- Exibe grid **dinâmico** com as colunas exatamente como estão na posição (todas as colunas do arquivo importado), com **paginação** (10/50/100 por página) igual à consulta de movimento
 
-**Importar (individual — CSV / XLSX):**
-- Selecione o **produto** da posição (combo com opções parametrizadas) e um arquivo `.csv` ou `.xlsx`
-- A **data** de cada registro vem de uma **coluna do próprio arquivo**, cujo nome é definido no `campo_data` da regra do produto (fallback: coluna cujo nome comece com `data`)
-
-**Importar em lote (produto pelo nome do arquivo):**
-- Selecione **vários arquivos** de uma vez; o produto de cada um é identificado por **padrões de nome** parametrizados (ex: `posicao_ndf*.csv` → NDF)
-- Um arquivo que casa com **mais de um padrão** é importado para **cada produto** correspondente
-- A data continua vindo de uma coluna do conteúdo (mesma lógica do import individual)
+**Importar em lote (Produto/Domínio pelo nome do arquivo):**
+- Selecione **um ou vários arquivos** de uma vez; o **Produto**, o **Domínio**, a **coluna de data base** e o **formato de data** de cada arquivo vêm do **padrão de nome** cadastrado em Parametrizações (ex: `posicao_ndf*.csv` → NDF/Posição)
+- Um arquivo que casa com **mais de um padrão** é importado para **cada combinação** correspondente
+- A **data do lote** vem da coluna informada no padrão; o resultado por arquivo mostra Produto/Domínio, data, versão e total
 
 **Pasta monitorada (automático):**
 - Uma **pasta monitorada** parametrizada é varrida periodicamente e também sob demanda ("Escanear agora")
 - O **intervalo de varredura é parametrizável em minutos**; se estiver vazio ou 0, o monitoramento automático fica **desativado** (o botão "Escanear agora" continua funcionando)
 - Arquivos que casam com um padrão são importados e **movidos** para a **pasta de processados** (também parametrizada)
 - Arquivos **sem padrão** correspondente **permanecem intactos** na pasta monitorada
-- **Após a importação automática, o contábil é executado automaticamente** para o (Produto, Domínio, data) importado — e o usuário é **notificado** (sino no topo). A importação **manual** não dispara o contábil nem notifica.
+- **Após a importação automática, o contábil é executado automaticamente** para o (Produto, Domínio, data) importado — e o usuário é **notificado** (sino no topo). A importação **manual** (botão "Importar em lote") não dispara o contábil nem notifica.
 
-> **Domínio** é uma dimensão paralela ao Produto: parametrizável em Parametrizações, presente no cadastro da regra (lista, como o Produto), na importação da posição e no padrão de arquivo (`nome → Produto + Domínio`). O contábil e o versionamento passam a considerar a combinação (Produto, Domínio).
+> **Domínio** é uma dimensão paralela ao Produto: parametrizável em Parametrizações, presente no cadastro da regra (lista, como o Produto), na consulta da posição e no padrão de arquivo (`nome → Produto + Domínio`). O contábil e o versionamento consideram a combinação (Produto, Domínio).
 
-> A importação (individual, em lote ou por varredura) apenas **persiste a posição** — não avalia as regras contábeis. As regras (condições, pré-condições) só são aplicadas ao **Gerar Movimento Contábil**. O único uso das regras na importação é ler o `campo_data` para localizar a coluna de data.
-- O produto informado é gravado no campo `produto` de cada registro e determina quais regras serão aplicadas
-- A primeira linha do arquivo deve conter os nomes das colunas; qualquer coluna é aceita e fica disponível nas regras
-- "Pré-visualizar" mostra as primeiras linhas e a coluna de data detectada antes de confirmar
-- "Importar" persiste os registros; a versão é atribuída automaticamente por **(data, produto)**, de modo que produtos distintos da mesma data coexistem no snapshot vigente
-- Números com vírgula decimal (formato BR) e valores `true/false`/`sim/não` são convertidos automaticamente
+> A importação apenas **persiste a posição** — não avalia as regras contábeis. As regras (condições, pré-condições) só são aplicadas ao **Gerar Movimento Contábil**.
+- A primeira linha do arquivo deve conter os **nomes das colunas**; qualquer coluna é aceita e fica disponível nas regras
+- A **versão** é atribuída automaticamente por **(data, Produto, Domínio)**, de modo que combinações distintas da mesma data coexistem no snapshot vigente
+- Números com separador configurável (ou vírgula decimal no formato BR) e valores `true/false`/`sim/não` são convertidos automaticamente; as **datas** seguem o formato do padrão
 
 ---
 
 ### Parametrizações (`/parametrizacoes`)
 
-Menu para manter as opções disponíveis nos combos do sistema (extensível para novas funcionalidades futuras). Atualmente:
+Menu para manter as opções e regras de leitura usadas em todo o sistema. Quatro blocos:
 
-- **Produtos** — lista de produtos usada nos combos de Produto (upload de posição e cadastro de regra). Adicione/remova opções livremente.
-- **Naturezas da Regra** — lista usada no combo de Natureza da regra contábil.
+![Parametrizações — Produtos e Domínios](docs/img/passo1-parametrizacoes.svg)
 
-Os campos Produto (upload e regra) e Natureza (regra) deixam de ser texto livre e passam a ser selecionados a partir dessas listas.
+- **Produtos** — lista de produtos usada nos combos (padrões de arquivo e cadastro de regra). Adicione/remova opções livremente.
+- **Domínios** — lista de domínios (ex.: `Posição`, `Liquidação`), usada da mesma forma.
 
-- **Padrões de Arquivo → Produto/Domínio** — mapeia um padrão de nome de arquivo (glob, ex: `posicao_ndf*.csv`) a um Produto e Domínio. Usado na importação em lote e no monitoramento de pasta. Um arquivo pode casar com mais de um padrão (importa para cada combinação). Opcionalmente, define os **separadores do CSV** — **delimitador** (`;`/`,`/auto), **separador decimal** (`,`/`.`/auto) e **separador de milhar** (`.`/`,`/nenhum) — resolvendo formatos como `1.500.000,50`. Vazios = detecção automática.
-- **Pastas de Importação** — configura a **pasta monitorada** (varrida automaticamente) e a **pasta de processados** (para onde os arquivos importados são movidos).
+Os campos Produto e Domínio deixam de ser texto livre e passam a ser selecionados a partir dessas listas.
+
+![Padrões de Arquivo](docs/img/passo2-padrao-arquivo.svg)
+
+- **Padrões de Arquivo → Produto/Domínio** — mapeia um padrão de nome de arquivo (glob, ex: `posicao_ndf*.csv`) a um Produto e Domínio. Usado na importação em lote e no monitoramento de pasta. Um arquivo pode casar com mais de um padrão (importa para cada combinação). Ao cadastrar, informe (obrigatórios):
+  - **Coluna da Data Base da Posição** — nome da coluna do arquivo que define a **data do lote** (ex.: `data_posicao_carteira`).
+  - **Formato de Data** — formato de **todas** as colunas de data, agrupado em **Padrão Brasil** (`AAAA/MM/DD`, `AAAA-MM-DD`, `DD/MM/AAAA`, `DD-MM-AAAA`) e **Padrão EUA** (`AAAA/DD/MM`, `AAAA-DD-MM`, `MM/DD/AAAA`, `MM-DD-AAAA`). Resolve a ambiguidade DD/MM vs MM/DD.
+  - Opcionalmente, os **separadores do CSV** — **delimitador** (`;`/`,`/auto), **separador decimal** (`,`/`.`/auto) e **separador de milhar** (`.`/`,`/nenhum) — resolvendo formatos como `1.500.000,50`. Vazios = detecção automática.
+- **Pastas de Importação** — configura a **pasta monitorada** (varrida automaticamente), a **pasta de processados** (para onde os arquivos importados são movidos) e o **intervalo de varredura em minutos**.
 
 ---
 
 ### Conciliação (`/conciliacao`)
 
-Página para verificar inconsistências entre posição e movimento contábil.
+Página para verificar inconsistências entre posição e movimento contábil. Tem duas modalidades: **Conciliação Simples** (regras fixas) e **Conciliação Inteligente com IA** (linguagem natural, via Gemini — ver [seção abaixo](#conciliação-inteligente-com-ia-gemini)).
 
-**Como usar:**
+![Conciliação Movimento × Carteira](https://github.com/user-attachments/assets/323acce0-1c12-4b90-b40f-28819015d329)
+
+**Como usar (Simples):**
 - Informe uma data e clique em "Conciliar"
 - O sistema compara a posição (versão máxima) com o movimento (versão vigente)
 
@@ -424,19 +441,28 @@ Página para verificar inconsistências entre posição e movimento contábil.
 
 ### Regras Contábeis (`/regras`)
 
-Página para cadastrar e manter as regras de roteamento contábil.
+Página para cadastrar e manter as regras de roteamento contábil. O conjunto de todas as regras de um Produto forma o seu **roteiro contábil**.
 
-**Regras:**
-- Lista todas as regras ativas com ID, descrição e código do produto
-- Botão "Ver Condições" para expandir as condições de cada regra
-- Formulário para criar nova regra (descrição + código produto)
+![Regras Contábeis — lista](https://github.com/user-attachments/assets/6c25ec2b-a086-4f1c-a987-ca6825ced747)
+
+**Regras (grid):**
+- Lista as regras ativas com colunas: **ID**, **Regra** (`Produto - Domínio - Descrição`), Descrição, Produtos, Domínios, Pré Condição e Posta/Reverte
+- Botão "Ver Condições" para abrir/gerenciar as condições de cada regra
+- Busca por texto (descrição, produto, condição…)
+
+![Nova Regra](docs/img/passo4-nova-regra.svg)
+
+**Nova Regra:**
+- **Descrição**; **Produtos** e **Domínios** (listas — a regra casa por Produto **E** Domínio; vazio = todas as posições/domínios)
+- **Campo Data** (coluna do arquivo com a data), **Pré Condição** (opcional, combinada com E a cada condição) e a flag **Posta/Reverte** (se desmarcada, os lançamentos desta regra **não são estornados**)
+
+![Nova Condição](docs/img/passo5-nova-condicao.svg)
 
 **Condições:**
-- Grid com ID, expressão de condição, contas débito/crédito, campo valor e campo moeda
-- Botão "Editar" para alterar cada condição
-- Formulário para adicionar nova condição à regra selecionada
+- Cada condição define **quando** lançar e **em quais contas**: expressão da **Condição**, **Conta Débito**, **Conta Crédito**, **Campo Valor**, **Campo Moeda** e **Campo Boleto** (identificador do lançamento)
+- Botões para adicionar, editar e excluir condições da regra selecionada
 
-**Regras NDF Nassau (pré-cadastradas):**
+**Regras NDF Nassau (exemplo pré-cadastrado):**
 
 | Condição | Débito | Crédito | Valor |
 |----------|--------|---------|-------|
@@ -444,6 +470,16 @@ Página para cadastrar e manter as regras de roteamento contábil.
 | Nassau + Afiliada + MTM < 0 | 333333333 | 444444444 | `principal_remanescente` |
 | Nassau + Não Afiliada + MTM > 0 | 555555555 | 666666666 | `principal_remanescente + valor_mtm` |
 | Nassau + Não Afiliada + MTM < 0 | 777777777 | 888888888 | `principal_remanescente` |
+
+---
+
+### Notificações
+
+Um **sino** no topo direito acumula avisos de eventos automáticos: **posição importada** e **contábil executado** pela pasta monitorada. Um badge mostra a quantidade de não lidas (atualiza a cada 15s); ao abrir o painel (ou clicar em "Marcar como lidas"), as notificações são marcadas como lidas.
+
+### Automação (pasta monitorada + notificações)
+
+Fluxo de ponta a ponta sem intervenção manual: um arquivo cai na **pasta monitorada** → é reconhecido pelo **padrão de arquivo** (Produto/Domínio, coluna de data, formato) → importado e **movido** para a pasta de processados → o **contábil do escopo é gerado automaticamente** → uma **notificação** é criada. O intervalo de varredura é configurável em minutos (0/vazio desativa; "Escanear agora" força a varredura).
 
 ---
 
@@ -469,7 +505,7 @@ Página para cadastrar e manter as regras de roteamento contábil.
 | GET/POST/DELETE | `/api/v1/parametrizacoes/padroes` | CRUD dos padrões nome-de-arquivo → produto |
 | GET/PUT | `/api/v1/configuracoes`                | Lê todas / define uma configuração (`{chave, valor}`) — ex: pastas |
 | GET    | `/api/v1/posicao/campos`                | Lista os campos disponíveis na posição da data |
-| GET    | `/api/v1/parametrizacoes/opcoes`        | Lista opções de uma categoria (`?categoria=produto\|natureza`) |
+| GET    | `/api/v1/parametrizacoes/opcoes`        | Lista opções de uma categoria (`?categoria=produto\|dominio`) |
 | POST   | `/api/v1/parametrizacoes/opcoes`        | Adiciona opção (`{categoria, valor}`) |
 | DELETE | `/api/v1/parametrizacoes/opcoes`        | Remove opção (`?categoria=...&valor=...`) |
 | GET    | `/api/v1/regras`                        | Lista regras                       |
@@ -558,7 +594,7 @@ sqlcmd -S localhost\SQLEXPRESS -d srcoff -i migrations/002_posicao_dinamica.sql
 # Campos extras da regra (campo_data, pre_condicao, natureza)
 sqlcmd -S localhost\SQLEXPRESS -d srcoff -i migrations/003_regra_campos_extras.sql
 
-# Parametrizações (opções de combos: produto, natureza)
+# Parametrizações (opções de combos: produto, dominio)
 sqlcmd -S localhost\SQLEXPRESS -d srcoff -i migrations/004_parametrizacao.sql
 
 # Inconsistências de processamento
@@ -572,6 +608,12 @@ sqlcmd -S localhost\SQLEXPRESS -d srcoff -i migrations/007_dominio.sql
 
 # Separadores do CSV por padrão de arquivo (delimitador/decimal/milhar)
 sqlcmd -S localhost\SQLEXPRESS -d srcoff -i migrations/008_padrao_csv_config.sql
+
+# Formato de data por padrão de arquivo
+sqlcmd -S localhost\SQLEXPRESS -d srcoff -i migrations/009_padrao_formato_data.sql
+
+# Coluna da data base da posição por padrão de arquivo
+sqlcmd -S localhost\SQLEXPRESS -d srcoff -i migrations/010_padrao_coluna_data.sql
 ```
 
 
@@ -639,7 +681,7 @@ O frontend foi reescrito como SPA (Single Page Application) com Bootstrap 5:
 |--------|------|-----------|
 | Operação | `/` | Gerar movimento contábil (estorno automático incluso) |
 | Consulta | `/consulta` | Consultar, exportar (CSV/TXT) e excluir movimentos |
-| Posição | `/posicao` | Inserir, consultar e excluir registros de posição |
+| Posição | `/posicao` | Consultar (Produto/Domínio, paginação) e importar posição (lote + pasta monitorada) |
 | Conciliação | `/conciliacao` | Conciliação simples e inteligente com IA |
 | Regras | `/regras` | Cadastrar e manter regras e condições contábeis |
 

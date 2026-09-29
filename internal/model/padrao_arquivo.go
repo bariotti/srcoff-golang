@@ -16,4 +16,8 @@ type PadraoArquivo struct {
 	// Guarda o rótulo escolhido (ex.: "DD/MM/AAAA", "MM/DD/AAAA"). Vazio = automático
 	// (mantido apenas para padrões legados cadastrados antes deste campo).
 	FormatoData string `json:"formato_data"`
+	// Nome da coluna do arquivo que contém a data base da posição — é ela que define a
+	// data do lote (obrigatório no cadastro). Comparada após normalização (snake_case).
+	// Vazio = comportamento legado (resolve pela regra/auto-detecção).
+	ColunaData string `json:"coluna_data"`
 }
