@@ -35,7 +35,8 @@ func TestFluxoCompleto_MovimentoEstornoConsulta(t *testing.T) {
 	ctx := context.Background()
 	eval := evaluator.New()
 
-	dataDMenos1 := baseDate.AddDate(0, 0, -1)
+	// D-1 é o dia útil anterior a baseDate (segunda 2024-01-15 → sexta 2024-01-12).
+	dataDMenos1 := DiaUtilAnterior(baseDate)
 
 	// Posição para D-1
 	posicaoD1 := posIntegra(1, dataDMenos1, "BOLETO-D1", 200.0, 1000.0, "USD")

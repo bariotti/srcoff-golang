@@ -79,6 +79,9 @@ func importarConteudoParaProduto(ctx context.Context, svc posicaoCarteiraSvc, re
 		if err != nil {
 			return nil, fmt.Errorf("linha %d: %v", i+1, err)
 		}
+		if !service.EhDiaUtil(data) {
+			return nil, fmt.Errorf("linha %d: data base %s não é dia útil (%s); a posição só pode ser importada em dias úteis", i+1, data.Format("2006-01-02"), service.DescricaoDiasNaoUteis)
+		}
 		m["data_posicao_carteira"] = data.Format("2006-01-02")
 		m["produto"] = produto
 		m["dominio"] = dominio

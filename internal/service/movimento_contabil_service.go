@@ -92,6 +92,11 @@ func (s *MovimentoContabilService) GerarMovimento(ctx context.Context, data time
 // regras ativas do escopo, gera lançamentos e estornos de D-1 (também do escopo),
 // grava produto/domínio em cada lançamento e registra a execução por combinação.
 func (s *MovimentoContabilService) GerarMovimentoEscopo(ctx context.Context, data time.Time, produtoFiltro, dominioFiltro string) error {
+	// 0. O contábil só pode ser processado em dias úteis.
+	if !EhDiaUtil(data) {
+		return fmt.Errorf("data %s não é dia útil (%s); o contábil só pode ser processado em dias úteis", data.Format("2006-01-02"), DescricaoDiasNaoUteis)
+	}
+
 	// 1. Buscar posição com versão máxima para a data
 	todasPosicoes, err := s.posicaoRepo.BuscarPorDataEVersaoMaxima(ctx, data)
 	if err != nil {
@@ -220,8 +225,8 @@ func (s *MovimentoContabilService) GerarMovimentoEscopo(ctx context.Context, dat
 		log.Printf("[movimento] %d inconsistência(s) detectada(s) para %s (lançamentos não gerados)", len(inconsistencias), data.Format("2006-01-02"))
 	}
 
-	// 4. Gerar estornos de D-1 em memória, restritos ao escopo (produto/domínio).
-	dMenos1 := data.AddDate(0, 0, -1)
+	// 4. Gerar estornos do dia útil anterior em memória, restritos ao escopo (produto/domínio).
+	dMenos1 := DiaUtilAnterior(data)
 	lancamentosD1, err := s.movimentoRepo.BuscarPorDataEIndicador(ctx, dMenos1, false)
 	if err != nil {
 		return fmt.Errorf("erro ao buscar lançamentos de D-1: %w", err)
@@ -315,13 +320,30 @@ func (s *MovimentoContabilService) GerarMovimentoEscopo(ctx context.Context, dat
 		qtdEst[e.Produto+"\x00"+e.Dominio]++
 	}
 
-	// 7. Registrar a execução por combinação (data, produto, domínio).
+	// 7. Registrar a execução por combinação (data, produto, domínio) com a contagem
+	// VISÍVEL — a mesma exibida na consulta de movimento (versão vigente, excluindo os
+	// pares lançamento+estorno de saldo zero). Assim o "Processados × Pendentes" bate
+	// com a quantidade da consulta para o mesmo Produto/Domínio/Data/Versão.
 	if s.execucaoRepo != nil {
+		qtdLancVis := map[string]int{}
+		qtdEstVis := map[string]int{}
+		if visiveis, err := s.movimentoRepo.ConsultarPaginadoFiltradoSemCancelados(ctx, data, data, "", 0, "vigente", 1, 999999); err == nil {
+			for _, l := range visiveis.Lancamentos {
+				k := l.Produto + "\x00" + l.Dominio
+				if l.IndicadorReversao {
+					qtdEstVis[k]++
+				} else {
+					qtdLancVis[k]++
+				}
+			}
+		} else {
+			log.Printf("[movimento] falha ao contar lançamentos visíveis para execução: %v", err)
+		}
 		for _, c := range combosSet {
 			k := c.Produto + "\x00" + c.Dominio
 			if err := s.execucaoRepo.RegistrarExecucao(ctx, model.MovimentoExecucao{
 				DataLote: data, Produto: c.Produto, Dominio: c.Dominio,
-				QtdLancamentos: qtdLanc[k], QtdEstornos: qtdEst[k],
+				QtdLancamentos: qtdLancVis[k], QtdEstornos: qtdEstVis[k],
 			}); err != nil {
 				log.Printf("[movimento] falha ao registrar execução %s/%s: %v", c.Produto, c.Dominio, err)
 			}
@@ -406,9 +428,9 @@ func (s *MovimentoContabilService) GerarEstorno(ctx context.Context, data time.T
 	return s.gerarEstornoInterno(ctx, data)
 }
 
-// gerarEstornoInterno busca lançamentos de D-1 (versão vigente) e gera estornos para D.
+// gerarEstornoInterno busca lançamentos do dia útil anterior (versão vigente) e gera estornos para D.
 func (s *MovimentoContabilService) gerarEstornoInterno(ctx context.Context, data time.Time) error {
-	dMenos1 := data.AddDate(0, 0, -1)
+	dMenos1 := DiaUtilAnterior(data)
 
 	// 1. Buscar lançamentos de D-1 (indicador_reversao=false)
 	lancamentosD1, err := s.movimentoRepo.BuscarPorDataEIndicador(ctx, dMenos1, false)

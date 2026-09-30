@@ -19,11 +19,37 @@ func NewMovimentoContabilRepo(db *sql.DB) *MovimentoContabilRepo {
 	return &MovimentoContabilRepo{db: db}
 }
 
+// maxLinhasInsert é o limite do SQL Server para expressões de linha em um único
+// INSERT ... VALUES. O BulkInsert quebra em lotes de até esse tamanho.
+const maxLinhasInsert = 1000
+
 func (r *MovimentoContabilRepo) BulkInsert(ctx context.Context, lancamentos []model.LancamentoContabil) error {
 	if len(lancamentos) == 0 {
 		return nil
 	}
 
+	// Uma transação envolve todos os lotes para manter o "tudo ou nada".
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	for ini := 0; ini < len(lancamentos); ini += maxLinhasInsert {
+		fim := ini + maxLinhasInsert
+		if fim > len(lancamentos) {
+			fim = len(lancamentos)
+		}
+		if err := inserirLoteMovimento(ctx, tx, lancamentos[ini:fim]); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
+// inserirLoteMovimento persiste um lote de até maxLinhasInsert lançamentos em um
+// único INSERT ... VALUES.
+func inserirLoteMovimento(ctx context.Context, tx *sql.Tx, lancamentos []model.LancamentoContabil) error {
 	var sb strings.Builder
 	sb.WriteString("INSERT INTO movimento_contabil (data_lote_contabil, codigo_versao_conteudo, codigo_identificador_boleto, valor_lancamento_contabil, moeda_lancamento_contabil, conta_debito, conta_credito, produto, dominio, indicador_reversao, descricao_regra_contabil, descricao_condicao_contabil, id_regra_contabil) VALUES ")
 
@@ -52,7 +78,7 @@ func (r *MovimentoContabilRepo) BulkInsert(ctx context.Context, lancamentos []mo
 		))
 	}
 
-	_, err := r.db.ExecContext(ctx, sb.String())
+	_, err := tx.ExecContext(ctx, sb.String())
 	return err
 }
 
@@ -162,8 +188,10 @@ func (r *MovimentoContabilRepo) consultarFiltrado(ctx context.Context, dataInici
 
 	filtroSaldoZero := ""
 	if excluirSaldoZero {
-		// Elimina grupos cujo saldo líquido é zero.
-		// Chave: boleto + regra + conta_debito + conta_credito (versão vigente por data/produto/domínio)
+		// Elimina grupos cujo saldo líquido é zero (par lançamento + estorno que se anulam).
+		// A chave normaliza as contas do estorno (invertidas na geração) de volta à ordem do
+		// lançamento normal, para que normal (débito A, crédito B) e estorno (débito B, crédito A)
+		// caiam no MESMO grupo — igual ao backend de arquivo. Versão vigente por data/produto/domínio.
 		filtroSaldoZero = `AND (
 			SELECT SUM(CASE WHEN m2.indicador_reversao = 0
 			                THEN  m2.valor_lancamento_contabil
@@ -173,8 +201,10 @@ func (r *MovimentoContabilRepo) consultarFiltrado(ctx context.Context, dataInici
 			WHERE m2.data_lote_contabil         = m.data_lote_contabil
 			  AND m2.codigo_identificador_boleto = m.codigo_identificador_boleto
 			  AND m2.id_regra_contabil           = m.id_regra_contabil
-			  AND m2.conta_debito                = m.conta_debito
-			  AND m2.conta_credito               = m.conta_credito
+			  AND (CASE WHEN m2.indicador_reversao = 1 THEN m2.conta_credito ELSE m2.conta_debito END)
+			    = (CASE WHEN m.indicador_reversao  = 1 THEN m.conta_credito  ELSE m.conta_debito  END)
+			  AND (CASE WHEN m2.indicador_reversao = 1 THEN m2.conta_debito  ELSE m2.conta_credito END)
+			    = (CASE WHEN m.indicador_reversao  = 1 THEN m.conta_debito   ELSE m.conta_credito  END)
 			  AND m2.codigo_versao_conteudo      = (SELECT MAX(m3.codigo_versao_conteudo) FROM movimento_contabil m3 WHERE m3.data_lote_contabil = m.data_lote_contabil AND ISNULL(m3.produto,'') = ISNULL(m.produto,'') AND ISNULL(m3.dominio,'') = ISNULL(m.dominio,''))
 		) <> 0`
 	}
