@@ -83,13 +83,28 @@ func (r *RegraContabilRepo) EditarRegra(_ context.Context, regra model.RegraCont
 			s.Regras[i].CodigoProdutoCorporativo = regra.CodigoProdutoCorporativo
 			s.Regras[i].Dominio = regra.Dominio
 			s.Regras[i].CampoProduto = regra.CampoProduto
-			s.Regras[i].CampoData = regra.CampoData
 			s.Regras[i].PreCondicao = regra.PreCondicao
+			s.Regras[i].PostaReverte = regra.PostaReverte
 			s.Regras[i].Ativo = regra.Ativo
 			return r.save(s)
 		}
 	}
 	return fmt.Errorf("regra %d não encontrada", regra.ID)
+}
+
+// ExcluirRegra faz a exclusão lógica da regra (Ativo = false).
+func (r *RegraContabilRepo) ExcluirRegra(_ context.Context, id int64) error {
+	s, err := r.load()
+	if err != nil {
+		return err
+	}
+	for i, reg := range s.Regras {
+		if reg.ID == id {
+			s.Regras[i].Ativo = false
+			return r.save(s)
+		}
+	}
+	return fmt.Errorf("regra %d não encontrada", id)
 }
 
 func (r *RegraContabilRepo) ListarCondicoes(_ context.Context, idRegra int64) ([]model.CondicaoRegra, error) {
@@ -131,7 +146,7 @@ func (r *RegraContabilRepo) EditarCondicao(_ context.Context, condicao model.Con
 			s.Condicoes[i].CampoValor = condicao.CampoValor
 			s.Condicoes[i].CampoMoeda = condicao.CampoMoeda
 			s.Condicoes[i].CampoBoleto = condicao.CampoBoleto
-			s.Condicoes[i].Ativo = condicao.Ativo
+			// Ativo é preservado: editar atualiza os campos, não (des)ativa a condição.
 			return r.save(s)
 		}
 	}

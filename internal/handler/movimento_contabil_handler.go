@@ -12,8 +12,8 @@ import (
 )
 
 type movimentoContabilSvc interface {
-	GerarMovimento(ctx context.Context, data time.Time) error
-	GerarMovimentoEscopo(ctx context.Context, data time.Time, produto, dominio string) error
+	GerarMovimento(ctx context.Context, data time.Time) ([]model.ProdutoDominio, error)
+	GerarMovimentoEscopo(ctx context.Context, data time.Time, produto, dominio string) ([]model.ProdutoDominio, error)
 	GerarEstorno(ctx context.Context, data time.Time) error
 	ConsultarLancamentos(ctx context.Context, data time.Time, pagina, tamanho int) (*model.PaginaLancamentos, error)
 	ConsultarLancamentosFiltrado(ctx context.Context, dataInicio, dataFim time.Time, boleto string, versao int, versaoModo string, pagina, tamanho int) (*model.PaginaLancamentos, error)
@@ -63,8 +63,19 @@ func (h *MovimentoContabilHandler) GerarMovimento(w http.ResponseWriter, r *http
 		return
 	}
 
-	if err := h.svc.GerarMovimentoEscopo(r.Context(), data, payload.Produto, payload.Dominio); err != nil {
+	bloqueios, err := h.svc.GerarMovimentoEscopo(r.Context(), data, payload.Produto, payload.Dominio)
+	if err != nil {
 		writeJSON(w, http.StatusOK, map[string]string{"mensagem": err.Error()})
+		return
+	}
+
+	if len(bloqueios) > 0 {
+		var combos []string
+		for _, b := range bloqueios {
+			combos = append(combos, b.Produto+"/"+b.Dominio)
+		}
+		msg := "O contábil de " + strings.Join(combos, ", ") + " deve ser executado para datas anteriores (falta o movimento do dia útil anterior)."
+		writeJSON(w, http.StatusOK, map[string]string{"mensagem": msg})
 		return
 	}
 

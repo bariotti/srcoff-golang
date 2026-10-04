@@ -70,12 +70,12 @@ func TestFluxoCompleto_MovimentoEstornoConsulta(t *testing.T) {
 	svc := NewMovimentoContabilService(posRepo, regraRepo, movRepo, eval)
 
 	// Passo 1: Gerar movimento para D-1
-	if err := svc.GerarMovimento(ctx, dataDMenos1); err != nil {
+	if _, err := svc.GerarMovimento(ctx, dataDMenos1); err != nil {
 		t.Fatalf("GerarMovimento D-1 falhou: %v", err)
 	}
 
 	// Passo 2: Gerar movimento para D
-	if err := svc.GerarMovimento(ctx, baseDate); err != nil {
+	if _, err := svc.GerarMovimento(ctx, baseDate); err != nil {
 		t.Fatalf("GerarMovimento D falhou: %v", err)
 	}
 
@@ -194,7 +194,7 @@ func TestNovaRegra_AplicadaNoProximoProcessamento(t *testing.T) {
 	movRepo1 := &fakeMovimentoRepo{}
 	svc1 := NewMovimentoContabilService(posRepo, regraRepo, movRepo1, eval)
 
-	if err := svc1.GerarMovimento(ctx, baseDate); err != nil {
+	if _, err := svc1.GerarMovimento(ctx, baseDate); err != nil {
 		t.Fatalf("GerarMovimento com 1 regra falhou: %v", err)
 	}
 
@@ -226,7 +226,7 @@ func TestNovaRegra_AplicadaNoProximoProcessamento(t *testing.T) {
 	movRepo2 := &fakeMovimentoRepo{}
 	svc2 := NewMovimentoContabilService(posRepo, regraRepo, movRepo2, eval)
 
-	if err := svc2.GerarMovimento(ctx, baseDate); err != nil {
+	if _, err := svc2.GerarMovimento(ctx, baseDate); err != nil {
 		t.Fatalf("GerarMovimento com 2 regras falhou: %v", err)
 	}
 

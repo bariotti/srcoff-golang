@@ -94,7 +94,7 @@ func TestNDF_Nassau_Afiliada_MTMPositivo(t *testing.T) {
 	movRepo := &fakeMovimentoRepo{}
 
 	svc := NewMovimentoContabilService(posRepo, regraRepo, movRepo, evaluator.New())
-	err := svc.GerarMovimento(context.Background(), ndfBaseDate)
+	_, err := svc.GerarMovimento(context.Background(), ndfBaseDate)
 	if err != nil {
 		t.Fatalf("GerarMovimento retornou erro inesperado: %v", err)
 	}
@@ -130,7 +130,7 @@ func TestNDF_Nassau_Afiliada_MTMNegativo(t *testing.T) {
 	movRepo := &fakeMovimentoRepo{}
 
 	svc := NewMovimentoContabilService(posRepo, regraRepo, movRepo, evaluator.New())
-	err := svc.GerarMovimento(context.Background(), ndfBaseDate)
+	_, err := svc.GerarMovimento(context.Background(), ndfBaseDate)
 	if err != nil {
 		t.Fatalf("GerarMovimento retornou erro inesperado: %v", err)
 	}
@@ -166,7 +166,7 @@ func TestNDF_Nassau_NaoAfiliada_MTMPositivo(t *testing.T) {
 	movRepo := &fakeMovimentoRepo{}
 
 	svc := NewMovimentoContabilService(posRepo, regraRepo, movRepo, evaluator.New())
-	err := svc.GerarMovimento(context.Background(), ndfBaseDate)
+	_, err := svc.GerarMovimento(context.Background(), ndfBaseDate)
 	if err != nil {
 		t.Fatalf("GerarMovimento retornou erro inesperado: %v", err)
 	}
@@ -202,7 +202,7 @@ func TestNDF_Nassau_NaoAfiliada_MTMNegativo(t *testing.T) {
 	movRepo := &fakeMovimentoRepo{}
 
 	svc := NewMovimentoContabilService(posRepo, regraRepo, movRepo, evaluator.New())
-	err := svc.GerarMovimento(context.Background(), ndfBaseDate)
+	_, err := svc.GerarMovimento(context.Background(), ndfBaseDate)
 	if err != nil {
 		t.Fatalf("GerarMovimento retornou erro inesperado: %v", err)
 	}
@@ -238,7 +238,7 @@ func TestNDF_SemCondicaoSatisfeita_NaoGeraLancamento(t *testing.T) {
 	movRepo := &fakeMovimentoRepo{}
 
 	svc := NewMovimentoContabilService(posRepo, regraRepo, movRepo, evaluator.New())
-	err := svc.GerarMovimento(context.Background(), ndfBaseDate)
+	_, err := svc.GerarMovimento(context.Background(), ndfBaseDate)
 	if err != nil {
 		t.Fatalf("GerarMovimento retornou erro inesperado: %v", err)
 	}

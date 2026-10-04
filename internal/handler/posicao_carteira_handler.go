@@ -16,7 +16,6 @@ type posicaoCarteiraSvc interface {
 	ListarPorPeriodo(ctx context.Context, dataInicio, dataFim time.Time) ([]model.PosicaoCarteira, error)
 	ImportarArquivo(ctx context.Context, registros []map[string]interface{}) ([]service.LoteImportado, error)
 	CamposDisponiveis(ctx context.Context, data time.Time) ([]string, error)
-	ResolverCampoData(ctx context.Context, produto string) (string, error)
 }
 
 type PosicaoCarteiraHandler struct {
@@ -186,16 +185,8 @@ func (h *PosicaoCarteiraHandler) Upload(w http.ResponseWriter, r *http.Request) 
 	}
 
 	if preview {
-		// Resolve a coluna de data apenas para exibir na pré-visualização.
-		colunaData := ""
-		if produto != "" {
-			if c, _ := h.svc.ResolverCampoData(r.Context(), produto); c != "" {
-				colunaData = normalizarNome(c)
-			}
-		}
-		if colunaData == "" {
-			colunaData = detectarColunaData(colunas)
-		}
+		// Detecta a coluna de data automaticamente apenas para exibir na pré-visualização.
+		colunaData := detectarColunaData(colunas)
 		amostra := registros
 		if len(amostra) > 10 {
 			amostra = amostra[:10]

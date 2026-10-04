@@ -3,6 +3,7 @@ package handler
 import (
 	"context"
 	"net/http"
+	"strconv"
 	"time"
 
 	"srcoff/internal/service"
@@ -10,6 +11,7 @@ import (
 
 type execucaoSvc interface {
 	StatusPorData(ctx context.Context, data time.Time) ([]service.StatusCombinacao, error)
+	CalendarioMes(ctx context.Context, ano int, mes time.Month) ([]service.DiaCalendario, error)
 }
 
 // ExecucaoHandler expõe a visão de processados/pendentes por data.
@@ -37,4 +39,32 @@ func (h *ExecucaoHandler) Status(w http.ResponseWriter, r *http.Request) {
 		status = []service.StatusCombinacao{}
 	}
 	writeJSON(w, http.StatusOK, status)
+}
+
+// Calendario trata GET /api/v1/movimento-contabil/calendario?ano=YYYY&mes=MM
+// Retorna o status agregado de cada dia do mês (completo/parcial/nenhum/não útil/futuro),
+// considerando todas as combinações (produto, domínio) dos padrões de arquivo.
+func (h *ExecucaoHandler) Calendario(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	ano, err := strconv.Atoi(q.Get("ano"))
+	if err != nil || ano < 1900 || ano > 3000 {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"erro": "ano inválido"})
+		return
+	}
+	mes, err := strconv.Atoi(q.Get("mes"))
+	if err != nil || mes < 1 || mes > 12 {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"erro": "mês inválido (1-12)"})
+		return
+	}
+	dias, err := h.svc.CalendarioMes(r.Context(), ano, time.Month(mes))
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"erro": err.Error()})
+		return
+	}
+	if dias == nil {
+		dias = []service.DiaCalendario{}
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"ano": ano, "mes": mes, "dias": dias,
+	})
 }

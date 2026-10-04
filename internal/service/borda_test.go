@@ -38,7 +38,7 @@ func TestGerarMovimento_PosicaoVazia_RetornaErroAusencia(t *testing.T) {
 	eval := evaluator.New()
 
 	svc := NewMovimentoContabilService(posRepo, regraRepo, movRepo, eval)
-	err := svc.GerarMovimento(context.Background(), testDate)
+	_, err := svc.GerarMovimento(context.Background(), testDate)
 
 	if err == nil {
 		t.Fatal("esperava erro de ausência, mas não houve erro")
@@ -121,7 +121,7 @@ func TestGerarMovimento_ExpressaoBooleanaInvalida_ContinuaProcessamento(t *testi
 	eval := evaluator.New()
 
 	svc := NewMovimentoContabilService(posRepo, regraRepo, movRepo, eval)
-	err := svc.GerarMovimento(context.Background(), testDate)
+	_, err := svc.GerarMovimento(context.Background(), testDate)
 
 	if err != nil {
 		t.Fatalf("não esperava erro, obteve: %v", err)
@@ -175,7 +175,7 @@ func TestGerarMovimento_ExpressaoValorInvalida_ContinuaProcessamento(t *testing.
 	eval := evaluator.New()
 
 	svc := NewMovimentoContabilService(posRepo, regraRepo, movRepo, eval)
-	err := svc.GerarMovimento(context.Background(), testDate)
+	_, err := svc.GerarMovimento(context.Background(), testDate)
 
 	if err != nil {
 		t.Fatalf("não esperava erro, obteve: %v", err)

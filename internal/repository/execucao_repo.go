@@ -39,6 +39,27 @@ func (r *ExecucaoRepo) RegistrarExecucao(ctx context.Context, e model.MovimentoE
 	return tx.Commit()
 }
 
+// DatasExecutadas retorna as datas distintas com execução para (produto, domínio).
+func (r *ExecucaoRepo) DatasExecutadas(ctx context.Context, produto, dominio string) ([]time.Time, error) {
+	rows, err := r.db.QueryContext(ctx,
+		"SELECT DISTINCT data_lote FROM movimento_execucao WHERE produto = @p1 AND dominio = @p2 ORDER BY data_lote",
+		produto, dominio,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var datas []time.Time
+	for rows.Next() {
+		var d time.Time
+		if err := rows.Scan(&d); err != nil {
+			return nil, err
+		}
+		datas = append(datas, d)
+	}
+	return datas, rows.Err()
+}
+
 func (r *ExecucaoRepo) ListarPorData(ctx context.Context, data time.Time) ([]model.MovimentoExecucao, error) {
 	rows, err := r.db.QueryContext(ctx,
 		"SELECT id, data_lote, produto, dominio, qtd_lancamentos, qtd_estornos, criado_em FROM movimento_execucao WHERE data_lote = @p1 ORDER BY produto, dominio",

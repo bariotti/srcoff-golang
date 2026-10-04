@@ -16,6 +16,7 @@ Sistema desenvolvido em Go para geração, estorno, conciliação e consulta do 
 - [API REST](#api-rest)
 - [Regras Contábeis — Expressões](#regras-contábeis--expressões)
 - [Formato do Arquivo TXT](#formato-do-arquivo-txt)
+- [Proposta de Solução Futura — Produção (AWS)](#proposta-de-solução-futura--produção-aws)
 
 ---
 
@@ -55,8 +56,9 @@ Ainda em **Parametrizações**, no cartão **Padrões de Arquivo**, diga ao sist
 1. Informe o padrão do nome com curinga `*` (ex.: `posicao_fxo*.csv`).
 2. Selecione o **Produto** (`FXO`) e o **Domínio** (`Posição`).
 3. **Coluna da Data Base da Posição** (obrigatório): o nome da coluna do arquivo que define a **data do lote** (ex.: `data_posicao_carteira`).
-4. **Formato de Data** (obrigatório): o formato das colunas de data do arquivo — agrupado em **Padrão Brasil** (`DD/MM/AAAA`…) e **Padrão EUA** (`MM/DD/AAAA`…). Vale para **todas** as colunas de data e resolve a ambiguidade DD/MM vs MM/DD.
-5. (Opcional) Ajuste os **separadores** do CSV — Delimitador, Decimal e Milhar (deixe em "auto/nenhum" se não souber). Clique em **Adicionar padrão**.
+4. **Coluna do Número do Boleto** (obrigatório): o nome da coluna do arquivo que contém o número do boleto (ex.: `codigo_identificador_boleto`). Essa coluna é **sempre importada como texto**, preservando zeros à esquerda e a precisão de identificadores longos (sem conversão para número).
+5. **Formato de Data** (obrigatório): o formato das colunas de data do arquivo — agrupado em **Padrão Brasil** (`DD/MM/AAAA`…) e **Padrão EUA** (`MM/DD/AAAA`…). Vale para **todas** as colunas de data e resolve a ambiguidade DD/MM vs MM/DD.
+6. (Opcional) Ajuste os **separadores** do CSV — Delimitador, Decimal e Milhar (deixe em "auto/nenhum" se não souber). Clique em **Adicionar padrão**.
 
 > A partir daqui, qualquer arquivo cujo nome case com o padrão é reconhecido como `FXO / Posição` na importação, com a data e os números interpretados conforme o formato configurado.
 
@@ -77,9 +79,10 @@ Menu **Regras** → **Nova Regra**. Cada regra é uma peça do roteiro contábil
 
 1. Preencha a **Descrição** (ex.: `FXO - Registro de Notional`).
 2. Selecione o(s) **Produto(s)** e **Domínio(s)** a que a regra se aplica (`FXO` / `Posição`).
-3. Informe o **Campo Data** (coluna do arquivo com a data) e, opcionalmente, uma **Pré Condição** e a flag **Posta/Reverte**. Clique em **Criar**.
+3. Opcionalmente, informe uma **Pré Condição** e a flag **Posta/Reverte**. Clique em **Criar**.
 
-> Repita este passo para **cada** regra do produto — juntas, elas formam o roteiro contábil.
+> Repita este passo para **cada** regra do produto — juntas, elas formam o roteiro contábil. As regras podem ser **editadas** (lápis) e **excluídas** (lixeira) na lista; as condições também podem ser editadas e excluídas.
+> A coluna de data da posição agora é definida no **padrão de arquivo** (Passo 2), não mais na regra.
 
 ### Passo 5 — Definir as condições de cada regra
 
@@ -251,7 +254,7 @@ Define as regras de roteamento contábil.
 >
 > **Pré-condição:** quando preenchida, é avaliada uma vez por posição/regra; se falsa, nenhuma condição da regra é aplicada. Útil para fatorar uma condição comum a várias condições da regra (ex: `descricao_veiculo == "NASSAU"`), evitando repeti-la em cada condição.
 >
-> **Campo Data:** na importação, a coluna de data é determinada pelo `campo_data` da regra do produto informado; se não configurado, o sistema tenta detectar automaticamente uma coluna cujo nome comece com `data`.
+> **Coluna de data:** na importação, a coluna de data da posição é definida no **padrão de arquivo** (Parametrizações → Padrões de Arquivo); se não configurada (padrões legados), o sistema tenta detectar automaticamente uma coluna cujo nome comece com `data`.
 
 ### condicao_regra
 
@@ -313,6 +316,11 @@ Página principal para acionar o processamento diário do contábil. Reúne trê
 **Processados × Pendentes:**
 - Para uma data, lista as combinações (Produto, Domínio) dos **padrões de arquivo** cadastrados em Parametrizações e o status: **Processado** (contábil já executado) ou **Pendente**
 - **Inconsistências:** se a pré-condição, condição ou campo_valor de uma regra referenciar um campo que **não existe** na posição, o lançamento **não é gerado** e uma inconsistência é registrada. Após o processamento, as inconsistências da data são listadas na tela.
+
+**Calendário de Execução do Contábil:**
+- Visão **agregada** de todas as combinações (Produto, Domínio) dos **padrões de arquivo**. Carrega automaticamente ao abrir a página (mês/ano atuais); troque **mês/ano** para recarregar.
+- Cada dia é colorido conforme a execução do contábil de **todos** os Produtos/Domínios: **verde** (todos executados), **amarelo** (parcial — falta algum), **vermelho** (nenhum executado, em dia útil até hoje), **cinza** (não útil — sábado, domingo, Natal ou Ano Novo) e **tracejado** (futuro — dia útil posterior a hoje).
+- O dia corrente é marcado com **Hoje** e o **último dia útil do mês** com **Fechamento Mensal**.
 
 **Inconsistências do Processamento:**
 - As inconsistências são persistidas por data do movimento e podem ser consultadas informando a data
@@ -409,7 +417,9 @@ Os campos Produto e Domínio deixam de ser texto livre e passam a ser selecionad
 
 - **Padrões de Arquivo → Produto/Domínio** — mapeia um padrão de nome de arquivo (glob, ex: `posicao_ndf*.csv`) a um Produto e Domínio. Usado na importação em lote e no monitoramento de pasta. Um arquivo pode casar com mais de um padrão (importa para cada combinação). Ao cadastrar, informe (obrigatórios):
   - **Coluna da Data Base da Posição** — nome da coluna do arquivo que define a **data do lote** (ex.: `data_posicao_carteira`).
+  - **Coluna do Número do Boleto** — nome da coluna do arquivo com o número do boleto (ex.: `codigo_identificador_boleto`). **Sempre importada como texto**: preserva zeros à esquerda e a precisão de identificadores longos (evita que um código numérico vire número e gere um lançamento com boleto diferente do arquivo).
   - **Formato de Data** — formato de **todas** as colunas de data, agrupado em **Padrão Brasil** (`AAAA/MM/DD`, `AAAA-MM-DD`, `DD/MM/AAAA`, `DD-MM-AAAA`) e **Padrão EUA** (`AAAA/DD/MM`, `AAAA-DD-MM`, `MM/DD/AAAA`, `MM-DD-AAAA`). Resolve a ambiguidade DD/MM vs MM/DD.
+  - **Obrigatoriedade Movimento Contábil D-1** (checkbox, padrão marcado) — quando marcado, o contábil só processa uma data se já houver movimento no **dia útil anterior** (considerando o agrupamento data/produto/domínio), exceto na primeira execução do produto/domínio. Desmarcado: não valida, e o **estorno** usa o movimento da **maior data anterior** disponível (sem data anterior = só o movimento do dia, sem estorno).
   - Opcionalmente, os **separadores do CSV** — **delimitador** (`;`/`,`/auto), **separador decimal** (`,`/`.`/auto) e **separador de milhar** (`.`/`,`/nenhum) — resolvendo formatos como `1.500.000,50`. Vazios = detecção automática.
 - **Pastas de Importação** — configura a **pasta monitorada** (varrida automaticamente), a **pasta de processados** (para onde os arquivos importados são movidos) e o **intervalo de varredura em minutos**.
 
@@ -454,7 +464,13 @@ Página para cadastrar e manter as regras de roteamento contábil. O conjunto de
 
 **Nova Regra:**
 - **Descrição**; **Produtos** e **Domínios** (listas — a regra casa por Produto **E** Domínio; vazio = todas as posições/domínios)
-- **Campo Data** (coluna do arquivo com a data), **Pré Condição** (opcional, combinada com E a cada condição) e a flag **Posta/Reverte** (se desmarcada, os lançamentos desta regra **não são estornados**)
+- **Pré Condição** (opcional, combinada com E a cada condição) e a flag **Posta/Reverte** (se desmarcada, os lançamentos desta regra **não são estornados**)
+- Regras e condições podem ser **editadas** e **excluídas** (botões de lápis/lixeira na lista). A coluna de data da posição é definida no **padrão de arquivo** (Parametrizações), não na regra.
+- **Exportar/Importar CSV (lote):** o botão **Exportar CSV** gera um único arquivo (BOM UTF-8, separador `;`) com **todas as regras e condições** ativas — uma linha por condição. O botão **Importar CSV** **cria e atualiza** em lote a partir desse arquivo; o ícone **?** ao lado abre as instruções de preenchimento. Convenção da coluna `regra_id`:
+  - **número existente** → atualiza a regra (se algo mudou); **número inexistente** → erro.
+  - **rótulo de texto** (ex.: `NOVA-1`) → **cria** uma regra nova (linhas com o mesmo rótulo viram uma regra com várias condições); **vazio** → cria uma regra nova isolada.
+  - Para condições: `condicao_id` existente → atualiza; `condicao_id` vazio com campos preenchidos → **cria** a condição (em regra existente ou nova).
+  - Linhas **idênticas** ao cadastro não são alteradas; registros **ausentes** do CSV não são tocados (**nunca exclui**). Linhas de criação criam a cada importação — depois de criar, **reexporte** para passar a ter os ids numéricos.
 
 ![Nova Condição](docs/img/passo5-nova-condicao.svg)
 
@@ -501,6 +517,7 @@ Fluxo de ponta a ponta sem intervenção manual: um arquivo cai na **pasta monit
 | POST   | `/api/v1/posicao/upload-lote`           | Importa vários arquivos (multipart `arquivos`); produto por padrão de nome |
 | GET/POST | `/api/v1/posicao/scan-pasta`          | Status (GET) / varredura imediata (POST) da pasta monitorada |
 | GET    | `/api/v1/movimento-contabil/status`     | Processados × pendentes por data (`?data=YYYY-MM-DD`) |
+| GET    | `/api/v1/movimento-contabil/calendario` | Status agregado de cada dia do mês (`?ano=&mes=`): completo/parcial/nenhum/não útil/futuro (+ hoje, fechamento mensal) |
 | GET/POST | `/api/v1/notificacoes`                | Lista notificações e contador (GET) / marca todas como lidas (POST) |
 | GET/POST/DELETE | `/api/v1/parametrizacoes/padroes` | CRUD dos padrões nome-de-arquivo → produto |
 | GET/PUT | `/api/v1/configuracoes`                | Lê todas / define uma configuração (`{chave, valor}`) — ex: pastas |
@@ -510,10 +527,14 @@ Fluxo de ponta a ponta sem intervenção manual: um arquivo cai na **pasta monit
 | DELETE | `/api/v1/parametrizacoes/opcoes`        | Remove opção (`?categoria=...&valor=...`) |
 | GET    | `/api/v1/regras`                        | Lista regras                       |
 | POST   | `/api/v1/regras`                        | Cria regra                         |
+| GET    | `/api/v1/regras/export`                 | Exporta todas as regras e condições em um único CSV |
+| POST   | `/api/v1/regras/import`                 | Atualiza regras e condições em lote por CSV (multipart `arquivo`; update por id) |
 | PUT    | `/api/v1/regras/{id}`                   | Edita regra                        |
+| DELETE | `/api/v1/regras/{id}`                   | Exclui regra (lógica)              |
 | GET    | `/api/v1/regras/{id}/condicoes`         | Lista condições                    |
 | POST   | `/api/v1/regras/{id}/condicoes`         | Cria condição                      |
 | PUT    | `/api/v1/condicoes/{id}`                | Edita condição                     |
+| DELETE | `/api/v1/condicoes/{id}`                | Exclui condição (lógica)           |
 
 ---
 
@@ -614,8 +635,79 @@ sqlcmd -S localhost\SQLEXPRESS -d srcoff -i migrations/009_padrao_formato_data.s
 
 # Coluna da data base da posição por padrão de arquivo
 sqlcmd -S localhost\SQLEXPRESS -d srcoff -i migrations/010_padrao_coluna_data.sql
+
+# Obrigatoriedade de movimento contábil D-1 por padrão de arquivo
+sqlcmd -S localhost\SQLEXPRESS -d srcoff -i migrations/011_padrao_obrigatorio_mov_d1.sql
+
+# Coluna do número do boleto (importada como texto) por padrão de arquivo
+sqlcmd -S localhost\SQLEXPRESS -d srcoff -i migrations/012_padrao_coluna_boleto.sql
 ```
 
+
+---
+
+## Proposta de Solução Futura — Produção (AWS)
+
+> Esta aplicação é um **POC/experimentação**. Em produção, a arquitetura muda para um modelo **event-driven e serverless** na AWS. O POC atual continua válido para validar as regras e o motor contábil — o que muda é a **origem da posição** e o **empacotamento** do processamento, não o núcleo de regras (graças à posição dinâmica `Campos` + avaliador expr-lang, que é agnóstico à origem).
+
+### Desenho da solução
+
+```mermaid
+flowchart TD
+  subgraph Fontes["Fontes de posição"]
+    GT["GlueTable<br/>(preenchida por outro processo)"]
+    CSV["CSV no S3<br/>(usuário disponibiliza)"]
+  end
+  subgraph Eventos["Ingestão / eventos"]
+    SNS["SNS<br/>data, tabela, versão"]
+    S3E["Evento S3 / EventBridge<br/>novo arquivo"]
+  end
+  subgraph Processamento["Processamento (serverless)"]
+    ROT["Lambda roteadora<br/>casa Padrão de Posição"]
+    ENG["Motor contábil<br/>Lambda/Fargate · regras · estorno · D-1"]
+  end
+  POS["Lê a posição sob demanda<br/>Athena/Glue · S3 — sem cópia"]
+  subgraph Dados["Persistência"]
+    AUR["RDS · Aurora PostgreSQL<br/>config + movimento + idempotência"]
+    LAKE["S3 + Athena<br/>histórico / export"]
+  end
+  subgraph AdminObs["Administração & Observabilidade"]
+    ADMIN["Admin Web (ECS)<br/>regras · padrões · parametrizações"]
+    DD["DataDog<br/>métricas · alertas"]
+  end
+
+  GT --> SNS
+  CSV --> S3E
+  SNS --> ROT
+  S3E --> ROT
+  ROT --> ENG
+  POS --> ENG
+  ENG --> AUR
+  ENG --> LAKE
+  ADMIN --> AUR
+  ENG --> DD
+```
+
+### Principais mudanças em relação ao POC
+
+- **Origem da posição (GlueTable):** um processo externo preenche uma GlueTable e publica um **SNS** (`data, tabela, versão`). O sistema lê o SNS, resolve o **Padrão de Posição** e dispara o contábil — lendo a posição **sob demanda via Athena**, **sem copiar** para a base.
+- **Entrada por CSV:** continua existindo, mas o usuário **deposita o arquivo em um bucket S3**; o **evento S3** aciona o mesmo pipeline do SNS (parse do CSV em memória, sem cópia para a base).
+- **Processamento serverless:** o motor contábil (regras, estorno, obrigatoriedade D-1) roda em **Lambda (Go)**, com **Fargate/ECS** como fallback para volumes que excedam o limite de 15 min / memória da Lambda.
+- **Idempotência:** como SNS e eventos S3 são *at-least-once* (podem duplicar), o mesmo evento não pode gerar o contábil duas vezes. A guarda é simples e fica **no próprio RDS**: uma tabela de eventos processados com **chave única** `(data, produto, domínio, versão)` e INSERT condicional — se já existe, ignora. (Um DynamoDB como "caderno de deduplicação" só se justificaria em volume de eventos muito alto, o que não é o caso de um contábil diário.)
+- **Banco de dados:** **RDS — Aurora PostgreSQL Serverless v2** para configuração + movimento + idempotência (padrões de acesso multidimensionais e paginados — território relacional); **S3 (Parquet) + Athena** para histórico/export. Com Lambda, usar **RDS Proxy** ou a **Data API** para conexões. (Aurora é um motor do próprio Amazon RDS.)
+- **Consulta de posição removida:** a posição deixa de viver nesta aplicação; a consulta passa a ser feita na aplicação de origem (ajustar a sugestão de campos das regras para ler o **schema do Glue**).
+- **Padrões de Arquivo → Padrões de Posição:** o cadastro ganha um campo **Fonte** (`CSV/S3` | `GlueTable/SNS`) e o formulário fica condicional: parâmetros de parsing (delimitador, decimal, formato de data) só para CSV; identificação da **tabela/database Glue** para a fonte Glue; `Produto/Domínio/ColunaBoleto/Obrigatoriedade D-1` comuns às duas.
+
+### Esforço estimado
+
+| Item | Esforço | Observação |
+|---|---|---|
+| Seam `PosicaoSource` (CSV em memória ou Athena/Glue) | Médio | Refatoração central; o motor contábil é reaproveitado |
+| Entrada CSV via S3 (evento) | Pequeno-Médio | Reaproveita parsing e resolução de padrão |
+| Origem GlueTable + SNS | Grande | Reader Athena + assinante SNS + padrão por tabela; risco: volume em memória |
+| Empacotar em Lambda/Fargate | Médio | Lógica reaproveitada; idempotência + store de estado |
+| Remover consulta de posição | Pequeno | Ajustar sugestão de campos (schema do Glue) |
+| Migração para Aurora PostgreSQL | Médio | Portar T-SQL → PostgreSQL e parametrizar SQL |
 
 ---
 

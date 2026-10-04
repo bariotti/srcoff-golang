@@ -46,10 +46,10 @@ func TestExecucaoBateComConsulta(t *testing.T) {
 	execRepo := filerepo.NewExecucaoRepo(dir)
 	svc := NewMovimentoContabilService(posRepo, regraRepo, movRepo, eval).ComExecucaoRepo(execRepo)
 
-	if err := svc.GerarMovimentoEscopo(ctx, sexta, "", ""); err != nil {
+	if _, err := svc.GerarMovimentoEscopo(ctx, sexta, "", ""); err != nil {
 		t.Fatalf("processar sexta: %v", err)
 	}
-	if err := svc.GerarMovimentoEscopo(ctx, segunda, "", ""); err != nil {
+	if _, err := svc.GerarMovimentoEscopo(ctx, segunda, "", ""); err != nil {
 		t.Fatalf("processar segunda: %v", err)
 	}
 

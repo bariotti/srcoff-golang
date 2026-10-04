@@ -89,10 +89,11 @@ func parseDataCampo(v interface{}) (time.Time, error) {
 // parseConfig carrega os parâmetros opcionais de parsing do CSV (vindos do padrão
 // de arquivo). Campos vazios/zero significam comportamento automático.
 type parseConfig struct {
-	delimitador rune   // 0 = auto-detecta
-	sepDecimal  string // "" = auto
-	sepMilhar   string // "" = nenhum
-	formatoData string // layout Go das datas (ex: "02/01/2006"); "" = automático (lista multi-formato)
+	delimitador  rune   // 0 = auto-detecta
+	sepDecimal   string // "" = auto
+	sepMilhar    string // "" = nenhum
+	formatoData  string // layout Go das datas (ex: "02/01/2006"); "" = automático (lista multi-formato)
+	colunaBoleto string // nome normalizado da coluna do boleto; sempre persistida como texto
 }
 
 // parsePosicaoArquivo lê um arquivo de posição (.csv ou .xlsx) com detecção automática.
@@ -153,7 +154,7 @@ func parseCSV(r io.Reader, cfg parseConfig) ([]map[string]interface{}, []string,
 			if i < len(linha) {
 				celula = strings.TrimSpace(linha[i])
 			}
-			reg[col] = inferirValorCfg(celula, cfg)
+			reg[col] = inferirCelula(col, celula, cfg)
 		}
 		registros = append(registros, reg)
 	}
@@ -194,7 +195,7 @@ func parseXLSX(r io.Reader, cfg parseConfig) ([]map[string]interface{}, []string
 			if i < len(linha) {
 				celula = strings.TrimSpace(linha[i])
 			}
-			reg[col] = inferirValorCfg(celula, cfg)
+			reg[col] = inferirCelula(col, celula, cfg)
 		}
 		registros = append(registros, reg)
 	}
@@ -273,6 +274,20 @@ func removerAcentos(s string) string {
 		}
 	}
 	return b.String()
+}
+
+// inferirCelula converte o valor de uma célula aplicando a configuração do padrão.
+// A coluna do boleto configurada é SEMPRE mantida como texto (sem conversão para
+// número/data), preservando zeros à esquerda e a precisão de identificadores longos;
+// célula vazia vira nil. As demais colunas seguem a inferência automática.
+func inferirCelula(col, celula string, cfg parseConfig) interface{} {
+	if cfg.colunaBoleto != "" && col == cfg.colunaBoleto {
+		if celula == "" {
+			return nil
+		}
+		return celula
+	}
+	return inferirValorCfg(celula, cfg)
 }
 
 // inferirValorCfg converte o texto de uma célula para bool, float64 ou string,

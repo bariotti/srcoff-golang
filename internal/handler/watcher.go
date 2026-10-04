@@ -23,7 +23,7 @@ type configLeitura interface {
 
 // movimentoExecutor executa o contábil para um escopo (usado no auto-contábil).
 type movimentoExecutor interface {
-	GerarMovimentoEscopo(ctx context.Context, data time.Time, produto, dominio string) error
+	GerarMovimentoEscopo(ctx context.Context, data time.Time, produto, dominio string) ([]model.ProdutoDominio, error)
 }
 
 // notificador cria notificações de eventos automáticos.
@@ -195,11 +195,20 @@ func (pw *PastaWatcher) posImportacaoAutomatica(ctx context.Context, res Resulta
 			if err != nil {
 				continue
 			}
-			if err := pw.movSvc.GerarMovimentoEscopo(ctx, data, p.Produto, p.Dominio); err != nil {
+			bloqueios, err := pw.movSvc.GerarMovimentoEscopo(ctx, data, p.Produto, p.Dominio)
+			if err != nil {
 				log.Printf("[watcher] auto-contábil %s/%s %s falhou: %v", p.Produto, p.Dominio, lote.Data, err)
 				pw.notificar(ctx, model.Notificacao{
 					Tipo: model.NotificacaoContabilExecutado, DataLote: lote.Data, Produto: p.Produto, Dominio: p.Dominio,
 					Mensagem: fmt.Sprintf("Contábil de %s/%s para %s NÃO executado: %v", p.Produto, p.Dominio, lote.Data, err),
+				})
+				continue
+			}
+			if len(bloqueios) > 0 {
+				log.Printf("[watcher] auto-contábil %s/%s %s bloqueado pela obrigatoriedade de movimento de D-1", p.Produto, p.Dominio, lote.Data)
+				pw.notificar(ctx, model.Notificacao{
+					Tipo: model.NotificacaoContabilExecutado, DataLote: lote.Data, Produto: p.Produto, Dominio: p.Dominio,
+					Mensagem: fmt.Sprintf("Contábil de %s/%s para %s NÃO executado: é necessário executar o contábil de datas anteriores (falta o movimento do dia útil anterior).", p.Produto, p.Dominio, lote.Data),
 				})
 				continue
 			}

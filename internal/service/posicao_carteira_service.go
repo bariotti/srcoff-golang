@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"sort"
-	"strings"
 	"time"
 
 	"srcoff/internal/model"
@@ -17,58 +16,12 @@ type posicaoCarteiraRepoFull interface {
 	ImportarLote(ctx context.Context, data time.Time, versao int, registros []map[string]interface{}) error
 }
 
-// regraLookup permite ao serviço de posição descobrir configurações das regras
-// (ex: qual campo da posição contém a data) a partir do produto informado no upload.
-type regraLookup interface {
-	ListarRegrasAtivas(ctx context.Context) ([]model.RegraContabil, error)
-}
-
 type PosicaoCarteiraService struct {
-	repo   posicaoCarteiraRepoFull
-	regras regraLookup
+	repo posicaoCarteiraRepoFull
 }
 
-func NewPosicaoCarteiraService(repo posicaoCarteiraRepoFull, regras regraLookup) *PosicaoCarteiraService {
-	return &PosicaoCarteiraService{repo: repo, regras: regras}
-}
-
-// ResolverCampoData retorna o nome do campo da posição que contém a data, conforme
-// configurado (campo_data) na regra do produto informado. Retorna "" se não houver
-// regra/produto correspondente com campo_data definido — nesse caso o chamador deve
-// recorrer à detecção automática.
-func (s *PosicaoCarteiraService) ResolverCampoData(ctx context.Context, produto string) (string, error) {
-	if s.regras == nil {
-		return "", nil
-	}
-	regras, err := s.regras.ListarRegrasAtivas(ctx)
-	if err != nil {
-		return "", err
-	}
-	produto = strings.TrimSpace(produto)
-	// 1ª preferência: regra cujo produto casa e que define campo_data.
-	for _, r := range regras {
-		if strings.TrimSpace(r.CampoData) == "" {
-			continue
-		}
-		if produtoCasaComRegra(r.CodigoProdutoCorporativo, produto) {
-			return strings.TrimSpace(r.CampoData), nil
-		}
-	}
-	return "", nil
-}
-
-// produtoCasaComRegra verifica se o produto informado está na lista de produtos da
-// regra (separada por vírgula). Regra sem produto casa com qualquer um.
-func produtoCasaComRegra(produtosRegra, produto string) bool {
-	if strings.TrimSpace(produtosRegra) == "" {
-		return true
-	}
-	for _, p := range strings.Split(produtosRegra, ",") {
-		if strings.TrimSpace(p) == produto {
-			return true
-		}
-	}
-	return false
+func NewPosicaoCarteiraService(repo posicaoCarteiraRepoFull) *PosicaoCarteiraService {
+	return &PosicaoCarteiraService{repo: repo}
 }
 
 func (s *PosicaoCarteiraService) ListarPorData(ctx context.Context, data time.Time) ([]model.PosicaoCarteira, error) {

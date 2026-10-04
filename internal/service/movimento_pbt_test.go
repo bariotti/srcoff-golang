@@ -338,7 +338,7 @@ func TestP3_LancamentosCorrespondemCondicoesSatisfeitas(t *testing.T) {
 			movRepo := &fakeMovimentoRepo{}
 
 			svc := NewMovimentoContabilService(posRepo, regraRepo, movRepo, eval)
-			err := svc.GerarMovimento(context.Background(), baseDate)
+			_, err := svc.GerarMovimento(context.Background(), baseDate)
 			if err != nil && expected == 0 {
 				// No posicoes for date or no lancamentos — acceptable if posicoes exist
 				// but GerarMovimento returns error only when posicoes is empty
@@ -425,7 +425,7 @@ func TestP4_CamposLancamentoPreenchidosCorretamente(t *testing.T) {
 			movRepo := &fakeMovimentoRepo{}
 
 			svc := NewMovimentoContabilService(posRepo, regraRepo, movRepo, eval)
-			if err := svc.GerarMovimento(context.Background(), baseDate); err != nil {
+			if _, err := svc.GerarMovimento(context.Background(), baseDate); err != nil {
 				return false
 			}
 
@@ -557,7 +557,7 @@ func TestP5_VersaoLoteIncrementadaMonotonicamente(t *testing.T) {
 			svc := NewMovimentoContabilService(posRepo, regraRepo, movRepo, eval)
 
 			for i := 0; i < n; i++ {
-				if err := svc.GerarMovimento(context.Background(), baseDate); err != nil {
+				if _, err := svc.GerarMovimento(context.Background(), baseDate); err != nil {
 					return false
 				}
 			}
@@ -625,14 +625,14 @@ func TestVersaoIndependentePorCombinacao(t *testing.T) {
 
 	ctx := context.Background()
 	// NDF processado duas vezes → versões 1 e 2 para NDF.
-	if err := svc.GerarMovimentoEscopo(ctx, baseDate, "NDF", "Posição"); err != nil {
+	if _, err := svc.GerarMovimentoEscopo(ctx, baseDate, "NDF", "Posição"); err != nil {
 		t.Fatal(err)
 	}
-	if err := svc.GerarMovimentoEscopo(ctx, baseDate, "NDF", "Posição"); err != nil {
+	if _, err := svc.GerarMovimentoEscopo(ctx, baseDate, "NDF", "Posição"); err != nil {
 		t.Fatal(err)
 	}
 	// SWAP processado pela primeira vez → deve ser versão 1 (e não 3).
-	if err := svc.GerarMovimentoEscopo(ctx, baseDate, "SWAP", "Posição"); err != nil {
+	if _, err := svc.GerarMovimentoEscopo(ctx, baseDate, "SWAP", "Posição"); err != nil {
 		t.Fatal(err)
 	}
 

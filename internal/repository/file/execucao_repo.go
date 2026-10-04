@@ -43,6 +43,26 @@ func (r *ExecucaoRepo) RegistrarExecucao(_ context.Context, e model.MovimentoExe
 	return r.st.save(mantidos)
 }
 
+// DatasExecutadas retorna as datas distintas com execução para (produto, domínio).
+func (r *ExecucaoRepo) DatasExecutadas(_ context.Context, produto, dominio string) ([]time.Time, error) {
+	all, err := r.st.load()
+	if err != nil {
+		return nil, err
+	}
+	vistas := map[string]bool{}
+	var datas []time.Time
+	for _, e := range all {
+		if e.Produto == produto && e.Dominio == dominio {
+			k := e.DataLote.Format("2006-01-02")
+			if !vistas[k] {
+				vistas[k] = true
+				datas = append(datas, e.DataLote)
+			}
+		}
+	}
+	return datas, nil
+}
+
 func (r *ExecucaoRepo) ListarPorData(_ context.Context, data time.Time) ([]model.MovimentoExecucao, error) {
 	all, err := r.st.load()
 	if err != nil {

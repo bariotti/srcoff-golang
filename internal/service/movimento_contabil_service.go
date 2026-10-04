@@ -37,9 +37,17 @@ type inconsistenciaRepoWriter interface {
 	SubstituirPorEscopo(ctx context.Context, data time.Time, combos []model.ProdutoDominio, itens []model.InconsistenciaProcessamento) error
 }
 
-// execucaoRepoWriter registra a execução do contábil por combinação.
+// execucaoRepoWriter registra a execução do contábil por combinação e consulta as
+// datas já executadas por produto/domínio (base da validação de D-1).
 type execucaoRepoWriter interface {
 	RegistrarExecucao(ctx context.Context, e model.MovimentoExecucao) error
+	DatasExecutadas(ctx context.Context, produto, dominio string) ([]time.Time, error)
+}
+
+// padraoFlagLookup consulta a configuração dos padrões de arquivo (ex: obrigatoriedade
+// do movimento de D-1) por produto/domínio.
+type padraoFlagLookup interface {
+	Listar(ctx context.Context) ([]model.PadraoArquivo, error)
 }
 
 // MovimentoContabilService implementa a lógica de geração e consulta de movimentos contábeis.
@@ -50,6 +58,7 @@ type MovimentoContabilService struct {
 	evaluator          evaluator.Evaluator
 	inconsistenciaRepo inconsistenciaRepoWriter
 	execucaoRepo       execucaoRepoWriter
+	padraoRepo         padraoFlagLookup
 }
 
 // NewMovimentoContabilService cria uma nova instância do serviço com as dependências injetadas.
@@ -81,9 +90,63 @@ func (s *MovimentoContabilService) ComExecucaoRepo(r execucaoRepoWriter) *Movime
 	return s
 }
 
+// ComPadraoRepo injeta o lookup dos padrões de arquivo (opcional) — usado para saber
+// se a validação de obrigatoriedade do movimento de D-1 se aplica a cada combinação.
+func (s *MovimentoContabilService) ComPadraoRepo(r padraoFlagLookup) *MovimentoContabilService {
+	s.padraoRepo = r
+	return s
+}
+
+// exigeMovimentoD1 informa se a combinação (produto, domínio) exige a validação de
+// movimento de D-1 útil, conforme o padrão de arquivo cadastrado. Default: true
+// (quando não há lookup de padrão ou nenhum padrão casa com a combinação).
+func (s *MovimentoContabilService) exigeMovimentoD1(ctx context.Context, produto, dominio string) bool {
+	if s.padraoRepo == nil {
+		return true
+	}
+	padroes, err := s.padraoRepo.Listar(ctx)
+	if err != nil {
+		return true
+	}
+	for _, p := range padroes {
+		if strings.TrimSpace(p.Produto) == produto && strings.TrimSpace(p.Dominio) == dominio {
+			return p.ExigeMovimentoD1()
+		}
+	}
+	return true
+}
+
+// dataEstornoPorCombo resolve a data de origem do estorno para uma combinação:
+//   - exige D-1 (padrão): o dia útil anterior à data de processamento;
+//   - não exige: a maior data anterior à de processamento com contábil executado.
+//
+// Retorna ok=false quando não há data de origem (nenhuma execução anterior).
+func (s *MovimentoContabilService) dataEstornoPorCombo(ctx context.Context, data time.Time, produto, dominio string, exigeD1 bool) (time.Time, bool) {
+	if exigeD1 {
+		return DiaUtilAnterior(data), true
+	}
+	if s.execucaoRepo == nil {
+		return time.Time{}, false
+	}
+	datas, err := s.execucaoRepo.DatasExecutadas(ctx, produto, dominio)
+	if err != nil {
+		return time.Time{}, false
+	}
+	// Maior data estritamente anterior à data de processamento.
+	var melhor time.Time
+	achou := false
+	for _, d := range datas {
+		if d.Before(data) && (!achou || d.After(melhor)) {
+			melhor = d
+			achou = true
+		}
+	}
+	return melhor, achou
+}
+
 // GerarMovimento processa toda a data (todas as combinações). Mantido para
 // compatibilidade; delega para GerarMovimentoEscopo sem filtro.
-func (s *MovimentoContabilService) GerarMovimento(ctx context.Context, data time.Time) error {
+func (s *MovimentoContabilService) GerarMovimento(ctx context.Context, data time.Time) ([]model.ProdutoDominio, error) {
 	return s.GerarMovimentoEscopo(ctx, data, "", "")
 }
 
@@ -91,16 +154,18 @@ func (s *MovimentoContabilService) GerarMovimento(ctx context.Context, data time
 // Produto e/ou Domínio informados (vazio = sem filtro naquela dimensão). Avalia as
 // regras ativas do escopo, gera lançamentos e estornos de D-1 (também do escopo),
 // grava produto/domínio em cada lançamento e registra a execução por combinação.
-func (s *MovimentoContabilService) GerarMovimentoEscopo(ctx context.Context, data time.Time, produtoFiltro, dominioFiltro string) error {
+// Retorna a lista de combinações (produto, domínio) BLOQUEADAS pela obrigatoriedade de
+// movimento de D-1 útil (não processadas); as demais são processadas normalmente.
+func (s *MovimentoContabilService) GerarMovimentoEscopo(ctx context.Context, data time.Time, produtoFiltro, dominioFiltro string) ([]model.ProdutoDominio, error) {
 	// 0. O contábil só pode ser processado em dias úteis.
 	if !EhDiaUtil(data) {
-		return fmt.Errorf("data %s não é dia útil (%s); o contábil só pode ser processado em dias úteis", data.Format("2006-01-02"), DescricaoDiasNaoUteis)
+		return nil, fmt.Errorf("data %s não é dia útil (%s); o contábil só pode ser processado em dias úteis", data.Format("2006-01-02"), DescricaoDiasNaoUteis)
 	}
 
 	// 1. Buscar posição com versão máxima para a data
 	todasPosicoes, err := s.posicaoRepo.BuscarPorDataEVersaoMaxima(ctx, data)
 	if err != nil {
-		return fmt.Errorf("erro ao buscar posicao_carteira: %w", err)
+		return nil, fmt.Errorf("erro ao buscar posicao_carteira: %w", err)
 	}
 
 	// Filtrar posições pelo escopo (produto/domínio).
@@ -118,13 +183,13 @@ func (s *MovimentoContabilService) GerarMovimentoEscopo(ctx context.Context, dat
 	}
 
 	if len(posicoes) == 0 {
-		return fmt.Errorf("nenhum registro de posicao_carteira encontrado para a data %s no escopo informado", data.Format("2006-01-02"))
+		return nil, fmt.Errorf("nenhum registro de posicao_carteira encontrado para a data %s no escopo informado", data.Format("2006-01-02"))
 	}
 
 	// 2. Carregar todas as regras e condições ativas
 	regras, err := s.regraRepo.ListarRegrasAtivas(ctx)
 	if err != nil {
-		return fmt.Errorf("erro ao carregar regras contábeis: %w", err)
+		return nil, fmt.Errorf("erro ao carregar regras contábeis: %w", err)
 	}
 
 	// 3. Gerar lançamentos de D em memória
@@ -209,7 +274,62 @@ func (s *MovimentoContabilService) GerarMovimentoEscopo(ctx context.Context, dat
 		}
 	}
 
-	// Combinações (produto, domínio) processadas neste escopo.
+	// 3b. Obrigatoriedade de movimento de D-1 útil, por combinação. Aplica-se apenas às
+	// combinações cujo padrão exige E que já tenham movimento em alguma data; nesse caso,
+	// exige que exista movimento no dia útil anterior à data de processamento.
+	bloqueados := map[string]bool{}
+	var bloqueios []model.ProdutoDominio
+	if s.execucaoRepo != nil {
+		dUtilAnterior := DiaUtilAnterior(data).Format("2006-01-02")
+		for _, c := range combosSet {
+			if !s.exigeMovimentoD1(ctx, c.Produto, c.Dominio) {
+				continue
+			}
+			datas, err := s.execucaoRepo.DatasExecutadas(ctx, c.Produto, c.Dominio)
+			if err != nil {
+				return nil, fmt.Errorf("erro ao verificar obrigatoriedade de D-1: %w", err)
+			}
+			if len(datas) == 0 {
+				continue // primeira execução do produto/domínio: permitido
+			}
+			temD1 := false
+			for _, d := range datas {
+				if d.Format("2006-01-02") == dUtilAnterior {
+					temD1 = true
+					break
+				}
+			}
+			if !temD1 {
+				bloqueados[c.Produto+"\x00"+c.Dominio] = true
+				bloqueios = append(bloqueios, c)
+			}
+		}
+	}
+	// Remove as combinações bloqueadas do processamento (lançamentos, inconsistências e combos).
+	if len(bloqueados) > 0 {
+		for k := range bloqueados {
+			delete(combosSet, k)
+		}
+		lancFiltrados := lancamentos[:0]
+		for _, l := range lancamentos {
+			if !bloqueados[l.Produto+"\x00"+l.Dominio] {
+				lancFiltrados = append(lancFiltrados, l)
+			}
+		}
+		lancamentos = lancFiltrados
+		incFiltradas := inconsistencias[:0]
+		for _, in := range inconsistencias {
+			if !bloqueados[in.Produto+"\x00"+in.Dominio] {
+				incFiltradas = append(incFiltradas, in)
+			}
+		}
+		inconsistencias = incFiltradas
+		for _, b := range bloqueios {
+			log.Printf("[movimento] bloqueio D-1: %s/%s não processado em %s (falta movimento do dia útil anterior)", b.Produto, b.Dominio, data.Format("2006-01-02"))
+		}
+	}
+
+	// Combinações (produto, domínio) efetivamente processadas (sem as bloqueadas).
 	var combos []model.ProdutoDominio
 	for _, c := range combosSet {
 		combos = append(combos, c)
@@ -225,53 +345,60 @@ func (s *MovimentoContabilService) GerarMovimentoEscopo(ctx context.Context, dat
 		log.Printf("[movimento] %d inconsistência(s) detectada(s) para %s (lançamentos não gerados)", len(inconsistencias), data.Format("2006-01-02"))
 	}
 
-	// 4. Gerar estornos do dia útil anterior em memória, restritos ao escopo (produto/domínio).
-	dMenos1 := DiaUtilAnterior(data)
-	lancamentosD1, err := s.movimentoRepo.BuscarPorDataEIndicador(ctx, dMenos1, false)
-	if err != nil {
-		return fmt.Errorf("erro ao buscar lançamentos de D-1: %w", err)
-	}
-
+	// 4. Gerar estornos por combinação. A data de origem depende da obrigatoriedade de
+	// D-1 do padrão: exige D-1 → dia útil anterior; não exige → maior data anterior com
+	// movimento. Combinações sem data de origem (nenhuma execução anterior) não estornam.
 	var estornos []model.LancamentoContabil
-	if len(lancamentosD1) > 0 {
-		regras, err := s.regraRepo.ListarRegrasAtivas(ctx)
-		if err != nil {
-			return fmt.Errorf("erro ao carregar regras para estorno: %w", err)
-		}
+	if len(combosSet) > 0 {
 		regraPostaReverte := make(map[int64]bool, len(regras))
 		for _, reg := range regras {
 			regraPostaReverte[reg.ID] = reg.PostaReverte
 		}
-
-		for _, l1 := range lancamentosD1 {
-			// Restringe o estorno ao escopo processado.
-			if produtoFiltro != "" && l1.Produto != produtoFiltro {
+		// Resolve a data de origem do estorno por combinação e agrupa as datas necessárias.
+		dataOrigemCombo := map[string]time.Time{}
+		datasNecessarias := map[string]time.Time{}
+		for _, c := range combosSet {
+			exigeD1 := s.exigeMovimentoD1(ctx, c.Produto, c.Dominio)
+			dOrig, ok := s.dataEstornoPorCombo(ctx, data, c.Produto, c.Dominio, exigeD1)
+			if !ok {
 				continue
 			}
-			if dominioFiltro != "" && l1.Dominio != dominioFiltro {
-				continue
-			}
-			if pr, found := regraPostaReverte[l1.IDRegraContabil]; found && !pr {
-				continue
-			}
-			estornos = append(estornos, model.LancamentoContabil{
-				DataLoteContabil:          data,
-				CodigoIdentificadorBoleto: l1.CodigoIdentificadorBoleto,
-				ValorLancamentoContabil:   l1.ValorLancamentoContabil,
-				MoedaLancamentoContabil:   l1.MoedaLancamentoContabil,
-				ContaDebito:               l1.ContaCredito,
-				ContaCredito:              l1.ContaDebito,
-				Produto:                   l1.Produto,
-				Dominio:                   l1.Dominio,
-				IndicadorReversao:         true,
-				DescricaoRegraContabil:    l1.DescricaoRegraContabil,
-				DescricaoCondicaoContabil: l1.DescricaoCondicaoContabil,
-				IDRegraContabil:           l1.IDRegraContabil,
-			})
+			dataOrigemCombo[c.Produto+"\x00"+c.Dominio] = dOrig
+			datasNecessarias[dOrig.Format("2006-01-02")] = dOrig
 		}
-		// Garante que combinações vindas do estorno (sem posição hoje) também sejam registradas.
-		for _, e := range estornos {
-			combosSet[e.Produto+"\x00"+e.Dominio] = model.ProdutoDominio{Produto: e.Produto, Dominio: e.Dominio}
+		// Busca os lançamentos normais vigentes de cada data de origem (cache por data).
+		lancPorData := map[string][]model.LancamentoContabil{}
+		for ds, d := range datasNecessarias {
+			ls, err := s.movimentoRepo.BuscarPorDataEIndicador(ctx, d, false)
+			if err != nil {
+				return nil, fmt.Errorf("erro ao buscar lançamentos para estorno: %w", err)
+			}
+			lancPorData[ds] = ls
+		}
+		// Gera os estornos por combinação, invertendo as contas.
+		for comboKey, dOrig := range dataOrigemCombo {
+			for _, l1 := range lancPorData[dOrig.Format("2006-01-02")] {
+				if l1.Produto+"\x00"+l1.Dominio != comboKey {
+					continue
+				}
+				if pr, found := regraPostaReverte[l1.IDRegraContabil]; found && !pr {
+					continue
+				}
+				estornos = append(estornos, model.LancamentoContabil{
+					DataLoteContabil:          data,
+					CodigoIdentificadorBoleto: l1.CodigoIdentificadorBoleto,
+					ValorLancamentoContabil:   l1.ValorLancamentoContabil,
+					MoedaLancamentoContabil:   l1.MoedaLancamentoContabil,
+					ContaDebito:               l1.ContaCredito,
+					ContaCredito:              l1.ContaDebito,
+					Produto:                   l1.Produto,
+					Dominio:                   l1.Dominio,
+					IndicadorReversao:         true,
+					DescricaoRegraContabil:    l1.DescricaoRegraContabil,
+					DescricaoCondicaoContabil: l1.DescricaoCondicaoContabil,
+					IDRegraContabil:           l1.IDRegraContabil,
+				})
+			}
 		}
 	}
 
@@ -283,7 +410,7 @@ func (s *MovimentoContabilService) GerarMovimentoEscopo(ctx context.Context, dat
 	for _, ind := range []bool{false, true} {
 		vigentes, err := s.movimentoRepo.BuscarPorDataEIndicador(ctx, data, ind)
 		if err != nil {
-			return fmt.Errorf("erro ao obter versão vigente: %w", err)
+			return nil, fmt.Errorf("erro ao obter versão vigente: %w", err)
 		}
 		for _, l := range vigentes {
 			k := l.Produto + "\x00" + l.Dominio
@@ -307,7 +434,7 @@ func (s *MovimentoContabilService) GerarMovimentoEscopo(ctx context.Context, dat
 	// 6. Persistir movimento + estornos em um único BulkInsert
 	todos := append(lancamentos, estornos...)
 	if err := s.movimentoRepo.BulkInsert(ctx, todos); err != nil {
-		return fmt.Errorf("erro ao persistir lançamentos: %w", err)
+		return nil, fmt.Errorf("erro ao persistir lançamentos: %w", err)
 	}
 
 	// Contagem por combinação (produto, domínio), usada no registro de execução e no log.
@@ -360,7 +487,7 @@ func (s *MovimentoContabilService) GerarMovimentoEscopo(ctx context.Context, dat
 
 	log.Printf("[movimento+estorno] persistidos %d lançamentos e %d estornos para %s (escopo produto=%q dominio=%q) [%s]",
 		len(lancamentos), len(estornos), data.Format("2006-01-02"), produtoFiltro, dominioFiltro, strings.Join(detalhes, "; "))
-	return nil
+	return bloqueios, nil
 }
 
 // ConsultarLancamentos retorna os lançamentos paginados para a data informada.

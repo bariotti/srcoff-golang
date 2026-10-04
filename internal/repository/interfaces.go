@@ -20,6 +20,7 @@ type RegraContabilRepository interface {
 	ListarRegrasAtivas(ctx context.Context) ([]model.RegraContabil, error)
 	CriarRegra(ctx context.Context, regra model.RegraContabil) (int64, error)
 	EditarRegra(ctx context.Context, regra model.RegraContabil) error
+	ExcluirRegra(ctx context.Context, id int64) error
 	ListarCondicoes(ctx context.Context, idRegra int64) ([]model.CondicaoRegra, error)
 	CriarCondicao(ctx context.Context, condicao model.CondicaoRegra) (int64, error)
 	EditarCondicao(ctx context.Context, condicao model.CondicaoRegra) error
@@ -59,6 +60,9 @@ type ConfiguracaoRepository interface {
 type ExecucaoRepository interface {
 	RegistrarExecucao(ctx context.Context, e model.MovimentoExecucao) error
 	ListarPorData(ctx context.Context, data time.Time) ([]model.MovimentoExecucao, error)
+	// DatasExecutadas retorna as datas distintas com contábil executado para o par
+	// (produto, domínio), em ordem crescente.
+	DatasExecutadas(ctx context.Context, produto, dominio string) ([]time.Time, error)
 }
 
 // NotificacaoRepository persiste as notificações de eventos automáticos.

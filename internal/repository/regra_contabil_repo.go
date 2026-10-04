@@ -18,7 +18,7 @@ func NewRegraContabilRepo(db *sql.DB) *RegraContabilRepo {
 }
 
 func (r *RegraContabilRepo) ListarRegrasAtivas(ctx context.Context) ([]model.RegraContabil, error) {
-	rows, err := r.db.QueryContext(ctx, "SELECT id, descricao, codigo_produto_corporativo, ISNULL(dominio, ''), ISNULL(campo_produto, ''), ISNULL(campo_data, ''), ISNULL(pre_condicao, ''), ativo, ISNULL(posta_reverte, 1) FROM regra_contabil WHERE ativo = 1")
+	rows, err := r.db.QueryContext(ctx, "SELECT id, descricao, codigo_produto_corporativo, ISNULL(dominio, ''), ISNULL(campo_produto, ''), ISNULL(pre_condicao, ''), ativo, ISNULL(posta_reverte, 1) FROM regra_contabil WHERE ativo = 1")
 	if err != nil {
 		return nil, err
 	}
@@ -27,7 +27,7 @@ func (r *RegraContabilRepo) ListarRegrasAtivas(ctx context.Context) ([]model.Reg
 	var regras []model.RegraContabil
 	for rows.Next() {
 		var reg model.RegraContabil
-		if err := rows.Scan(&reg.ID, &reg.Descricao, &reg.CodigoProdutoCorporativo, &reg.Dominio, &reg.CampoProduto, &reg.CampoData, &reg.PreCondicao, &reg.Ativo, &reg.PostaReverte); err != nil {
+		if err := rows.Scan(&reg.ID, &reg.Descricao, &reg.CodigoProdutoCorporativo, &reg.Dominio, &reg.CampoProduto, &reg.PreCondicao, &reg.Ativo, &reg.PostaReverte); err != nil {
 			return nil, err
 		}
 		regras = append(regras, reg)
@@ -58,7 +58,7 @@ func (r *RegraContabilRepo) CriarRegra(ctx context.Context, regra model.RegraCon
 		postaReverte = 0
 	}
 	err := r.db.QueryRowContext(ctx,
-		"INSERT INTO regra_contabil (descricao, codigo_produto_corporativo, dominio, campo_produto, campo_data, pre_condicao, ativo, posta_reverte) VALUES ('"+esc(regra.Descricao)+"', '"+esc(regra.CodigoProdutoCorporativo)+"', '"+esc(regra.Dominio)+"', '"+esc(regra.CampoProduto)+"', '"+esc(regra.CampoData)+"', '"+esc(regra.PreCondicao)+"', 1, "+fmt.Sprintf("%d", postaReverte)+"); SELECT SCOPE_IDENTITY()",
+		"INSERT INTO regra_contabil (descricao, codigo_produto_corporativo, dominio, campo_produto, pre_condicao, ativo, posta_reverte) VALUES ('"+esc(regra.Descricao)+"', '"+esc(regra.CodigoProdutoCorporativo)+"', '"+esc(regra.Dominio)+"', '"+esc(regra.CampoProduto)+"', '"+esc(regra.PreCondicao)+"', 1, "+fmt.Sprintf("%d", postaReverte)+"); SELECT SCOPE_IDENTITY()",
 	).Scan(&id)
 	if err != nil {
 		return 0, err
@@ -76,8 +76,17 @@ func (r *RegraContabilRepo) EditarRegra(ctx context.Context, regra model.RegraCo
 		postaReverte = 1
 	}
 	_, err := r.db.ExecContext(ctx,
-		fmt.Sprintf("UPDATE regra_contabil SET descricao = '%s', codigo_produto_corporativo = '%s', dominio = '%s', campo_produto = '%s', campo_data = '%s', pre_condicao = '%s', ativo = %d, posta_reverte = %d WHERE id = %d",
-			esc(regra.Descricao), esc(regra.CodigoProdutoCorporativo), esc(regra.Dominio), esc(regra.CampoProduto), esc(regra.CampoData), esc(regra.PreCondicao), ativo, postaReverte, regra.ID),
+		fmt.Sprintf("UPDATE regra_contabil SET descricao = '%s', codigo_produto_corporativo = '%s', dominio = '%s', campo_produto = '%s', pre_condicao = '%s', ativo = %d, posta_reverte = %d WHERE id = %d",
+			esc(regra.Descricao), esc(regra.CodigoProdutoCorporativo), esc(regra.Dominio), esc(regra.CampoProduto), esc(regra.PreCondicao), ativo, postaReverte, regra.ID),
+	)
+	return err
+}
+
+// ExcluirRegra faz a exclusão lógica da regra (ativo = 0); as condições permanecem
+// mas a regra some da listagem (ListarRegrasAtivas filtra ativo = 1).
+func (r *RegraContabilRepo) ExcluirRegra(ctx context.Context, id int64) error {
+	_, err := r.db.ExecContext(ctx,
+		fmt.Sprintf("UPDATE regra_contabil SET ativo = 0 WHERE id = %d", id),
 	)
 	return err
 }
@@ -119,13 +128,10 @@ func (r *RegraContabilRepo) CriarCondicao(ctx context.Context, condicao model.Co
 }
 
 func (r *RegraContabilRepo) EditarCondicao(ctx context.Context, condicao model.CondicaoRegra) error {
-	ativo := 0
-	if condicao.Ativo {
-		ativo = 1
-	}
+	// Ativo é preservado: editar atualiza os campos, não (des)ativa a condição.
 	_, err := r.db.ExecContext(ctx,
-		fmt.Sprintf("UPDATE condicao_regra SET condicao = '%s', conta_debito = '%s', conta_credito = '%s', campo_valor = '%s', campo_moeda = '%s', campo_boleto = '%s', ativo = %d WHERE id = %d",
-			esc(condicao.Condicao), esc(condicao.ContaDebito), esc(condicao.ContaCredito), esc(condicao.CampoValor), esc(condicao.CampoMoeda), esc(condicao.CampoBoleto), ativo, condicao.ID),
+		fmt.Sprintf("UPDATE condicao_regra SET condicao = '%s', conta_debito = '%s', conta_credito = '%s', campo_valor = '%s', campo_moeda = '%s', campo_boleto = '%s' WHERE id = %d",
+			esc(condicao.Condicao), esc(condicao.ContaDebito), esc(condicao.ContaCredito), esc(condicao.CampoValor), esc(condicao.CampoMoeda), esc(condicao.CampoBoleto), condicao.ID),
 	)
 	return err
 }

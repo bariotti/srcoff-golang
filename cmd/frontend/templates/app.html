@@ -33,6 +33,23 @@
     }
     .card-header:not([class*="bg-"]) i.bi { color: var(--srcoff-accent); }
     .card-header .subtitulo { display: block; font-weight: 400; font-size: 0.75rem; color: #6c757d; margin-top: 1px; }
+    /* Calendário de execução do contábil */
+    .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; max-width: 520px; }
+    .cal-head { text-align: center; font-size: 0.72rem; font-weight: 600; color: #6c757d; padding: 2px 0; }
+    .cal-cell { min-height: 58px; display: flex; flex-direction: column; align-items: center; justify-content: center;
+      gap: 1px; padding: 3px 2px; font-size: 0.82rem; border-radius: 6px; border: 1px solid #e9ecef; }
+    .cal-cell.cal-empty { border: none; min-height: 0; }
+    .cal-dia-num { line-height: 1; font-weight: 500; }
+    .cal-tag { font-size: 0.5rem; line-height: 1.05; text-align: center; font-weight: 700; text-transform: uppercase; letter-spacing: .2px; }
+    .cal-cell.cal-hoje { box-shadow: 0 0 0 2px #0d6efd inset; }
+    .cal-completo { background: #198754; color: #fff; border-color: #198754; }
+    .cal-parcial { background: #ffc107; color: #212529; border-color: #ffc107; }
+    .cal-nenhum { background: #dc3545; color: #fff; border-color: #dc3545; }
+    .cal-nao-util { background: #e9ecef; color: #adb5bd; }
+    .cal-fut { background: #fff; color: #adb5bd; border-style: dashed; }
+    .cal-legenda { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 12px; font-size: 0.8rem; color: #495057; }
+    .cal-legenda span { display: inline-flex; align-items: center; gap: 6px; }
+    .cal-dot { width: 14px; height: 14px; border-radius: 4px; display: inline-block; border: 1px solid #e9ecef; }
   </style>
 </head>
 <body>
@@ -123,6 +140,33 @@
                 <div id="op-status-resultado" class="mt-3"></div>
               </div>
             </div>
+          </div>
+        </div>
+
+        <!-- Calendário de Execução do Contábil -->
+        <div class="card shadow-sm mt-4">
+          <div class="card-header"><i class="bi bi-calendar3 me-2"></i>Calendário de Execução do Contábil<span class="subtitulo">visão agregada de todos os Produtos/Domínios</span></div>
+          <div class="card-body">
+            <p class="text-muted small">Cada dia é colorido conforme a execução do contábil de <strong>todos</strong> os Produtos/Domínios (padrões de arquivo): <strong>verde</strong> = todos executados, <strong>amarelo</strong> = falta algum, <strong>vermelho</strong> = nenhum executado.</p>
+            <div class="row g-2 align-items-end">
+              <div class="col-auto">
+                <label class="form-label form-label-sm mb-0">Mês</label>
+                <select id="op-cal-mes" class="form-select form-select-sm" onchange="consultarCalendario()">
+                  <option value="1">Janeiro</option><option value="2">Fevereiro</option><option value="3">Março</option>
+                  <option value="4">Abril</option><option value="5">Maio</option><option value="6">Junho</option>
+                  <option value="7">Julho</option><option value="8">Agosto</option><option value="9">Setembro</option>
+                  <option value="10">Outubro</option><option value="11">Novembro</option><option value="12">Dezembro</option>
+                </select>
+              </div>
+              <div class="col-auto">
+                <label class="form-label form-label-sm mb-0">Ano</label>
+                <input type="number" id="op-cal-ano" class="form-control form-control-sm" style="width:100px" min="1900" max="3000" onchange="consultarCalendario()">
+              </div>
+              <div class="col-auto">
+                <button class="btn btn-outline-primary btn-sm" onclick="consultarCalendario()"><i class="bi bi-arrow-clockwise me-1"></i>Atualizar</button>
+              </div>
+            </div>
+            <div id="op-cal-resultado" class="mt-3"></div>
           </div>
         </div>
 
@@ -392,7 +436,15 @@
               <input type="text" id="r-filtro" class="form-control form-control-sm" style="max-width:300px"
                 placeholder="Pesquisar por descrição, produto, conta, condição..." oninput="filtrarRegras()">
             </div>
-            <button class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#modalNovaRegra"><i class="bi bi-plus me-1"></i>Nova Regra</button>
+            <div class="d-flex gap-2 align-items-center">
+              <button class="btn btn-sm btn-outline-secondary" onclick="exportarRegras()" title="Exportar regras e condições para CSV"><i class="bi bi-download me-1"></i>Exportar CSV</button>
+              <div class="btn-group">
+                <button class="btn btn-sm btn-outline-secondary" onclick="document.getElementById('r-import-file').click()" title="Importar CSV para criar/atualizar regras e condições em lote"><i class="bi bi-upload me-1"></i>Importar CSV</button>
+                <button class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#modalAjudaCSV" title="Como preencher o CSV"><i class="bi bi-question-circle"></i></button>
+              </div>
+              <input type="file" id="r-import-file" accept=".csv" style="display:none" onchange="importarRegras(this)">
+              <button class="btn btn-sm btn-primary" onclick="abrirNovaRegra()"><i class="bi bi-plus me-1"></i>Nova Regra</button>
+            </div>
           </div>
           <div class="card-body p-0">
             <div id="r-lista"></div>
@@ -445,6 +497,9 @@
                   <div class="col-6"><label class="form-label form-label-sm mb-0">Domínio</label><select id="param-padrao-dominio" class="form-select form-select-sm"></select></div>
                   <div class="col-12"><label class="form-label form-label-sm mb-0">Coluna da Data Base da Posição <span class="text-danger">*</span></label>
                     <input type="text" id="param-padrao-coluna-data" class="form-control form-control-sm" placeholder="nome da coluna do arquivo (ex: data_posicao_carteira)"></div>
+                  <div class="col-12"><label class="form-label form-label-sm mb-0">Coluna do Número do Boleto <span class="text-danger">*</span></label>
+                    <input type="text" id="param-padrao-coluna-boleto" class="form-control form-control-sm" placeholder="nome da coluna do arquivo (ex: codigo_identificador_boleto)">
+                    <small class="text-muted">Importada sempre como texto (preserva zeros à esquerda e identificadores longos).</small></div>
                   <div class="col-12"><label class="form-label form-label-sm mb-0">Formato de Data <span class="text-danger">*</span></label>
                     <select id="param-padrao-formato" class="form-select form-select-sm">
                       <option value="">Selecione…</option>
@@ -473,6 +528,10 @@
                     <select id="param-padrao-milhar" class="form-select form-select-sm">
                       <option value="">nenhum</option><option value=".">. (ponto)</option><option value=",">, (vírgula)</option>
                     </select></div>
+                  <div class="col-12 form-check ms-1">
+                    <input type="checkbox" class="form-check-input" id="param-padrao-obrig-d1" checked>
+                    <label class="form-check-label form-label-sm" for="param-padrao-obrig-d1">Obrigatoriedade Movimento Contábil D-1 <small class="text-muted">(se marcado, o contábil exige o movimento de D-1 útil)</small></label>
+                  </div>
                   <div class="col-12"><button class="btn btn-primary btn-sm w-100" onclick="adicionarPadrao()"><i class="bi bi-plus"></i> Adicionar padrão</button></div>
                 </div>
                 <ul class="list-group list-group-flush" id="param-padrao-lista"></ul>
@@ -529,11 +588,62 @@
   </div>
 </div>
 
+<!-- Modal Ajuda: Como preencher o CSV de regras/condições -->
+<div class="modal fade" id="modalAjudaCSV" tabindex="-1">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="bi bi-question-circle me-2"></i>Como preencher o CSV (Exportar / Importar)</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p>O <strong>Exportar CSV</strong> gera um arquivo (separador <code>;</code>, codificação UTF-8) com <strong>uma linha por condição</strong> — os dados da regra se repetem nas linhas das suas condições. O <strong>Importar CSV</strong> lê esse mesmo formato para <strong>criar</strong> e <strong>atualizar</strong> regras e condições em lote.</p>
+
+        <h6 class="mt-3">O que a coluna <code>regra_id</code> faz</h6>
+        <table class="table table-sm table-bordered align-middle">
+          <thead class="table-light"><tr><th>Valor em <code>regra_id</code></th><th>Efeito</th></tr></thead>
+          <tbody>
+            <tr><td><strong>número existente</strong> (ex.: <code>12</code>)</td><td>Atualiza a regra com esse id (se algum campo mudou).</td></tr>
+            <tr><td><strong>número inexistente</strong></td><td>Erro — provável engano de digitação. Nada é criado.</td></tr>
+            <tr><td><strong>texto/rótulo</strong> (ex.: <code>NOVA-1</code>)</td><td><strong>Cria</strong> uma regra nova. Linhas com o <em>mesmo rótulo</em> viram <strong>uma</strong> regra com várias condições.</td></tr>
+            <tr><td><strong>em branco</strong></td><td><strong>Cria</strong> uma regra nova isolada (uma linha = uma regra + uma condição).</td></tr>
+          </tbody>
+        </table>
+
+        <h6 class="mt-3">O que a coluna <code>condicao_id</code> faz</h6>
+        <ul>
+          <li><strong>número existente</strong> → atualiza a condição (se algum campo mudou).</li>
+          <li><strong>em branco</strong> + campos de condição preenchidos (<code>condicao</code>, contas, campos) → <strong>cria</strong> uma condição nova (na regra da linha — existente ou nova).</li>
+          <li><strong>em branco</strong> e sem campos de condição → a linha serve só para a regra (sem condição).</li>
+        </ul>
+
+        <h6 class="mt-3">Regras importantes</h6>
+        <ul>
+          <li>O casamento é por <strong>id</strong>. Linhas <strong>idênticas</strong> ao cadastro não são alteradas.</li>
+          <li>Registros que <strong>não estão no CSV</strong> não são tocados — a importação <strong>nunca exclui</strong>.</li>
+          <li>Campos obrigatórios ao criar: regra exige <code>descricao</code>; condição exige <code>condicao</code>, <code>conta_debito</code>, <code>conta_credito</code>, <code>campo_valor</code> e <code>campo_moeda</code>. Linhas incompletas entram como erro (sem interromper o resto).</li>
+          <li><code>regra_ativa</code> e <code>posta_reverte</code> aceitam <code>Sim</code>/<code>Não</code>.</li>
+          <li><strong>Atenção:</strong> linhas de criação (rótulo ou <code>regra_id</code> vazio) criam registros <em>a cada importação</em> — reimportar o mesmo arquivo gera duplicatas. Depois de criar, <strong>exporte de novo</strong> para passar a ter os ids numéricos e então só atualizar.</li>
+        </ul>
+
+        <h6 class="mt-3">Exemplo — criar uma regra nova com duas condições</h6>
+        <pre class="bg-light p-2 rounded small mb-0"><code>regra_id;descricao;codigo_produto_corporativo;dominio;...;condicao_id;condicao;conta_debito;conta_credito;campo_valor;campo_moeda;campo_boleto;condicao_ativa
+NOVA-1;Minha Regra;NDF;Posição;...;;valor_mtm &gt;= 0;1111111111;2222222222;valor_principal;moeda_principal;codigo_identificador_boleto;
+NOVA-1;Minha Regra;NDF;Posição;...;;valor_mtm &lt; 0;3333333333;4444444444;valor_principal;moeda_principal;codigo_identificador_boleto;</code></pre>
+        <p class="text-muted small mt-2 mb-0">Dica: exporte primeiro para usar o arquivo atual como modelo e acrescente as linhas novas ao final.</p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fechar</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- Modal Nova Regra -->
 <div class="modal fade" id="modalNovaRegra" tabindex="-1">
   <div class="modal-dialog">
     <div class="modal-content">
-      <div class="modal-header"><h5 class="modal-title">Nova Regra</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+      <div class="modal-header"><h5 class="modal-title" id="modalNovaRegraTitulo">Nova Regra</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
       <div class="modal-body">
         <div class="mb-3"><label class="form-label">Descrição</label><input type="text" id="r-nova-desc" class="form-control"></div>
         <div class="mb-3">
@@ -545,10 +655,6 @@
           <label class="form-label">Domínios <small class="text-muted">(selecione um ou mais; nenhum = todos os domínios)</small></label>
           <select id="r-nova-dominio" class="form-select" multiple size="4"></select>
           <small class="text-muted">A regra só é aplicada às posições cujo domínio coincide.</small>
-        </div>
-        <div class="mb-3">
-          <label class="form-label">Campo Data <small class="text-muted">(coluna do arquivo que contém a data da posição)</small></label>
-          <input type="text" id="r-nova-campo-data" class="form-control" list="r-campos-datalist" placeholder="ex: data_posicao_carteira">
         </div>
         <div class="mb-3">
           <label class="form-label">Pré Condição <small class="text-muted">(opcional — combinada com E a cada condição da regra)</small></label>
@@ -563,7 +669,7 @@
       </div>
       <div class="modal-footer">
         <button class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-        <button class="btn btn-primary" onclick="criarRegra()">Criar</button>
+        <button class="btn btn-primary" id="r-nova-btn-salvar" onclick="salvarRegra()">Criar</button>
       </div>
     </div>
   </div>
@@ -573,7 +679,7 @@
 <div class="modal fade" id="modalNovaCondicao" tabindex="-1">
   <div class="modal-dialog modal-lg">
     <div class="modal-content">
-      <div class="modal-header"><h5 class="modal-title">Nova Condição</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+      <div class="modal-header"><h5 class="modal-title" id="modalNovaCondicaoTitulo">Nova Condição</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
       <div class="modal-body">
         <div class="row g-2">
           <div class="col-12">
@@ -597,7 +703,7 @@
       </div>
       <div class="modal-footer">
         <button class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-        <button class="btn btn-success" onclick="criarCondicao()">Adicionar</button>
+        <button class="btn btn-success" id="r-cond-btn-salvar" onclick="salvarCondicao()">Adicionar</button>
       </div>
     </div>
   </div>
@@ -611,6 +717,9 @@ let currentPage = 'operacao';
 let consultaPagina = 1;
 let regraAtualId = null;
 let todasRegras = []; // cache para filtro client-side
+let regraEditId = null; // regra em edição (null = criação)
+let condicaoEditId = null; // condição em edição (null = criação)
+let condicoesAtuais = []; // condições da regra aberta no modal
 
 // ── Navegação ──────────────────────────────────────────────
 function showPage(name) {
@@ -625,7 +734,16 @@ function showPage(name) {
   if (name === 'posicao') { preencherSelectOpcoes('p-consulta-produto', 'produto', { incluirVazio: true }); preencherSelectOpcoes('p-consulta-dominio', 'dominio', { incluirVazio: true }); }
   if (name === 'consulta') { preencherSelectOpcoes('c-produto', 'produto', { incluirVazio: true }); preencherSelectOpcoes('c-dominio', 'dominio', { incluirVazio: true }); }
   if (name === 'parametrizacoes') { renderParametrizacoes(); }
-  if (name === 'operacao') { preencherSelectOpcoes('op-produto', 'produto', { incluirVazio: true }); preencherSelectOpcoes('op-dominio', 'dominio', { incluirVazio: true }); }
+  if (name === 'operacao') {
+    preencherSelectOpcoes('op-produto', 'produto', { incluirVazio: true });
+    preencherSelectOpcoes('op-dominio', 'dominio', { incluirVazio: true });
+    const hoje = new Date();
+    const mesSel = document.getElementById('op-cal-mes');
+    const anoInp = document.getElementById('op-cal-ano');
+    if (mesSel && !mesSel.dataset.init) { mesSel.value = String(hoje.getMonth() + 1); mesSel.dataset.init = '1'; }
+    if (anoInp && !anoInp.value) { anoInp.value = hoje.getFullYear(); }
+    consultarCalendario(); // carrega o calendário automaticamente
+  }
 }
 
 // ── PARAMETRIZAÇÕES / OPÇÕES ───────────────────────────────
@@ -662,12 +780,14 @@ async function renderPadroes() {
   const lista = Array.isArray(r) ? r : [];
   if (!lista.length) { ul.innerHTML = '<li class="list-group-item text-muted">Nenhum padrão cadastrado.</li>'; return; }
   const sep = p => {
+    const d1 = (p.obrigatorio_mov_d1 !== false) ? 'exige mov. D-1' : 'sem obrig. D-1';
     const col = p.coluna_data ? `col.data '${p.coluna_data}'` : 'col.data auto';
+    const bol = p.coluna_boleto ? `boleto '${p.coluna_boleto}'` : 'boleto —';
     const fmt = p.formato_data ? `data ${p.formato_data}` : 'data auto';
     const d = p.delimitador ? `delim '${p.delimitador}'` : 'delim auto';
     const dec = p.separador_decimal ? `dec '${p.separador_decimal}'` : 'dec auto';
     const mil = p.separador_milhar ? `milhar '${p.separador_milhar}'` : 'sem milhar';
-    return `${col} · ${fmt} · ${d} · ${dec} · ${mil}`;
+    return `${d1} · ${col} · ${bol} · ${fmt} · ${d} · ${dec} · ${mil}`;
   };
   ul.innerHTML = lista.map(p => `<li class="list-group-item d-flex justify-content-between align-items-center py-1">
     <span><code>${p.padrao}</code> <i class="bi bi-arrow-right mx-1"></i> <span class="badge bg-secondary">${p.produto}</span> <span class="badge bg-info text-dark">${p.dominio || '—'}</span>
@@ -682,13 +802,17 @@ async function adicionarPadrao() {
   const dominio = document.getElementById('param-padrao-dominio').value;
   const formato = document.getElementById('param-padrao-formato').value;
   const colunaData = document.getElementById('param-padrao-coluna-data').value.trim();
+  const colunaBoleto = document.getElementById('param-padrao-coluna-boleto').value.trim();
   if (!padrao || !produto || !dominio) { toast('Informe o padrão, o produto e o domínio', 'warning'); return; }
   if (!colunaData) { toast('Informe a coluna da data base da posição', 'warning'); return; }
+  if (!colunaBoleto) { toast('Informe a coluna do número do boleto', 'warning'); return; }
   if (!formato) { toast('Selecione o Formato de Data do arquivo', 'warning'); return; }
   const payload = {
     padrao, produto, dominio,
     coluna_data: colunaData,
+    coluna_boleto: colunaBoleto,
     formato_data: formato,
+    obrigatorio_mov_d1: document.getElementById('param-padrao-obrig-d1').checked,
     delimitador: document.getElementById('param-padrao-delim').value,
     separador_decimal: document.getElementById('param-padrao-decimal').value,
     separador_milhar: document.getElementById('param-padrao-milhar').value,
@@ -697,7 +821,9 @@ async function adicionarPadrao() {
   if (r?.id) {
     document.getElementById('param-padrao-novo').value = '';
     document.getElementById('param-padrao-coluna-data').value = '';
+    document.getElementById('param-padrao-coluna-boleto').value = '';
     document.getElementById('param-padrao-formato').value = '';
+    document.getElementById('param-padrao-obrig-d1').checked = true;
     document.getElementById('param-padrao-delim').value = '';
     document.getElementById('param-padrao-decimal').value = '';
     document.getElementById('param-padrao-milhar').value = '';
@@ -916,6 +1042,54 @@ async function consultarStatus() {
   el.innerHTML = `<div class="table-responsive"><table class="table table-sm table-hover mb-0">
     <thead class="table-dark"><tr><th>Produto</th><th>Domínio</th><th>Status</th></tr></thead>
     <tbody>${rows}</tbody></table></div>`;
+}
+
+// ── Calendário de execução do contábil (visão agregada) ────
+async function consultarCalendario() {
+  const mes = document.getElementById('op-cal-mes').value;
+  const ano = document.getElementById('op-cal-ano').value;
+  const el = document.getElementById('op-cal-resultado');
+  if (!el || !mes || !ano) return;
+  const r = await api('GET', `/v1/movimento-contabil/calendario?ano=${encodeURIComponent(ano)}&mes=${encodeURIComponent(mes)}`);
+  if (!r || r.erro) { el.innerHTML = `<div class="alert alert-danger">${r?.erro || 'Erro'}</div>`; return; }
+  el.innerHTML = renderCalendario(r.dias || [], parseInt(ano, 10), parseInt(mes, 10));
+}
+
+function renderCalendario(dias, ano, mes) {
+  const nomes = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+  const classe = { completo: 'cal-completo', parcial: 'cal-parcial', nenhum: 'cal-nenhum', nao_util: 'cal-nao-util', futuro: 'cal-fut' };
+  const rotulo = { completo: 'Todos executados', parcial: 'Parcial (falta algum)', nenhum: 'Nenhum executado', nao_util: 'Não útil', futuro: 'Futuro' };
+  // Primeiro dia da semana do mês (0=Dom) para posicionar o dia 1 na grade.
+  const offset = new Date(ano, mes - 1, 1).getDay();
+  let cells = '';
+  for (let i = 0; i < offset; i++) cells += '<div class="cal-cell cal-empty"></div>';
+  for (const d of dias) {
+    const c = classe[d.status] || '';
+    let tags = '';
+    if (d.hoje) tags += '<span class="cal-tag">Hoje</span>';
+    if (d.fechamento_mensal) tags += '<span class="cal-tag">Fechamento Mensal</span>';
+    let titulo = `${d.data} — ${rotulo[d.status] || d.status}`;
+    if (d.esperados > 0 && (d.status === 'completo' || d.status === 'parcial' || d.status === 'nenhum')) {
+      titulo += ` (${d.executados}/${d.esperados} combos)`;
+    }
+    if (d.fechamento_mensal) titulo += ' · Fechamento mensal (último dia útil)';
+    cells += `<div class="cal-cell ${c}${d.hoje ? ' cal-hoje' : ''}" title="${titulo}">
+      <span class="cal-dia-num">${d.dia}</span>${tags}</div>`;
+  }
+  const header = nomes.map(n => `<div class="cal-head">${n}</div>`).join('');
+  const legenda = `<div class="cal-legenda">
+    <span><i class="cal-dot cal-completo"></i>Todos executados</span>
+    <span><i class="cal-dot cal-parcial"></i>Parcial</span>
+    <span><i class="cal-dot cal-nenhum"></i>Nenhum</span>
+    <span><i class="cal-dot cal-nao-util"></i>Não útil</span>
+    <span><i class="cal-dot cal-fut"></i>Futuro</span>
+  </div>`;
+  return `<div class="small text-muted mb-2">${mesExtenso(mes)}/${ano}</div>
+    <div class="cal-grid">${header}${cells}</div>${legenda}`;
+}
+
+function mesExtenso(mes) {
+  return ['', 'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'][mes] || mes;
 }
 
 async function gerarEstorno() {
@@ -1328,11 +1502,46 @@ async function carregarRegras() {
   renderizarRegras(todasRegras);
 }
 
+// Exporta todas as regras e condições (ativas) para um único CSV.
+function exportarRegras() {
+  window.open('/api/v1/regras/export', '_blank');
+}
+
+// Importa um CSV para atualizar regras e condições em lote (update por id; linhas
+// idênticas ao cadastro ou com id inexistente são ignoradas).
+async function importarRegras(input) {
+  const file = input.files && input.files[0];
+  if (!file) return;
+  const fd = new FormData();
+  fd.append('arquivo', file);
+  spin(true);
+  let r = null;
+  try {
+    r = await fetch('/api/v1/regras/import', { method: 'POST', body: fd }).then(x => x.json());
+  } catch (e) {
+    toast('Erro de comunicação: ' + e.message, 'danger');
+  } finally {
+    spin(false);
+    input.value = ''; // permite reimportar o mesmo arquivo
+  }
+  if (!r) return;
+  if (r.erro) { toast(r.erro, 'danger'); return; }
+  const resumo = `Regras: ${r.regras_criadas} criada(s), ${r.regras_atualizadas} atualizada(s), ${r.regras_inalteradas} sem mudança · ` +
+    `Condições: ${r.condicoes_criadas} criada(s), ${r.condicoes_atualizadas} atualizada(s), ${r.condicoes_inalteradas} sem mudança`;
+  toast(resumo, (r.erros && r.erros.length) ? 'warning' : 'success');
+  if (r.erros && r.erros.length) {
+    toast('Erros: ' + r.erros.join(' | '), 'danger');
+  }
+  carregarRegras();
+}
+
 // Popula os combos do modal de nova regra com as opções parametrizadas.
 // Independente da existência de regras — chamado ao abrir a página e o modal.
-function preencherCombosRegra() {
-  preencherSelectOpcoes('r-nova-produto', 'produto');
-  preencherSelectOpcoes('r-nova-dominio', 'dominio');
+async function preencherCombosRegra() {
+  await Promise.all([
+    preencherSelectOpcoes('r-nova-produto', 'produto'),
+    preencherSelectOpcoes('r-nova-dominio', 'dominio'),
+  ]);
 }
 
 function filtrarRegras() {
@@ -1373,10 +1582,12 @@ function renderizarRegras(regras) {
     <td>${reg.dominio ? reg.dominio.split(',').map(d => `<span class="badge bg-info text-dark me-1">${d.trim()}</span>`).join('') : '<span class="text-muted">Todos</span>'}</td>
     <td>${reg.pre_condicao ? `<code>${reg.pre_condicao}</code>` : '<span class="text-muted">—</span>'}</td>
     <td>${reg.posta_reverte ? '<span class="badge bg-success">Sim</span>' : '<span class="badge bg-warning text-dark">Não</span>'}</td>
-    <td>
+    <td class="text-nowrap">
       <button class="btn btn-sm btn-outline-primary" onclick="selecionarRegra(${reg.id}, '${reg.descricao.replace(/'/g,"\\'")}')">
-        <i class="bi bi-list-check me-1"></i>Ver Condições
+        <i class="bi bi-list-check me-1"></i>Condições
       </button>
+      <button class="btn btn-sm btn-outline-secondary" onclick="abrirEdicaoRegra(${reg.id})" title="Editar regra"><i class="bi bi-pencil"></i></button>
+      <button class="btn btn-sm btn-outline-danger" onclick="excluirRegra(${reg.id}, '${reg.descricao.replace(/'/g,"\\'")}')" title="Excluir regra"><i class="bi bi-trash"></i></button>
     </td>
   </tr>`).join('');
   el.innerHTML = `<div class="table-responsive"><table class="table table-sm table-hover mb-0">
@@ -1392,6 +1603,7 @@ async function selecionarRegra(id, nome) {
   const r = await api('GET', `/v1/regras/${id}/condicoes`);
   const el = document.getElementById('modal-cond-body');
 
+  condicoesAtuais = Array.isArray(r) ? r : [];
   if (!r || r.erro || !r.length) {
     el.innerHTML = `<div class="alert alert-info">Nenhuma condição cadastrada para esta regra.</div>`;
   } else {
@@ -1402,7 +1614,10 @@ async function selecionarRegra(id, nome) {
       <td><code>${c.campo_valor}</code></td>
       <td>${c.campo_moeda}</td>
       <td>${c.campo_boleto || '<span class="text-muted">padrão</span>'}</td>
-      <td><button class="btn btn-danger btn-sm py-0 px-1" onclick="excluirCondicao(${c.id}, '${nome.replace(/'/g,"\\'")}')"><i class="bi bi-trash"></i></button></td>
+      <td class="text-nowrap">
+        <button class="btn btn-outline-secondary btn-sm py-0 px-1" onclick="abrirEdicaoCondicao(${c.id})" title="Editar"><i class="bi bi-pencil"></i></button>
+        <button class="btn btn-outline-danger btn-sm py-0 px-1" onclick="excluirCondicao(${c.id}, '${nome.replace(/'/g,"\\'")}')" title="Excluir"><i class="bi bi-trash"></i></button>
+      </td>
     </tr>`).join('');
     el.innerHTML = `<div class="table-responsive"><table class="table table-sm table-hover mb-0">
       <thead class="table-light"><tr><th>Condição</th><th>Débito</th><th>Crédito</th><th>Campo Valor</th><th>Campo Moeda</th><th>Campo Boleto</th><th></th></tr></thead>
@@ -1439,6 +1654,32 @@ function validarCondicao(valor, tipo, elId) {
 }
 
 function showNovaCondicaoModal() {
+  // Modo CRIAÇÃO: limpa os campos e o estado de edição.
+  condicaoEditId = null;
+  document.getElementById('modalNovaCondicaoTitulo').textContent = 'Nova Condição';
+  document.getElementById('r-cond-btn-salvar').textContent = 'Adicionar';
+  ['r-cond-expr','r-cond-debito','r-cond-credito','r-cond-valor','r-cond-moeda','r-cond-boleto'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('r-cond-validacao').innerHTML = '';
+  document.getElementById('r-cond-valor-validacao').innerHTML = '';
+  bootstrap.Modal.getOrCreateInstance(document.getElementById('modalCondicoes')).hide();
+  setTimeout(() => bootstrap.Modal.getOrCreateInstance(document.getElementById('modalNovaCondicao')).show(), 300);
+}
+
+// Abre o modal de condição em modo EDIÇÃO, pré-preenchido a partir do cache.
+function abrirEdicaoCondicao(id) {
+  const c = condicoesAtuais.find(x => x.id === id);
+  if (!c) return;
+  condicaoEditId = id;
+  document.getElementById('modalNovaCondicaoTitulo').textContent = 'Editar Condição';
+  document.getElementById('r-cond-btn-salvar').textContent = 'Salvar';
+  document.getElementById('r-cond-expr').value = c.condicao || '';
+  document.getElementById('r-cond-debito').value = c.conta_debito || '';
+  document.getElementById('r-cond-credito').value = c.conta_credito || '';
+  document.getElementById('r-cond-valor').value = c.campo_valor || '';
+  document.getElementById('r-cond-moeda').value = c.campo_moeda || '';
+  document.getElementById('r-cond-boleto').value = c.campo_boleto || '';
+  document.getElementById('r-cond-validacao').innerHTML = '';
+  document.getElementById('r-cond-valor-validacao').innerHTML = '';
   bootstrap.Modal.getOrCreateInstance(document.getElementById('modalCondicoes')).hide();
   setTimeout(() => bootstrap.Modal.getOrCreateInstance(document.getElementById('modalNovaCondicao')).show(), 300);
 }
@@ -1454,41 +1695,79 @@ async function excluirCondicao(id, nomeRegra) {
   }
 }
 
-async function criarRegra() {
+// Abre o modal de regra em modo CRIAÇÃO (campos limpos).
+async function abrirNovaRegra() {
+  regraEditId = null;
+  document.getElementById('modalNovaRegraTitulo').textContent = 'Nova Regra';
+  document.getElementById('r-nova-btn-salvar').textContent = 'Criar';
+  document.getElementById('r-nova-desc').value = '';
+  document.getElementById('r-nova-pre-condicao').value = '';
+  document.getElementById('r-nova-pre-validacao').innerHTML = '';
+  document.getElementById('r-nova-posta-reverte').checked = true;
+  await preencherCombosRegra();
+  [...document.getElementById('r-nova-produto').options].forEach(o => o.selected = false);
+  [...document.getElementById('r-nova-dominio').options].forEach(o => o.selected = false);
+  bootstrap.Modal.getOrCreateInstance(document.getElementById('modalNovaRegra')).show();
+}
+
+// Abre o modal de regra em modo EDIÇÃO, pré-preenchido a partir do cache (todasRegras).
+async function abrirEdicaoRegra(id) {
+  const reg = todasRegras.find(x => x.id === id);
+  if (!reg) return;
+  regraEditId = id;
+  document.getElementById('modalNovaRegraTitulo').textContent = 'Editar Regra';
+  document.getElementById('r-nova-btn-salvar').textContent = 'Salvar';
+  document.getElementById('r-nova-desc').value = reg.descricao || '';
+  document.getElementById('r-nova-pre-condicao').value = reg.pre_condicao || '';
+  document.getElementById('r-nova-pre-validacao').innerHTML = '';
+  document.getElementById('r-nova-posta-reverte').checked = !!reg.posta_reverte;
+  await preencherCombosRegra();
+  const prods = (reg.codigo_produto_corporativo || '').split(',').map(s => s.trim());
+  [...document.getElementById('r-nova-produto').options].forEach(o => o.selected = prods.includes(o.value));
+  const doms = (reg.dominio || '').split(',').map(s => s.trim());
+  [...document.getElementById('r-nova-dominio').options].forEach(o => o.selected = doms.includes(o.value));
+  bootstrap.Modal.getOrCreateInstance(document.getElementById('modalNovaRegra')).show();
+}
+
+// Cria (POST) ou edita (PUT) a regra conforme regraEditId.
+async function salvarRegra() {
   const desc = document.getElementById('r-nova-desc').value;
-  const postaReverte = document.getElementById('r-nova-posta-reverte').checked;
   if (!desc) { toast('Informe a descrição', 'warning'); return; }
-
-  const produtosSel = [...document.getElementById('r-nova-produto').selectedOptions].map(o => o.value);
-  const codigoProduto = produtosSel.join(',');
-  const dominiosSel = [...document.getElementById('r-nova-dominio').selectedOptions].map(o => o.value);
-  const dominio = dominiosSel.join(',');
-  const campoData = document.getElementById('r-nova-campo-data').value.trim();
+  const codigoProduto = [...document.getElementById('r-nova-produto').selectedOptions].map(o => o.value).join(',');
+  const dominio = [...document.getElementById('r-nova-dominio').selectedOptions].map(o => o.value).join(',');
   const preCondicao = document.getElementById('r-nova-pre-condicao').value.trim();
-
-  const r = await api('POST', '/v1/regras', {
+  const postaReverte = document.getElementById('r-nova-posta-reverte').checked;
+  const payload = {
     descricao: desc,
     codigo_produto_corporativo: codigoProduto,
     dominio: dominio,
-    campo_data: campoData,
     pre_condicao: preCondicao,
     posta_reverte: postaReverte,
-  });
-  if (r?.id) {
-    toast('Regra criada!');
+  };
+  let r;
+  if (regraEditId) {
+    payload.ativo = true; // mantém a regra ativa ao editar
+    r = await api('PUT', `/v1/regras/${regraEditId}`, payload);
+  } else {
+    r = await api('POST', '/v1/regras', payload);
+  }
+  if (r?.id || r?.mensagem) {
+    toast(regraEditId ? 'Regra atualizada!' : 'Regra criada!');
     bootstrap.Modal.getInstance(document.getElementById('modalNovaRegra')).hide();
-    document.getElementById('r-nova-desc').value = '';
-    [...document.getElementById('r-nova-produto').options].forEach(o => o.selected = false);
-    [...document.getElementById('r-nova-dominio').options].forEach(o => o.selected = false);
-    document.getElementById('r-nova-campo-data').value = '';
-    document.getElementById('r-nova-pre-condicao').value = '';
-    document.getElementById('r-nova-pre-validacao').innerHTML = '';
-    document.getElementById('r-nova-posta-reverte').checked = true;
+    regraEditId = null;
     carregarRegras();
   } else if (r?.erro) toast(r.erro, 'danger');
 }
 
-async function criarCondicao() {
+async function excluirRegra(id, nome) {
+  if (!confirm(`Excluir a regra "${nome}"? As condições dela deixam de ser aplicadas.`)) return;
+  const r = await api('DELETE', `/v1/regras/${id}`);
+  if (r?.mensagem) { toast(r.mensagem); carregarRegras(); }
+  else if (r?.erro) toast(r.erro, 'danger');
+}
+
+// Cria (POST) ou edita (PUT) a condição conforme condicaoEditId.
+async function salvarCondicao() {
   if (!regraAtualId) return;
   const payload = {
     condicao: document.getElementById('r-cond-expr').value,
@@ -1498,18 +1777,21 @@ async function criarCondicao() {
     campo_moeda: document.getElementById('r-cond-moeda').value,
     campo_boleto: document.getElementById('r-cond-boleto').value,
   };
-  const r = await api('POST', `/v1/regras/${regraAtualId}/condicoes`, payload);
-  if (r?.id) {
-    toast('Condição adicionada!');
+  let r;
+  if (condicaoEditId) {
+    r = await api('PUT', `/v1/condicoes/${condicaoEditId}`, payload);
+  } else {
+    r = await api('POST', `/v1/regras/${regraAtualId}/condicoes`, payload);
+  }
+  if (r?.id || r?.mensagem) {
+    toast(condicaoEditId ? 'Condição atualizada!' : 'Condição adicionada!');
     bootstrap.Modal.getInstance(document.getElementById('modalNovaCondicao')).hide();
+    condicaoEditId = null;
     const nome = document.getElementById('modal-cond-titulo').textContent;
     setTimeout(() => selecionarRegra(regraAtualId, nome), 300);
   } else if (r?.erro) toast(r.erro, 'danger');
 }
 
-// Repopula os combos sempre que o modal de nova regra é aberto — garante que
-// opções recém-cadastradas em Parametrizações apareçam sem trocar de página.
-document.getElementById('modalNovaRegra').addEventListener('show.bs.modal', preencherCombosRegra);
 
 // ── NOTIFICAÇÕES (sino) ────────────────────────────────────
 let notifCache = { nao_lidas: 0, itens: [] };
@@ -1556,6 +1838,10 @@ async function marcarNotificacoesLidas() {
 // Atualiza o contador periodicamente e na carga inicial.
 atualizarNotificacoes();
 setInterval(atualizarNotificacoes, 15000);
+
+// Inicializa a página padrão (Operação) na carga — popula combos e preenche o
+// Mês/Ano do calendário com o mês e ano atuais.
+showPage('operacao');
 </script>
 </body>
 </html>

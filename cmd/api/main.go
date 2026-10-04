@@ -75,13 +75,14 @@ func main() {
 	// 3. Instanciar serviços
 	movimentoSvc := service.NewMovimentoContabilService(posicaoRepo, regraRepo, movimentoRepo, eval).
 		ComInconsistenciaRepo(inconsistenciaRepo).
-		ComExecucaoRepo(execucaoRepo)
+		ComExecucaoRepo(execucaoRepo).
+		ComPadraoRepo(padraoArquivoRepo)
 	inconsistenciaSvc := service.NewInconsistenciaService(inconsistenciaRepo)
 	execucaoSvc := service.NewExecucaoService(execucaoRepo, padraoArquivoRepo)
 	notificacaoSvc := service.NewNotificacaoService(notificacaoRepo)
 	regraSvc := service.NewRegraContabilService(regraRepo)
 	conciliacaoSvc := service.NewConciliacaoService(posicaoRepo, movimentoRepo)
-	posicaoSvc := service.NewPosicaoCarteiraService(posicaoRepo, regraRepo)
+	posicaoSvc := service.NewPosicaoCarteiraService(posicaoRepo)
 	parametrizacaoSvc := service.NewParametrizacaoService(parametrizacaoRepo)
 	padraoArquivoSvc := service.NewPadraoArquivoService(padraoArquivoRepo)
 	configuracaoSvc := service.NewConfiguracaoService(configuracaoRepo)
@@ -131,6 +132,11 @@ func main() {
 		}
 	})
 
+	// Exportação/importação em lote de regras+condições (um único CSV).
+	// Padrões mais específicos vencem o catch-all "/api/v1/regras/" no ServeMux.
+	http.HandleFunc("/api/v1/regras/export", regraHandler.ExportarRegrasCSV)
+	http.HandleFunc("/api/v1/regras/import", regraHandler.ImportarRegrasCSV)
+
 	http.HandleFunc("/api/v1/regras/", func(w http.ResponseWriter, r *http.Request) {
 		path := r.URL.Path
 		if strings.HasSuffix(path, "/condicoes") {
@@ -139,6 +145,8 @@ func main() {
 			} else {
 				regraHandler.CriarCondicao(w, r)
 			}
+		} else if r.Method == http.MethodDelete {
+			regraHandler.ExcluirRegra(w, r)
 		} else {
 			regraHandler.EditarRegra(w, r)
 		}
@@ -182,6 +190,7 @@ func main() {
 	http.HandleFunc("/api/v1/inconsistencias", inconsistenciaHandler.Listar)
 	http.HandleFunc("/api/v1/inconsistencias/export", inconsistenciaHandler.Export)
 	http.HandleFunc("/api/v1/movimento-contabil/status", execucaoHandler.Status)
+	http.HandleFunc("/api/v1/movimento-contabil/calendario", execucaoHandler.Calendario)
 	http.HandleFunc("/api/v1/notificacoes", notificacaoHandler.Notificacoes)
 
 	// 6. Ler porta

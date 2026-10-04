@@ -31,9 +31,10 @@ var layoutsFormatoData = map[string]string{
 // configDoPadrao converte os separadores textuais e o formato de data do padrão em parseConfig.
 func configDoPadrao(p model.PadraoArquivo) parseConfig {
 	cfg := parseConfig{
-		sepDecimal:  p.SeparadorDecimal,
-		sepMilhar:   p.SeparadorMilhar,
-		formatoData: layoutsFormatoData[p.FormatoData], // rótulo desconhecido/vazio → "" (automático)
+		sepDecimal:   p.SeparadorDecimal,
+		sepMilhar:    p.SeparadorMilhar,
+		formatoData:  layoutsFormatoData[p.FormatoData], // rótulo desconhecido/vazio → "" (automático)
+		colunaBoleto: normalizarNome(p.ColunaBoleto),    // mantida como texto na importação
 	}
 	switch p.Delimitador {
 	case ";":
@@ -48,16 +49,11 @@ func configDoPadrao(p model.PadraoArquivo) parseConfig {
 // produto ou detecção), preenche data, produto e domínio em cada registro e importa
 // o lote. Cada combinação recebe uma cópia dos registros para não compartilhar mutações.
 func importarConteudoParaProduto(ctx context.Context, svc posicaoCarteiraSvc, registros []map[string]interface{}, colunas []string, produto, dominio, colunaDataPadrao string) ([]service.LoteImportado, error) {
-	// Prioridade: coluna de data informada no padrão de arquivo; senão (legado),
-	// resolve pela regra do produto ou tenta detectar automaticamente.
+	// Prioridade: coluna de data informada no padrão de arquivo; senão (legado/upload
+	// individual), tenta detectar automaticamente.
 	colunaData := ""
 	if colunaDataPadrao != "" {
 		colunaData = normalizarNome(colunaDataPadrao)
-	}
-	if colunaData == "" && produto != "" {
-		if c, _ := svc.ResolverCampoData(ctx, produto); c != "" {
-			colunaData = normalizarNome(c)
-		}
 	}
 	if colunaData == "" {
 		colunaData = detectarColunaData(colunas)

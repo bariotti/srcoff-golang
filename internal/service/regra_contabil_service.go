@@ -11,6 +11,7 @@ type regraContabilRepoFull interface {
 	ListarRegrasAtivas(ctx context.Context) ([]model.RegraContabil, error)
 	CriarRegra(ctx context.Context, regra model.RegraContabil) (int64, error)
 	EditarRegra(ctx context.Context, regra model.RegraContabil) error
+	ExcluirRegra(ctx context.Context, id int64) error
 	ListarCondicoes(ctx context.Context, idRegra int64) ([]model.CondicaoRegra, error)
 	CriarCondicao(ctx context.Context, condicao model.CondicaoRegra) (int64, error)
 	EditarCondicao(ctx context.Context, condicao model.CondicaoRegra) error
@@ -45,6 +46,13 @@ func (s *RegraContabilService) EditarRegra(ctx context.Context, regra model.Regr
 		return fmt.Errorf("campo obrigatório ausente: descricao")
 	}
 	return s.repo.EditarRegra(ctx, regra)
+}
+
+func (s *RegraContabilService) ExcluirRegra(ctx context.Context, id int64) error {
+	if id == 0 {
+		return fmt.Errorf("id da regra é obrigatório")
+	}
+	return s.repo.ExcluirRegra(ctx, id)
 }
 
 func (s *RegraContabilService) ListarCondicoes(ctx context.Context, idRegra int64) ([]model.CondicaoRegra, error) {

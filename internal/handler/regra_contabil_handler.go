@@ -14,6 +14,7 @@ type regraContabilSvc interface {
 	ListarRegras(ctx context.Context) ([]model.RegraContabil, error)
 	CriarRegra(ctx context.Context, regra model.RegraContabil) (int64, error)
 	EditarRegra(ctx context.Context, regra model.RegraContabil) error
+	ExcluirRegra(ctx context.Context, id int64) error
 	ListarCondicoes(ctx context.Context, idRegra int64) ([]model.CondicaoRegra, error)
 	CriarCondicao(ctx context.Context, condicao model.CondicaoRegra) (int64, error)
 	EditarCondicao(ctx context.Context, condicao model.CondicaoRegra) error
@@ -95,6 +96,25 @@ func (h *RegraContabilHandler) EditarRegra(w http.ResponseWriter, r *http.Reques
 	}
 
 	writeJSON(w, http.StatusOK, map[string]string{"mensagem": "regra atualizada com sucesso"})
+}
+
+// ExcluirRegra trata DELETE /api/v1/regras/{id} (exclusão lógica).
+func (h *RegraContabilHandler) ExcluirRegra(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodDelete {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	idStr := strings.TrimPrefix(r.URL.Path, "/api/v1/regras/")
+	id, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil || id == 0 {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"erro": "id inválido"})
+		return
+	}
+	if err := h.svc.ExcluirRegra(r.Context(), id); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"erro": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"mensagem": "regra excluída com sucesso"})
 }
 
 // ListarCondicoes trata GET /api/v1/regras/{id}/condicoes.
