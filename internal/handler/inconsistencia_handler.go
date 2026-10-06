@@ -61,7 +61,7 @@ func (h *InconsistenciaHandler) Export(w http.ResponseWriter, r *http.Request) {
 	writer := csv.NewWriter(&buf)
 	writer.Comma = ';'
 	writer.Write([]string{
-		"Data Lote", "Boleto", "Produto", "ID Regra", "Regra",
+		"Data Lote", "Boleto", "Produto", "Domínio", "ID Regra", "Regra",
 		"Tipo", "Expressão", "Campos Faltantes", "Detalhe",
 	})
 	for _, i := range itens {
@@ -69,6 +69,7 @@ func (h *InconsistenciaHandler) Export(w http.ResponseWriter, r *http.Request) {
 			i.DataLoteContabil.Format("2006-01-02"),
 			i.CodigoIdentificadorBoleto,
 			i.Produto,
+			i.Dominio,
 			fmt.Sprintf("%d", i.IDRegraContabil),
 			i.DescricaoRegraContabil,
 			i.Tipo,

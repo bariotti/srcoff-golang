@@ -20,11 +20,12 @@ type padroesParaEscopo interface {
 
 // StatusCombinacao descreve o status de processamento de uma combinação para uma data.
 type StatusCombinacao struct {
-	Produto        string `json:"produto"`
-	Dominio        string `json:"dominio"`
-	Processado     bool   `json:"processado"`
-	QtdLancamentos int    `json:"qtd_lancamentos"`
-	QtdEstornos    int    `json:"qtd_estornos"`
+	Produto            string `json:"produto"`
+	Dominio            string `json:"dominio"`
+	Processado         bool   `json:"processado"`
+	QtdLancamentos     int    `json:"qtd_lancamentos"`
+	QtdEstornos        int    `json:"qtd_estornos"`
+	QtdInconsistencias int    `json:"qtd_inconsistencias"`
 }
 
 // DiaCalendario descreve o status AGREGADO de um dia do mês, considerando TODAS as
@@ -32,6 +33,7 @@ type StatusCombinacao struct {
 //   - "completo": todos os combos esperados tiveram contábil executado nesse dia;
 //   - "parcial":  parte dos combos foi executada (falta algum);
 //   - "nenhum":   dia útil, até hoje (inclusive), sem nenhum combo executado;
+//   - "inconsistencia": dia processado cuja última versão tem inconsistências;
 //   - "nao_util": sábado, domingo ou feriado (ver EhDiaUtil);
 //   - "futuro":   dia útil posterior a hoje (ainda não devido), ou sem combos cadastrados.
 type DiaCalendario struct {
@@ -41,6 +43,8 @@ type DiaCalendario struct {
 	// Executados/Esperados quantificam os combos (produto, domínio) do dia.
 	Executados int `json:"executados"`
 	Esperados  int `json:"esperados"`
+	// Inconsistencias conta as inconsistências da última versão processada no dia.
+	Inconsistencias int `json:"inconsistencias"`
 	// Hoje marca o dia corrente (apenas quando o mês/ano exibido é o atual).
 	Hoje bool `json:"hoje,omitempty"`
 	// FechamentoMensal marca o último dia útil do mês (ponto de fechamento contábil).
@@ -51,10 +55,36 @@ type DiaCalendario struct {
 type ExecucaoService struct {
 	execRepo   execucaoRepoReader
 	padraoRepo padroesParaEscopo
+	incRepo    inconsistenciaRepoReader
 }
 
 func NewExecucaoService(execRepo execucaoRepoReader, padraoRepo padroesParaEscopo) *ExecucaoService {
 	return &ExecucaoService{execRepo: execRepo, padraoRepo: padraoRepo}
+}
+
+// ComInconsistenciaRepo injeta o repositório de inconsistências para expor a contagem
+// por combinação (status) e por dia (calendário). Opcional: sem ele, a contagem é zero.
+func (s *ExecucaoService) ComInconsistenciaRepo(r inconsistenciaRepoReader) *ExecucaoService {
+	s.incRepo = r
+	return s
+}
+
+// inconsistenciasPorCombo lê as inconsistências da data e conta por (produto, domínio).
+// Como as inconsistências são substituídas a cada processamento (SubstituirPorEscopo),
+// a contagem reflete sempre a última versão do lote para cada combinação.
+func (s *ExecucaoService) inconsistenciasPorCombo(ctx context.Context, data time.Time) (map[string]int, error) {
+	if s.incRepo == nil {
+		return map[string]int{}, nil
+	}
+	itens, err := s.incRepo.ListarPorData(ctx, data)
+	if err != nil {
+		return nil, err
+	}
+	m := map[string]int{}
+	for _, i := range itens {
+		m[i.Produto+"\x00"+i.Dominio]++
+	}
+	return m, nil
 }
 
 // StatusPorData retorna, para a data, as combinações (produto, domínio) definidas
@@ -87,15 +117,22 @@ func (s *ExecucaoService) StatusPorData(ctx context.Context, data time.Time) ([]
 		porCombo[e.Produto+"\x00"+e.Dominio] = e
 	}
 
+	incPorCombo, err := s.inconsistenciasPorCombo(ctx, data)
+	if err != nil {
+		return nil, err
+	}
+
 	var status []StatusCombinacao
 	for _, c := range esperadas {
-		e, ok := porCombo[c.Produto+"\x00"+c.Dominio]
+		k := c.Produto + "\x00" + c.Dominio
+		e, ok := porCombo[k]
 		status = append(status, StatusCombinacao{
-			Produto:        c.Produto,
-			Dominio:        c.Dominio,
-			Processado:     ok,
-			QtdLancamentos: e.QtdLancamentos,
-			QtdEstornos:    e.QtdEstornos,
+			Produto:            c.Produto,
+			Dominio:            c.Dominio,
+			Processado:         ok,
+			QtdLancamentos:     e.QtdLancamentos,
+			QtdEstornos:        e.QtdEstornos,
+			QtdInconsistencias: incPorCombo[k],
 		})
 	}
 	return status, nil
@@ -127,9 +164,11 @@ func (s *ExecucaoService) CalendarioMes(ctx context.Context, ano int, mes time.M
 		ds := d.Format("2006-01-02")
 		util := EhDiaUtil(d)
 
-		// Conta quantos combos esperados foram executados nesse dia (apenas dias úteis
-		// já vencidos — não faz sentido avaliar completude de dias futuros).
+		// Conta quantos combos esperados foram executados nesse dia e quantas
+		// inconsistências a última versão gerou (apenas dias úteis já vencidos —
+		// não faz sentido avaliar completude de dias futuros).
 		execExpected := 0
+		incCount := 0
 		if util && totalEsperado > 0 && ds <= hojeStr {
 			execs, err := s.execRepo.ListarPorData(ctx, d)
 			if err != nil {
@@ -143,6 +182,15 @@ func (s *ExecucaoService) CalendarioMes(ctx context.Context, ano int, mes time.M
 					execExpected++
 				}
 			}
+			incPorCombo, err := s.inconsistenciasPorCombo(ctx, d)
+			if err != nil {
+				return nil, err
+			}
+			for k, n := range incPorCombo {
+				if esperadas[k] {
+					incCount += n
+				}
+			}
 		}
 
 		var st string
@@ -153,18 +201,21 @@ func (s *ExecucaoService) CalendarioMes(ctx context.Context, ano int, mes time.M
 			st = "futuro"
 		case totalEsperado == 0:
 			st = "futuro" // sem combos cadastrados: nada a avaliar
+		case incCount > 0:
+			st = "inconsistencia" // processado, mas a última versão tem inconsistências
+		case execExpected == 0:
+			st = "nenhum"
 		case execExpected == totalEsperado:
 			st = "completo"
-		case execExpected > 0:
-			st = "parcial"
 		default:
-			st = "nenhum"
+			st = "parcial"
 		}
 
 		dias = append(dias, DiaCalendario{
 			Dia: d.Day(), Data: ds, Status: st,
 			Executados: execExpected, Esperados: totalEsperado,
-			Hoje: ds == hojeStr,
+			Inconsistencias: incCount,
+			Hoje:            ds == hojeStr,
 		})
 		if util {
 			ultimoUtil = len(dias) - 1

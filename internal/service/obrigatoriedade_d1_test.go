@@ -148,3 +148,47 @@ func TestObrigatoriedadeD1_Desligada_EstornoMaiorDataAnterior(t *testing.T) {
 		t.Fatalf("15/01 deveria ter estorno da maior data anterior (08/01)")
 	}
 }
+
+// TestObrigatoriedadeD1_ReprocessarMesmaDataNaoBloqueia reproduz o bug relatado: uma
+// primeira rodada que não gerou lançamentos (por inconsistências) registra execução para
+// a própria data; ao reprocessar o MESMO dia, a obrigatoriedade de D-1 não pode bloquear,
+// pois a execução da própria data não conta como histórico anterior.
+func TestObrigatoriedadeD1_ReprocessarMesmaDataNaoBloqueia(t *testing.T) {
+	ctx := context.Background()
+	eval := evaluator.New()
+	dir := t.TempDir()
+
+	seg15 := d("2024-01-15") // segunda; D-1 útil = sexta 12/01
+
+	posRepo := &fakePosicaoRepo{registros: []model.PosicaoCarteira{
+		posD1(1, seg15, "NDF", "Posição", "B1", 100),
+	}}
+	regraRepo := &fakeRegraRepo{regras: []model.RegraContabil{regraSimplesD1()}}
+	movRepo := filerepo.NewMovimentoContabilRepo(dir)
+	execRepo := filerepo.NewExecucaoRepo(dir)
+	padrao := &fakePadraoLookup{padroes: []model.PadraoArquivo{
+		{Produto: "NDF", Dominio: "Posição", ObrigatorioMovD1: boolPtr(true)},
+	}}
+	svc := NewMovimentoContabilService(posRepo, regraRepo, movRepo, eval).
+		ComExecucaoRepo(execRepo).ComPadraoRepo(padrao)
+
+	// Simula a 1ª rodada do mesmo dia (0 lançamentos por inconsistências), que registrou
+	// execução para a própria data 15/01.
+	if err := execRepo.RegistrarExecucao(ctx, model.MovimentoExecucao{
+		DataLote: seg15, Produto: "NDF", Dominio: "Posição", QtdLancamentos: 0,
+	}); err != nil {
+		t.Fatalf("registrar execução anterior: %v", err)
+	}
+
+	// Reprocessar a MESMA data não deve ser bloqueado (não há data anterior).
+	bloq, err := svc.GerarMovimentoEscopo(ctx, seg15, "NDF", "Posição")
+	if err != nil {
+		t.Fatalf("erro inesperado: %v", err)
+	}
+	if len(bloq) != 0 {
+		t.Fatalf("reprocessar a 1ª data não deveria bloquear, bloq=%v", bloq)
+	}
+	if p, _ := svc.ConsultarLancamentos(ctx, seg15, 1, 100); p.Total == 0 {
+		t.Fatalf("15/01 deveria ter lançamentos após o reprocesso")
+	}
+}

@@ -57,6 +57,94 @@ func padroesDois() *fakePadraoLookup {
 	}}
 }
 
+// fakeIncRepo é um leitor de inconsistências por data para testes.
+type fakeIncRepo struct{ itens []model.InconsistenciaProcessamento }
+
+func (f *fakeIncRepo) ListarPorData(_ context.Context, data time.Time) ([]model.InconsistenciaProcessamento, error) {
+	ds := data.Format("2006-01-02")
+	var out []model.InconsistenciaProcessamento
+	for _, i := range f.itens {
+		if i.DataLoteContabil.Format("2006-01-02") == ds {
+			out = append(out, i)
+		}
+	}
+	return out, nil
+}
+
+func inc(ds, produto, dominio string) model.InconsistenciaProcessamento {
+	d, _ := time.Parse("2006-01-02", ds)
+	return model.InconsistenciaProcessamento{DataLoteContabil: d, Produto: produto, Dominio: dominio}
+}
+
+// TestCalendarioMes_Inconsistencia valida que um dia processado com inconsistências na
+// última versão fica com status "inconsistencia", e volta a "completo" quando não há.
+func TestCalendarioMes_Inconsistencia(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+	execRepo := filerepo.NewExecucaoRepo(dir)
+	// Ambos os combos executados em 08 e 09/01/2024.
+	for _, ds := range []string{"2024-01-08", "2024-01-09"} {
+		registrar(t, execRepo, ds, "NDF", "Posição")
+		registrar(t, execRepo, ds, "SWAP", "Posição")
+	}
+	// Inconsistência apenas em 08/01 (combo NDF/Posição).
+	incRepo := &fakeIncRepo{itens: []model.InconsistenciaProcessamento{inc("2024-01-08", "NDF", "Posição")}}
+
+	svc := NewExecucaoService(execRepo, padroesDois()).ComInconsistenciaRepo(incRepo)
+	dias, err := svc.CalendarioMes(ctx, 2024, time.January)
+	if err != nil {
+		t.Fatalf("erro: %v", err)
+	}
+	if got := statusDoDia(dias, 8); got != "inconsistencia" {
+		t.Fatalf("08/01 (com inconsistência) deveria ser inconsistencia, obteve %q", got)
+	}
+	if got := statusDoDia(dias, 9); got != "completo" {
+		t.Fatalf("09/01 (sem inconsistência) deveria ser completo, obteve %q", got)
+	}
+}
+
+// TestStatusPorData_Inconsistencia valida que o status por combinação expõe a contagem
+// de inconsistências da última versão.
+func TestStatusPorData_Inconsistencia(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+	execRepo := filerepo.NewExecucaoRepo(dir)
+	data, _ := time.Parse("2006-01-02", "2024-01-08")
+	if err := execRepo.RegistrarExecucao(ctx, model.MovimentoExecucao{
+		DataLote: data, Produto: "NDF", Dominio: "Posição", QtdLancamentos: 5, QtdEstornos: 2,
+	}); err != nil {
+		t.Fatalf("registrar: %v", err)
+	}
+	incRepo := &fakeIncRepo{itens: []model.InconsistenciaProcessamento{
+		inc("2024-01-08", "NDF", "Posição"),
+		inc("2024-01-08", "NDF", "Posição"),
+	}}
+
+	svc := NewExecucaoService(execRepo, padroesDois()).ComInconsistenciaRepo(incRepo)
+	status, err := svc.StatusPorData(ctx, data)
+	if err != nil {
+		t.Fatalf("erro: %v", err)
+	}
+	var achou bool
+	for _, s := range status {
+		if s.Produto == "NDF" && s.Dominio == "Posição" {
+			achou = true
+			if s.QtdInconsistencias != 2 {
+				t.Fatalf("NDF/Posição deveria ter 2 inconsistências, obteve %d", s.QtdInconsistencias)
+			}
+			if s.QtdLancamentos != 5 || s.QtdEstornos != 2 {
+				t.Fatalf("contadores de lançamento/estorno inesperados: %+v", s)
+			}
+		}
+		if s.Produto == "SWAP" && s.QtdInconsistencias != 0 {
+			t.Fatalf("SWAP/Posição não deveria ter inconsistências, obteve %d", s.QtdInconsistencias)
+		}
+	}
+	if !achou {
+		t.Fatalf("combinação NDF/Posição não encontrada no status")
+	}
+}
+
 // TestCalendarioMes_Agregado valida a cor agregada: completo (todos os combos),
 // parcial (falta algum) e nenhum (dia útil passado sem execução), além de nao_util.
 func TestCalendarioMes_Agregado(t *testing.T) {

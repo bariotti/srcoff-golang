@@ -275,11 +275,14 @@ func (s *MovimentoContabilService) GerarMovimentoEscopo(ctx context.Context, dat
 	}
 
 	// 3b. Obrigatoriedade de movimento de D-1 útil, por combinação. Aplica-se apenas às
-	// combinações cujo padrão exige E que já tenham movimento em alguma data; nesse caso,
-	// exige que exista movimento no dia útil anterior à data de processamento.
+	// combinações cujo padrão exige E que já tenham movimento em alguma data ESTRITAMENTE
+	// ANTERIOR à data de processamento; nesse caso, exige que exista movimento no dia útil
+	// anterior. Reprocessar a própria data (ou a primeira data do combo) nunca é bloqueado,
+	// pois a execução da própria data não conta como histórico anterior.
 	bloqueados := map[string]bool{}
 	var bloqueios []model.ProdutoDominio
 	if s.execucaoRepo != nil {
+		dataStr := data.Format("2006-01-02")
 		dUtilAnterior := DiaUtilAnterior(data).Format("2006-01-02")
 		for _, c := range combosSet {
 			if !s.exigeMovimentoD1(ctx, c.Produto, c.Dominio) {
@@ -289,17 +292,19 @@ func (s *MovimentoContabilService) GerarMovimentoEscopo(ctx context.Context, dat
 			if err != nil {
 				return nil, fmt.Errorf("erro ao verificar obrigatoriedade de D-1: %w", err)
 			}
-			if len(datas) == 0 {
-				continue // primeira execução do produto/domínio: permitido
-			}
-			temD1 := false
+			temAnterior := false // existe execução em data estritamente anterior?
+			temD1 := false       // existe execução exatamente no dia útil anterior?
 			for _, d := range datas {
-				if d.Format("2006-01-02") == dUtilAnterior {
+				ds := d.Format("2006-01-02")
+				if ds < dataStr {
+					temAnterior = true
+				}
+				if ds == dUtilAnterior {
 					temD1 = true
-					break
 				}
 			}
-			if !temD1 {
+			// Só bloqueia quando já há histórico anterior e falta o D-1 útil.
+			if temAnterior && !temD1 {
 				bloqueados[c.Produto+"\x00"+c.Dominio] = true
 				bloqueios = append(bloqueios, c)
 			}

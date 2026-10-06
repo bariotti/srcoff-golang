@@ -45,6 +45,7 @@
     .cal-completo { background: #198754; color: #fff; border-color: #198754; }
     .cal-parcial { background: #ffc107; color: #212529; border-color: #ffc107; }
     .cal-nenhum { background: #dc3545; color: #fff; border-color: #dc3545; }
+    .cal-inconsistencia { background: #fd7e14; color: #fff; border-color: #fd7e14; }
     .cal-nao-util { background: #e9ecef; color: #adb5bd; }
     .cal-fut { background: #fff; color: #adb5bd; border-style: dashed; }
     .cal-legenda { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 12px; font-size: 0.8rem; color: #495057; }
@@ -147,7 +148,7 @@
         <div class="card shadow-sm mt-4">
           <div class="card-header"><i class="bi bi-calendar3 me-2"></i>Calendário de Execução do Contábil<span class="subtitulo">visão agregada de todos os Produtos/Domínios</span></div>
           <div class="card-body">
-            <p class="text-muted small">Cada dia é colorido conforme a execução do contábil de <strong>todos</strong> os Produtos/Domínios (padrões de arquivo): <strong>verde</strong> = todos executados, <strong>amarelo</strong> = falta algum, <strong>vermelho</strong> = nenhum executado.</p>
+            <p class="text-muted small">Cada dia é colorido conforme a execução do contábil de <strong>todos</strong> os Produtos/Domínios (padrões de arquivo): <strong>verde</strong> = todos executados, <strong>amarelo</strong> = falta algum, <strong>vermelho</strong> = nenhum executado, <strong>laranja</strong> = processado com inconsistência (última versão).</p>
             <div class="row g-2 align-items-end">
               <div class="col-auto">
                 <label class="form-label form-label-sm mb-0">Mês</label>
@@ -627,10 +628,10 @@
         </ul>
 
         <h6 class="mt-3">Exemplo — criar uma regra nova com duas condições</h6>
-        <pre class="bg-light p-2 rounded small mb-0"><code>regra_id;descricao;codigo_produto_corporativo;dominio;...;condicao_id;condicao;conta_debito;conta_credito;campo_valor;campo_moeda;campo_boleto;condicao_ativa
-NOVA-1;Minha Regra;NDF;Posição;...;;valor_mtm &gt;= 0;1111111111;2222222222;valor_principal;moeda_principal;codigo_identificador_boleto;
-NOVA-1;Minha Regra;NDF;Posição;...;;valor_mtm &lt; 0;3333333333;4444444444;valor_principal;moeda_principal;codigo_identificador_boleto;</code></pre>
-        <p class="text-muted small mt-2 mb-0">Dica: exporte primeiro para usar o arquivo atual como modelo e acrescente as linhas novas ao final.</p>
+        <pre class="bg-light p-2 rounded small mb-0"><code>regra_id;descricao;codigo_produto_corporativo;dominio;campo_produto;pre_condicao;regra_ativa;posta_reverte;condicao_id;condicao;conta_debito;conta_credito;campo_valor;campo_moeda;campo_boleto;condicao_ativa
+NOVA-1;Minha Regra;NDF;Posição;;;Sim;Sim;;valor_mtm &gt;= 0;1111111111;2222222222;valor_principal;moeda_principal;codigo_identificador_boleto;
+NOVA-1;Minha Regra;NDF;Posição;;;Sim;Sim;;valor_mtm &lt; 0;3333333333;4444444444;valor_principal;moeda_principal;codigo_identificador_boleto;</code></pre>
+        <p class="text-muted small mt-2 mb-0">O exemplo mostra <strong>todas</strong> as colunas, na ordem do CSV exportado. Dica: exporte primeiro para usar o arquivo atual como modelo e acrescente as linhas novas ao final.</p>
       </div>
       <div class="modal-footer">
         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fechar</button>
@@ -994,6 +995,7 @@ async function consultarInconsistencias() {
   const rows = lista.map(i => `<tr>
     <td>${i.codigo_identificador_boleto || '—'}</td>
     <td>${i.produto || '—'}</td>
+    <td><span class="badge bg-info text-dark">${i.dominio || '—'}</span></td>
     <td>${i.descricao_regra_contabil || '—'}</td>
     <td><span class="badge bg-warning text-dark">${rotuloTipoInc(i.tipo)}</span></td>
     <td><code>${i.expressao || ''}</code></td>
@@ -1007,7 +1009,7 @@ async function consultarInconsistencias() {
     </div>
     <div class="card-body p-0"><div class="table-responsive">
       <table class="table table-sm table-hover mb-0">
-        <thead class="table-dark"><tr><th>Boleto</th><th>Produto</th><th>Regra</th><th>Tipo</th><th>Expressão</th><th>Campos Faltantes</th><th>Detalhe</th></tr></thead>
+        <thead class="table-dark"><tr><th>Boleto</th><th>Produto</th><th>Domínio</th><th>Regra</th><th>Tipo</th><th>Expressão</th><th>Campos Faltantes</th><th>Detalhe</th></tr></thead>
         <tbody>${rows}</tbody>
       </table>
     </div></div>
@@ -1036,7 +1038,7 @@ async function consultarStatus() {
     <td><span class="badge bg-secondary">${s.produto || 'Todos'}</span></td>
     <td><span class="badge bg-info text-dark">${s.dominio || 'Todos'}</span></td>
     <td>${s.processado
-      ? `<span class="badge bg-success"><i class="bi bi-check-circle me-1"></i>Processado</span> <small class="text-muted">${s.qtd_lancamentos} lanç. / ${s.qtd_estornos} est.</small>`
+      ? `<span class="badge bg-success"><i class="bi bi-check-circle me-1"></i>Processado</span> <small class="text-muted">${s.qtd_lancamentos} lanç. / ${s.qtd_estornos} est. / <span class="${s.qtd_inconsistencias > 0 ? 'text-danger fw-semibold' : ''}">${s.qtd_inconsistencias} inc.</span></small>`
       : '<span class="badge bg-warning text-dark"><i class="bi bi-hourglass-split me-1"></i>Pendente</span>'}</td>
   </tr>`).join('');
   el.innerHTML = `<div class="table-responsive"><table class="table table-sm table-hover mb-0">
@@ -1057,8 +1059,8 @@ async function consultarCalendario() {
 
 function renderCalendario(dias, ano, mes) {
   const nomes = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
-  const classe = { completo: 'cal-completo', parcial: 'cal-parcial', nenhum: 'cal-nenhum', nao_util: 'cal-nao-util', futuro: 'cal-fut' };
-  const rotulo = { completo: 'Todos executados', parcial: 'Parcial (falta algum)', nenhum: 'Nenhum executado', nao_util: 'Não útil', futuro: 'Futuro' };
+  const classe = { completo: 'cal-completo', parcial: 'cal-parcial', nenhum: 'cal-nenhum', inconsistencia: 'cal-inconsistencia', nao_util: 'cal-nao-util', futuro: 'cal-fut' };
+  const rotulo = { completo: 'Todos executados', parcial: 'Parcial (falta algum)', nenhum: 'Nenhum executado', inconsistencia: 'Com inconsistência', nao_util: 'Não útil', futuro: 'Futuro' };
   // Primeiro dia da semana do mês (0=Dom) para posicionar o dia 1 na grade.
   const offset = new Date(ano, mes - 1, 1).getDay();
   let cells = '';
@@ -1069,9 +1071,10 @@ function renderCalendario(dias, ano, mes) {
     if (d.hoje) tags += '<span class="cal-tag">Hoje</span>';
     if (d.fechamento_mensal) tags += '<span class="cal-tag">Fechamento Mensal</span>';
     let titulo = `${d.data} — ${rotulo[d.status] || d.status}`;
-    if (d.esperados > 0 && (d.status === 'completo' || d.status === 'parcial' || d.status === 'nenhum')) {
+    if (d.esperados > 0 && (d.status === 'completo' || d.status === 'parcial' || d.status === 'nenhum' || d.status === 'inconsistencia')) {
       titulo += ` (${d.executados}/${d.esperados} combos)`;
     }
+    if (d.inconsistencias > 0) titulo += ` · ${d.inconsistencias} inconsistência(s)`;
     if (d.fechamento_mensal) titulo += ' · Fechamento mensal (último dia útil)';
     cells += `<div class="cal-cell ${c}${d.hoje ? ' cal-hoje' : ''}" title="${titulo}">
       <span class="cal-dia-num">${d.dia}</span>${tags}</div>`;
@@ -1081,6 +1084,7 @@ function renderCalendario(dias, ano, mes) {
     <span><i class="cal-dot cal-completo"></i>Todos executados</span>
     <span><i class="cal-dot cal-parcial"></i>Parcial</span>
     <span><i class="cal-dot cal-nenhum"></i>Nenhum</span>
+    <span><i class="cal-dot cal-inconsistencia"></i>Com inconsistência</span>
     <span><i class="cal-dot cal-nao-util"></i>Não útil</span>
     <span><i class="cal-dot cal-fut"></i>Futuro</span>
   </div>`;

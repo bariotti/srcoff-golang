@@ -78,7 +78,8 @@ func main() {
 		ComExecucaoRepo(execucaoRepo).
 		ComPadraoRepo(padraoArquivoRepo)
 	inconsistenciaSvc := service.NewInconsistenciaService(inconsistenciaRepo)
-	execucaoSvc := service.NewExecucaoService(execucaoRepo, padraoArquivoRepo)
+	execucaoSvc := service.NewExecucaoService(execucaoRepo, padraoArquivoRepo).
+		ComInconsistenciaRepo(inconsistenciaRepo)
 	notificacaoSvc := service.NewNotificacaoService(notificacaoRepo)
 	regraSvc := service.NewRegraContabilService(regraRepo)
 	conciliacaoSvc := service.NewConciliacaoService(posicaoRepo, movimentoRepo)
