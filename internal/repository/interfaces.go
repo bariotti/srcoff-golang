@@ -63,6 +63,10 @@ type ExecucaoRepository interface {
 	// DatasExecutadas retorna as datas distintas com contábil executado para o par
 	// (produto, domínio), em ordem crescente.
 	DatasExecutadas(ctx context.Context, produto, dominio string) ([]time.Time, error)
+	// DatasComMovimento retorna as datas distintas que efetivamente geraram movimento
+	// contábil (qtd_lancamentos > 0) para o par (produto, domínio). Execuções que não
+	// geraram lançamentos (ex.: barradas por inconsistências) não entram.
+	DatasComMovimento(ctx context.Context, produto, dominio string) ([]time.Time, error)
 }
 
 // NotificacaoRepository persiste as notificações de eventos automáticos.

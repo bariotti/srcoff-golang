@@ -31,8 +31,8 @@ func (r *ExecucaoRepo) RegistrarExecucao(ctx context.Context, e model.MovimentoE
 		return err
 	}
 	if _, err := tx.ExecContext(ctx,
-		"INSERT INTO movimento_execucao (data_lote, produto, dominio, qtd_lancamentos, qtd_estornos, criado_em) VALUES (@p1,@p2,@p3,@p4,@p5,@p6)",
-		dataStr, e.Produto, e.Dominio, e.QtdLancamentos, e.QtdEstornos, time.Now(),
+		"INSERT INTO movimento_execucao (data_lote, produto, dominio, qtd_lancamentos, qtd_estornos, qtd_movimento, criado_em) VALUES (@p1,@p2,@p3,@p4,@p5,@p6,@p7)",
+		dataStr, e.Produto, e.Dominio, e.QtdLancamentos, e.QtdEstornos, e.QtdMovimento, time.Now(),
 	); err != nil {
 		return err
 	}
@@ -43,6 +43,28 @@ func (r *ExecucaoRepo) RegistrarExecucao(ctx context.Context, e model.MovimentoE
 func (r *ExecucaoRepo) DatasExecutadas(ctx context.Context, produto, dominio string) ([]time.Time, error) {
 	rows, err := r.db.QueryContext(ctx,
 		"SELECT DISTINCT data_lote FROM movimento_execucao WHERE produto = @p1 AND dominio = @p2 ORDER BY data_lote",
+		produto, dominio,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var datas []time.Time
+	for rows.Next() {
+		var d time.Time
+		if err := rows.Scan(&d); err != nil {
+			return nil, err
+		}
+		datas = append(datas, d)
+	}
+	return datas, rows.Err()
+}
+
+// DatasComMovimento retorna as datas distintas que geraram movimento (qtd_lancamentos > 0)
+// para (produto, domínio). Execuções sem lançamentos não entram.
+func (r *ExecucaoRepo) DatasComMovimento(ctx context.Context, produto, dominio string) ([]time.Time, error) {
+	rows, err := r.db.QueryContext(ctx,
+		"SELECT DISTINCT data_lote FROM movimento_execucao WHERE produto = @p1 AND dominio = @p2 AND ISNULL(qtd_movimento, 0) > 0 ORDER BY data_lote",
 		produto, dominio,
 	)
 	if err != nil {

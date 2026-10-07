@@ -1,0 +1,7 @@
+# Banco SQLite de runtime (backend sqlite)
+*.db
+*.db-wal
+*.db-shm
+
+# Binários de backup gerados pelo build
+*.exe~

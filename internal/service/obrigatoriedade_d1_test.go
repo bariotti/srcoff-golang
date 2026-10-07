@@ -192,3 +192,46 @@ func TestObrigatoriedadeD1_ReprocessarMesmaDataNaoBloqueia(t *testing.T) {
 		t.Fatalf("15/01 deveria ter lançamentos após o reprocesso")
 	}
 }
+
+// TestObrigatoriedadeD1_DiaAnteriorSemLancamentoNaoConta valida que um dia anterior que
+// rodou mas NÃO gerou lançamentos (0 lançamentos) não conta como "tem contábil": por isso
+// não dispara a obrigatoriedade de D-1 ao processar uma data posterior.
+func TestObrigatoriedadeD1_DiaAnteriorSemLancamentoNaoConta(t *testing.T) {
+	ctx := context.Background()
+	eval := evaluator.New()
+	dir := t.TempDir()
+
+	qua10 := d("2024-01-10") // quarta; D-1 útil = terça 09/01
+	seg08 := d("2024-01-08") // segunda, anterior; teve rodada com 0 lançamentos
+
+	posRepo := &fakePosicaoRepo{registros: []model.PosicaoCarteira{
+		posD1(1, qua10, "NDF", "Posição", "B1", 100),
+	}}
+	regraRepo := &fakeRegraRepo{regras: []model.RegraContabil{regraSimplesD1()}}
+	movRepo := filerepo.NewMovimentoContabilRepo(dir)
+	execRepo := filerepo.NewExecucaoRepo(dir)
+	padrao := &fakePadraoLookup{padroes: []model.PadraoArquivo{
+		{Produto: "NDF", Dominio: "Posição", ObrigatorioMovD1: boolPtr(true)},
+	}}
+	svc := NewMovimentoContabilService(posRepo, regraRepo, movRepo, eval).
+		ComExecucaoRepo(execRepo).ComPadraoRepo(padrao)
+
+	// 08/01 rodou mas não gerou lançamentos (0) — não é "contábil".
+	if err := execRepo.RegistrarExecucao(ctx, model.MovimentoExecucao{
+		DataLote: seg08, Produto: "NDF", Dominio: "Posição", QtdLancamentos: 0,
+	}); err != nil {
+		t.Fatalf("registrar execução sem lançamentos: %v", err)
+	}
+
+	// Processar 10/01 não deve bloquear, pois não há contábil (lançamentos) em data anterior.
+	bloq, err := svc.GerarMovimentoEscopo(ctx, qua10, "NDF", "Posição")
+	if err != nil {
+		t.Fatalf("erro inesperado: %v", err)
+	}
+	if len(bloq) != 0 {
+		t.Fatalf("10/01 não deveria bloquear (08/01 teve 0 lançamentos), bloq=%v", bloq)
+	}
+	if p, _ := svc.ConsultarLancamentos(ctx, qua10, 1, 100); p.Total == 0 {
+		t.Fatalf("10/01 deveria ter lançamentos")
+	}
+}

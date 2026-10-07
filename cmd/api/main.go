@@ -13,11 +13,12 @@ import (
 	"srcoff/internal/handler"
 	"srcoff/internal/repository"
 	filerepo "srcoff/internal/repository/file"
+	sqliterepo "srcoff/internal/repository/sqlite"
 	"srcoff/internal/service"
 )
 
 func main() {
-	// 1. Selecionar backend de armazenamento via STORAGE_BACKEND (sqlserver | file)
+	// 1. Selecionar backend de armazenamento via STORAGE_BACKEND (sqlserver | file | sqlite)
 	backend := os.Getenv("STORAGE_BACKEND")
 	if backend == "" {
 		backend = "file"
@@ -53,6 +54,27 @@ func main() {
 		configuracaoRepo = filerepo.NewConfiguracaoRepo(dir)
 		execucaoRepo = filerepo.NewExecucaoRepo(dir)
 		notificacaoRepo = filerepo.NewNotificacaoRepo(dir)
+
+	case "sqlite":
+		path := os.Getenv("SQLITE_PATH")
+		if path == "" {
+			path = "./srcoff.db"
+		}
+		sdb, err := sqliterepo.Open(path)
+		if err != nil {
+			log.Fatalf("erro ao abrir SQLite (%s): %v", path, err)
+		}
+		defer sdb.Close()
+		log.Printf("Backend: SQLite (arquivo=%s)", path)
+		posicaoRepo = sqliterepo.NewPosicaoCarteiraRepo(sdb)
+		regraRepo = sqliterepo.NewRegraContabilRepo(sdb)
+		movimentoRepo = sqliterepo.NewMovimentoContabilRepo(sdb)
+		parametrizacaoRepo = sqliterepo.NewParametrizacaoRepo(sdb)
+		inconsistenciaRepo = sqliterepo.NewInconsistenciaRepo(sdb)
+		padraoArquivoRepo = sqliterepo.NewPadraoArquivoRepo(sdb)
+		configuracaoRepo = sqliterepo.NewConfiguracaoRepo(sdb)
+		execucaoRepo = sqliterepo.NewExecucaoRepo(sdb)
+		notificacaoRepo = sqliterepo.NewNotificacaoRepo(sdb)
 
 	default: // sqlserver
 		rawSQLDB = db.Connect()

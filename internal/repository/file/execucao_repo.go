@@ -63,6 +63,29 @@ func (r *ExecucaoRepo) DatasExecutadas(_ context.Context, produto, dominio strin
 	return datas, nil
 }
 
+// DatasComMovimento retorna as datas distintas que geraram movimento (qtd_movimento > 0)
+// para (produto, domínio). Reflete a última execução de cada data (RegistrarExecucao
+// sobrescreve por data/combo). Usa a contagem BRUTA de movimento (não a visível), pois
+// o par lançamento+estorno de saldo zero zeraria a contagem visível.
+func (r *ExecucaoRepo) DatasComMovimento(_ context.Context, produto, dominio string) ([]time.Time, error) {
+	all, err := r.st.load()
+	if err != nil {
+		return nil, err
+	}
+	vistas := map[string]bool{}
+	var datas []time.Time
+	for _, e := range all {
+		if e.Produto == produto && e.Dominio == dominio && e.QtdMovimento > 0 {
+			k := e.DataLote.Format("2006-01-02")
+			if !vistas[k] {
+				vistas[k] = true
+				datas = append(datas, e.DataLote)
+			}
+		}
+	}
+	return datas, nil
+}
+
 func (r *ExecucaoRepo) ListarPorData(_ context.Context, data time.Time) ([]model.MovimentoExecucao, error) {
 	all, err := r.st.load()
 	if err != nil {

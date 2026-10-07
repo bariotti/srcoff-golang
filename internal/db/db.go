@@ -26,7 +26,7 @@ func Connect() *sql.DB {
 		dbServer, dbName,
 	)
 
-	db, err := sql.Open("mssql", connStr)
+	db, err := sql.Open("sqlserver", connStr)
 	if err != nil {
 		log.Printf("erro ao abrir conexão com o banco de dados: %v", err)
 		os.Exit(1)

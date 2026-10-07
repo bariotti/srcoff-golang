@@ -173,13 +173,14 @@ srcoff/
 
 | Variável | Padrão | Descrição |
 |----------|--------|-----------|
-| `STORAGE_BACKEND` | `file` | Backend de persistência: `sqlserver` ou `file` |
+| `STORAGE_BACKEND` | `sqlserver` | Backend de persistência: `sqlserver`, `file` ou `sqlite` |
 | `DB_SERVER` | `LOCALHOST\SQLEXPRESS` | Servidor SQL Server |
 | `DB_NAME` | `srcoff` | Nome do banco de dados |
 | `API_PORT` | `8080` | Porta da API |
 | `FRONTEND_PORT` | `9090` | Porta do Frontend |
 | `API_URL` | `http://localhost:8080` | URL da API consumida pelo frontend |
 | `FILE_STORAGE_DIR` | `./data` | Diretório dos arquivos JSON (backend file) |
+| `SQLITE_PATH` | `./srcoff.db` | Caminho do arquivo .db (backend sqlite) |
 | `CAMPO_BOLETO_PADRAO` | `codigo_identificador_boleto` | Campo da posição usado como identificador do boleto na conciliação/exportação e como fallback quando a condição não define `campo_boleto` |
 
 ### Executar com SQL Server
@@ -202,6 +203,20 @@ go build -o frontend.exe ./cmd/frontend
 ```bash
 set STORAGE_BACKEND=file
 set FILE_STORAGE_DIR=./data
+
+.\api.exe
+.\frontend.exe
+```
+
+### Executar com SQLite (embarcado, sem servidor)
+
+Backend embarcado em arquivo único, indexado e transacional (driver pure-Go
+`modernc.org/sqlite`, sem CGO). O schema e os combos padrão são criados automaticamente
+na primeira execução.
+
+```bash
+set STORAGE_BACKEND=sqlite
+set SQLITE_PATH=./srcoff.db
 
 .\api.exe
 .\frontend.exe

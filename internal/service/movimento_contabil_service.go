@@ -42,6 +42,9 @@ type inconsistenciaRepoWriter interface {
 type execucaoRepoWriter interface {
 	RegistrarExecucao(ctx context.Context, e model.MovimentoExecucao) error
 	DatasExecutadas(ctx context.Context, produto, dominio string) ([]time.Time, error)
+	// DatasComMovimento retorna as datas que efetivamente geraram lançamentos (>0) —
+	// base correta da obrigatoriedade de D-1 e da escolha da data de estorno.
+	DatasComMovimento(ctx context.Context, produto, dominio string) ([]time.Time, error)
 }
 
 // padraoFlagLookup consulta a configuração dos padrões de arquivo (ex: obrigatoriedade
@@ -128,11 +131,11 @@ func (s *MovimentoContabilService) dataEstornoPorCombo(ctx context.Context, data
 	if s.execucaoRepo == nil {
 		return time.Time{}, false
 	}
-	datas, err := s.execucaoRepo.DatasExecutadas(ctx, produto, dominio)
+	// Maior dia útil anterior COM movimento contábil (lançamentos > 0).
+	datas, err := s.execucaoRepo.DatasComMovimento(ctx, produto, dominio)
 	if err != nil {
 		return time.Time{}, false
 	}
-	// Maior data estritamente anterior à data de processamento.
 	var melhor time.Time
 	achou := false
 	for _, d := range datas {
@@ -274,11 +277,12 @@ func (s *MovimentoContabilService) GerarMovimentoEscopo(ctx context.Context, dat
 		}
 	}
 
-	// 3b. Obrigatoriedade de movimento de D-1 útil, por combinação. Aplica-se apenas às
-	// combinações cujo padrão exige E que já tenham movimento em alguma data ESTRITAMENTE
-	// ANTERIOR à data de processamento; nesse caso, exige que exista movimento no dia útil
-	// anterior. Reprocessar a própria data (ou a primeira data do combo) nunca é bloqueado,
-	// pois a execução da própria data não conta como histórico anterior.
+	// 3b. Obrigatoriedade de movimento de D-1 útil, por combinação. Baseia-se no MOVIMENTO
+	// CONTÁBIL REAL (dias com lançamentos > 0), não no mero log de execução — uma rodada que
+	// gerou 0 lançamentos (ex.: barrada por inconsistências) não conta como "tem contábil".
+	// Regra (padrão exige D-1):
+	//   - existe contábil em algum dia útil ANTERIOR à data? Não → executa.
+	//   - Sim → existe contábil no dia útil anterior (D-1)? Não → barra; Sim → executa.
 	bloqueados := map[string]bool{}
 	var bloqueios []model.ProdutoDominio
 	if s.execucaoRepo != nil {
@@ -288,12 +292,12 @@ func (s *MovimentoContabilService) GerarMovimentoEscopo(ctx context.Context, dat
 			if !s.exigeMovimentoD1(ctx, c.Produto, c.Dominio) {
 				continue
 			}
-			datas, err := s.execucaoRepo.DatasExecutadas(ctx, c.Produto, c.Dominio)
+			datas, err := s.execucaoRepo.DatasComMovimento(ctx, c.Produto, c.Dominio)
 			if err != nil {
 				return nil, fmt.Errorf("erro ao verificar obrigatoriedade de D-1: %w", err)
 			}
-			temAnterior := false // existe execução em data estritamente anterior?
-			temD1 := false       // existe execução exatamente no dia útil anterior?
+			temAnterior := false // existe contábil em data estritamente anterior?
+			temD1 := false       // existe contábil exatamente no dia útil anterior?
 			for _, d := range datas {
 				ds := d.Format("2006-01-02")
 				if ds < dataStr {
@@ -303,7 +307,7 @@ func (s *MovimentoContabilService) GerarMovimentoEscopo(ctx context.Context, dat
 					temD1 = true
 				}
 			}
-			// Só bloqueia quando já há histórico anterior e falta o D-1 útil.
+			// Só bloqueia quando já há contábil anterior e falta o D-1 útil.
 			if temAnterior && !temD1 {
 				bloqueados[c.Produto+"\x00"+c.Dominio] = true
 				bloqueios = append(bloqueios, c)
@@ -476,6 +480,7 @@ func (s *MovimentoContabilService) GerarMovimentoEscopo(ctx context.Context, dat
 			if err := s.execucaoRepo.RegistrarExecucao(ctx, model.MovimentoExecucao{
 				DataLote: data, Produto: c.Produto, Dominio: c.Dominio,
 				QtdLancamentos: qtdLancVis[k], QtdEstornos: qtdEstVis[k],
+				QtdMovimento: qtdLanc[k], // contagem bruta de movimento (não-estorno) gerado
 			}); err != nil {
 				log.Printf("[movimento] falha ao registrar execução %s/%s: %v", c.Produto, c.Dominio, err)
 			}

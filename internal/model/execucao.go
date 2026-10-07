@@ -15,7 +15,11 @@ type MovimentoExecucao struct {
 	DataLote       time.Time `json:"data_lote"`
 	Produto        string    `json:"produto"`
 	Dominio        string    `json:"dominio"`
-	QtdLancamentos int       `json:"qtd_lancamentos"`
+	QtdLancamentos int       `json:"qtd_lancamentos"` // contagem VISÍVEL (sem cancelados), para exibição
 	QtdEstornos    int       `json:"qtd_estornos"`
-	CriadoEm       time.Time `json:"criado_em"`
+	// QtdMovimento é a contagem BRUTA de lançamentos de movimento (não-estorno) gerados —
+	// usada para saber se a data realmente tem contábil, independentemente de o par
+	// lançamento+estorno ficar com saldo zero na consulta (que zeraria QtdLancamentos).
+	QtdMovimento int       `json:"qtd_movimento"`
+	CriadoEm     time.Time `json:"criado_em"`
 }

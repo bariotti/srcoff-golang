@@ -15,6 +15,7 @@ IF NOT EXISTS (
 BEGIN
     ALTER TABLE posicao_carteira ADD campos NVARCHAR(MAX) NULL;
 END;
+GO
 
 -- Backfill opcional: consolida as colunas fixas existentes em JSON na coluna `campos`
 -- para as linhas ainda não migradas (só roda se as colunas antigas existirem).
@@ -57,6 +58,7 @@ IF NOT EXISTS (
 BEGIN
     ALTER TABLE condicao_regra ADD campo_boleto VARCHAR(100) NULL;
 END;
+GO
 
 -- Preenche campo_boleto padrão nas condições existentes que não o definiram.
 UPDATE condicao_regra
