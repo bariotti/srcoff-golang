@@ -24,7 +24,7 @@ var cabecalhoRegrasCSV = []string{
 	"campo_produto",
 	"pre_condicao",
 	"regra_ativa",
-	"posta_reverte",
+	"tipo_lancamento",
 	"condicao_id",
 	"condicao",
 	"conta_debito",
@@ -38,6 +38,7 @@ var cabecalhoRegrasCSV = []string{
 // ExportarRegrasCSV trata GET /api/v1/regras/export.
 // Gera um único CSV (separador ";", com BOM para o Excel) contendo todas as regras
 // ativas e suas condições — uma linha por condição.
+// Spec: RF-024 (docs/especificacao.md §8.1, §11.2).
 func (h *RegraContabilHandler) ExportarRegrasCSV(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		w.WriteHeader(http.StatusMethodNotAllowed)
@@ -72,7 +73,7 @@ func (h *RegraContabilHandler) ExportarRegrasCSV(w http.ResponseWriter, r *http.
 			reg.CampoProduto,
 			reg.PreCondicao,
 			boolStr(reg.Ativo),
-			boolStr(reg.PostaReverte),
+			model.NormalizaTipoLancamento(reg.TipoLancamento),
 		}
 		if len(reg.Condicoes) == 0 {
 			// Regra sem condições: colunas de condição vazias.
@@ -145,6 +146,7 @@ type importRegrasCSV struct {
 // com campos de condição preenchidos → cria condição (em regra existente ou nova).
 // Linhas idênticas ao cadastro não são atualizadas; registros ausentes do CSV não são
 // tocados (nenhuma exclusão).
+// Spec: RF-024 · RN-024.2/024.3 (docs/especificacao.md §8.1, §11.2).
 func (h *RegraContabilHandler) ImportarRegrasCSV(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		w.WriteHeader(http.StatusMethodNotAllowed)
@@ -315,7 +317,7 @@ func parseRegrasCSV(r io.Reader) (importRegrasCSV, error) {
 			CampoProduto:             get(linha, "campo_produto"),
 			PreCondicao:              get(linha, "pre_condicao"),
 			Ativo:                    parseBoolCSV(get(linha, "regra_ativa"), true),
-			PostaReverte:             parseBoolCSV(get(linha, "posta_reverte"), false),
+			TipoLancamento:           parseTipoLancamentoCSV(get(linha, "tipo_lancamento")),
 		}
 
 		cCond := get(linha, "condicao")
@@ -398,6 +400,18 @@ func parseBoolCSV(s string, def bool) bool {
 	}
 }
 
+// parseTipoLancamentoCSV interpreta o tipo de lançamento do CSV. Aceita rótulos amigáveis
+// de "não reverte" e, para o restante, delega a normalização canônica ao model
+// (reverte | nao_reverte | incremental; vazio/desconhecido = "reverte").
+func parseTipoLancamentoCSV(s string) string {
+	switch strings.ToLower(strings.TrimSpace(s)) {
+	case "não reverte", "nao reverte", "posta/nao reverte", "posta/não reverte":
+		return model.TipoNaoReverte
+	default:
+		return model.NormalizaTipoLancamento(s)
+	}
+}
+
 // regraIgual indica se os campos editáveis de duas regras são idênticos.
 func regraIgual(a, b model.RegraContabil) bool {
 	return a.Descricao == b.Descricao &&
@@ -406,7 +420,7 @@ func regraIgual(a, b model.RegraContabil) bool {
 		a.CampoProduto == b.CampoProduto &&
 		a.PreCondicao == b.PreCondicao &&
 		a.Ativo == b.Ativo &&
-		a.PostaReverte == b.PostaReverte
+		parseTipoLancamentoCSV(a.TipoLancamento) == parseTipoLancamentoCSV(b.TipoLancamento)
 }
 
 // condicaoIgual indica se os campos editáveis de duas condições são idênticos.

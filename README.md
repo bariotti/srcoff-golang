@@ -2,6 +2,8 @@
 
 Sistema desenvolvido em Go para geração, estorno, conciliação e consulta do movimento contábil diário da Tesouraria Offshore.
 
+> 📐 **Especificação (SDD):** este README é o guia de uso. O comportamento normativo do sistema (requisitos, regras de negócio e contrato da API) está em [`docs/especificacao.md`](docs/especificacao.md) — fonte da verdade para desenvolvimento. Em caso de divergência, a especificação prevalece. Ver [`docs/README.md`](docs/README.md).
+
 ---
 
 ## Sumário
@@ -79,7 +81,7 @@ Menu **Regras** → **Nova Regra**. Cada regra é uma peça do roteiro contábil
 
 1. Preencha a **Descrição** (ex.: `FXO - Registro de Notional`).
 2. Selecione o(s) **Produto(s)** e **Domínio(s)** a que a regra se aplica (`FXO` / `Posição`).
-3. Opcionalmente, informe uma **Pré Condição** e a flag **Posta/Reverte**. Clique em **Criar**.
+3. Opcionalmente, informe uma **Pré Condição** e escolha o **Tipo de Lançamento** (combo obrigatório). Clique em **Criar**.
 
 > Repita este passo para **cada** regra do produto — juntas, elas formam o roteiro contábil. As regras podem ser **editadas** (lápis) e **excluídas** (lixeira) na lista; as condições também podem ser editadas e excluídas.
 > A coluna de data da posição agora é definida no **padrão de arquivo** (Passo 2), não mais na regra.
@@ -262,7 +264,7 @@ Define as regras de roteamento contábil.
 | `campo_data` | VARCHAR(100) | Nome da coluna do arquivo que contém a data da posição (usado na importação) |
 | `pre_condicao` | VARCHAR(1000) | Expressão opcional combinada com **E** a cada condição da regra |
 | `dominio` | VARCHAR(255) | Domínio(s) da regra, separados por vírgula (ex: `Posição,Liquidação`) — opcional |
-| `posta_reverte` | BIT | Se os lançamentos da regra são estornados no dia seguinte |
+| `tipo_lancamento` | VARCHAR | Tipo de lançamento da regra: `reverte` · `nao_reverte` · `incremental` (migration 014) |
 | `ativo` | BIT | Se a regra está ativa |
 
 > A regra só é aplicada às posições cujo **produto** (informado no upload e gravado no campo `produto`) coincide com `codigo_produto_corporativo`. Ex.: ao processar uma posição de NDF, apenas as regras de NDF são aplicadas. Regra sem produto aplica-se a todas as posições.
@@ -471,7 +473,7 @@ Página para cadastrar e manter as regras de roteamento contábil. O conjunto de
 ![Regras Contábeis — lista](https://github.com/user-attachments/assets/6c25ec2b-a086-4f1c-a987-ca6825ced747)
 
 **Regras (grid):**
-- Lista as regras ativas com colunas: **ID**, **Regra** (`Produto - Domínio - Descrição`), Descrição, Produtos, Domínios, Pré Condição e Posta/Reverte
+- Lista as regras ativas com colunas: **ID**, **Regra** (`Produto - Domínio - Descrição`), Descrição, Produtos, Domínios, Pré Condição e **Tipo** (Posta/Reverte · Posta/Não Reverte · Incremental)
 - Botão "Ver Condições" para abrir/gerenciar as condições de cada regra
 - Busca por texto (descrição, produto, condição…)
 
@@ -479,7 +481,10 @@ Página para cadastrar e manter as regras de roteamento contábil. O conjunto de
 
 **Nova Regra:**
 - **Descrição**; **Produtos** e **Domínios** (listas — a regra casa por Produto **E** Domínio; vazio = todas as posições/domínios)
-- **Pré Condição** (opcional, combinada com E a cada condição) e a flag **Posta/Reverte** (se desmarcada, os lançamentos desta regra **não são estornados**)
+- **Pré Condição** (opcional, combinada com E a cada condição) e o **Tipo de Lançamento** (combo obrigatório):
+  - **Posta/Reverte** — posta e estorna os lançamentos no dia seguinte (comportamento clássico).
+  - **Posta/Não Reverte** — posta e **não** estorna (lançamentos definitivos).
+  - **Incremental** — **não** estorna; o valor lançado em D0 é **| |valor_D0| − |valor_D-N| |** por (boleto, regra), onde D-N é a mesma data-base do estorno (D-1 útil se o padrão exige D-1; senão o último dia com movimento). Primeira ocorrência = valor cheio.
 - Regras e condições podem ser **editadas** e **excluídas** (botões de lápis/lixeira na lista). A coluna de data da posição é definida no **padrão de arquivo** (Parametrizações), não na regra.
 - **Exportar/Importar CSV (lote):** o botão **Exportar CSV** gera um único arquivo (BOM UTF-8, separador `;`) com **todas as regras e condições** ativas — uma linha por condição. O botão **Importar CSV** **cria e atualiza** em lote a partir desse arquivo; o ícone **?** ao lado abre as instruções de preenchimento. Convenção da coluna `regra_id`:
   - **número existente** → atualiza a regra (se algo mudou); **número inexistente** → erro.
@@ -656,6 +661,12 @@ sqlcmd -S localhost\SQLEXPRESS -d srcoff -i migrations/011_padrao_obrigatorio_mo
 
 # Coluna do número do boleto (importada como texto) por padrão de arquivo
 sqlcmd -S localhost\SQLEXPRESS -d srcoff -i migrations/012_padrao_coluna_boleto.sql
+
+# Contagem bruta de movimento por execução (base da validação D-1)
+sqlcmd -S localhost\SQLEXPRESS -d srcoff -i migrations/013_execucao_qtd_movimento.sql
+
+# Tipo de lançamento da regra (reverte | nao_reverte | incremental)
+sqlcmd -S localhost\SQLEXPRESS -d srcoff -i migrations/014_regra_tipo_lancamento.sql
 ```
 
 

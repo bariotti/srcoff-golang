@@ -26,6 +26,7 @@ func NewNotificacaoHandler(svc notificacaoSvc) *NotificacaoHandler {
 // Notificacoes trata /api/v1/notificacoes.
 //   GET  → { nao_lidas, itens: [...] }
 //   POST → marca todas como lidas (ação de leitura ao abrir o sino)
+// Spec: RF-071 (docs/especificacao.md §10, §11.5).
 func (h *NotificacaoHandler) Notificacoes(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:

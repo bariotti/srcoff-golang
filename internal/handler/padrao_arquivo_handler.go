@@ -28,6 +28,7 @@ func NewPadraoArquivoHandler(svc padraoArquivoSvc) *PadraoArquivoHandler {
 //   GET    → lista os padrões
 //   POST   {padrao, produto} → cria
 //   DELETE ?id=N → remove
+// Spec: RF-041 (docs/especificacao.md §8.3, §11.4).
 func (h *PadraoArquivoHandler) Padroes(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:

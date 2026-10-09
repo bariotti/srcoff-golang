@@ -28,6 +28,7 @@ func NewExportHandler(svc exportMovimentoSvc) *ExportHandler {
 
 // ExportMovimentoCSV trata GET /api/v1/movimento-contabil/export
 // Retorna um arquivo CSV com todos os lançamentos do filtro informado.
+// Spec: RF-051 (docs/especificacao.md §6.2, §11.1).
 func (h *ExportHandler) ExportMovimentoCSV(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 
@@ -119,6 +120,7 @@ func (h *ExportHandler) ExportMovimentoCSV(w http.ResponseWriter, r *http.Reques
 
 // ExportMovimentoTXT trata GET /api/v1/movimento-contabil/export-txt?data=YYYY-MM-DD
 // Retorna arquivo TXT no formato específico com cabeçalho, detalhes e totalizador.
+// Spec: RF-052 (docs/especificacao.md §6.2, §11.1).
 func (h *ExportHandler) ExportMovimentoTXT(w http.ResponseWriter, r *http.Request) {
 	dataStr := r.URL.Query().Get("data")
 	data, err := time.Parse("2006-01-02", dataStr)

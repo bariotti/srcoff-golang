@@ -27,6 +27,7 @@ func NewPosicaoCarteiraHandler(svc posicaoCarteiraSvc, padraoSvc padraoArquivoRe
 	return &PosicaoCarteiraHandler{svc: svc, padraoSvc: padraoSvc}
 }
 
+// Spec: RF-091 (docs/especificacao.md §9.1, §11.3).
 func (h *PosicaoCarteiraHandler) Listar(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	dataInicioStr := q.Get("data_inicio")
@@ -119,6 +120,7 @@ func (h *PosicaoCarteiraHandler) Listar(w http.ResponseWriter, r *http.Request) 
 // Campos trata GET /api/v1/posicao/campos?data=YYYY-MM-DD
 // Retorna os nomes de campos disponíveis na posição da data — usado para sugerir
 // os campos no cadastro de regras/condições, sem exigir conhecimento da estrutura.
+// Spec: RF-091 (docs/especificacao.md §9.1, §11.3).
 func (h *PosicaoCarteiraHandler) Campos(w http.ResponseWriter, r *http.Request) {
 	dataStr := r.URL.Query().Get("data")
 	if dataStr == "" {
@@ -145,6 +147,7 @@ func (h *PosicaoCarteiraHandler) Campos(w http.ResponseWriter, r *http.Request) 
 // Campos: produto (nome do produto da posição), arquivo (.csv | .xlsx), preview (opcional "1").
 // A data de cada registro vem de uma coluna do próprio arquivo. O produto informado
 // é persistido em cada registro (campo `produto`). Com preview=1, apenas faz o parse.
+// Spec: RF-090 (docs/especificacao.md §9.1, §11.3).
 func (h *PosicaoCarteiraHandler) Upload(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		w.WriteHeader(http.StatusMethodNotAllowed)
@@ -222,6 +225,7 @@ func (h *PosicaoCarteiraHandler) Upload(w http.ResponseWriter, r *http.Request) 
 // UploadLote trata POST /api/v1/posicao/upload-lote (multipart, vários arquivos no
 // campo "arquivos"). Para cada arquivo, o produto é resolvido pelo nome via padrões
 // cadastrados; se casar com mais de um padrão, a posição é importada para cada produto.
+// Spec: RF-090 (docs/especificacao.md §9.1, §11.3).
 func (h *PosicaoCarteiraHandler) UploadLote(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		w.WriteHeader(http.StatusMethodNotAllowed)

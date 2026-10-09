@@ -67,6 +67,7 @@ func (r *RegraContabilRepo) CriarRegra(_ context.Context, regra model.RegraConta
 	}
 	regra.ID = s.NextRegra
 	regra.Ativo = true
+	regra.TipoLancamento = model.NormalizaTipoLancamento(regra.TipoLancamento)
 	s.NextRegra++
 	s.Regras = append(s.Regras, regra)
 	return regra.ID, r.save(s)
@@ -84,7 +85,7 @@ func (r *RegraContabilRepo) EditarRegra(_ context.Context, regra model.RegraCont
 			s.Regras[i].Dominio = regra.Dominio
 			s.Regras[i].CampoProduto = regra.CampoProduto
 			s.Regras[i].PreCondicao = regra.PreCondicao
-			s.Regras[i].PostaReverte = regra.PostaReverte
+			s.Regras[i].TipoLancamento = model.NormalizaTipoLancamento(regra.TipoLancamento)
 			s.Regras[i].Ativo = regra.Ativo
 			return r.save(s)
 		}

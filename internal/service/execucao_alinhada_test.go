@@ -32,7 +32,7 @@ func TestExecucaoBateComConsulta(t *testing.T) {
 	}}
 
 	regra := model.RegraContabil{
-		ID: 1, Descricao: "Regra", Ativo: true, PostaReverte: true,
+		ID: 1, Descricao: "Regra", Ativo: true, TipoLancamento: model.TipoReverte,
 		Condicoes: []model.CondicaoRegra{{
 			ID: 1, IDRegra: 1, Condicao: "valor_mtm > 0",
 			ContaDebito: "1001", ContaCredito: "2001",

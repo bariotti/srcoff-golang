@@ -11,10 +11,10 @@ import (
 // por id, leitura das condições e linha de regra sem condição.
 func TestParseRegrasCSV(t *testing.T) {
 	csv := strings.Join([]string{
-		"regra_id;descricao;codigo_produto_corporativo;dominio;campo_produto;pre_condicao;regra_ativa;posta_reverte;condicao_id;condicao;conta_debito;conta_credito;campo_valor;campo_moeda;campo_boleto;condicao_ativa",
-		"1;Regra A;NDF;Posição;produto;;Sim;Sim;10;valor_mtm > 0;1001;2001;valor_mtm;moeda;codigo_identificador_boleto;Sim",
-		"1;Regra A;NDF;Posição;produto;;Sim;Sim;11;valor_mtm < 0;3001;4001;valor_mtm;moeda;codigo_identificador_boleto;Sim",
-		"2;Regra B;SWAP;Liquidação;produto;;Não;Não;;;;;;;;",
+		"regra_id;descricao;codigo_produto_corporativo;dominio;campo_produto;pre_condicao;regra_ativa;tipo_lancamento;condicao_id;condicao;conta_debito;conta_credito;campo_valor;campo_moeda;campo_boleto;condicao_ativa",
+		"1;Regra A;NDF;Posição;produto;;Sim;reverte;10;valor_mtm > 0;1001;2001;valor_mtm;moeda;codigo_identificador_boleto;Sim",
+		"1;Regra A;NDF;Posição;produto;;Sim;reverte;11;valor_mtm < 0;3001;4001;valor_mtm;moeda;codigo_identificador_boleto;Sim",
+		"2;Regra B;SWAP;Liquidação;produto;;Não;nao_reverte;;;;;;;;",
 	}, "\n") + "\n"
 
 	imp, err := parseRegrasCSV(strings.NewReader(csv))
@@ -30,10 +30,10 @@ func TestParseRegrasCSV(t *testing.T) {
 	if len(imp.novas) != 0 || len(imp.novasCondExistente) != 0 {
 		t.Fatalf("não deveria haver regras/condições novas: %#v / %#v", imp.novas, imp.novasCondExistente)
 	}
-	if imp.updRegras[0].ID != 1 || imp.updRegras[0].Descricao != "Regra A" || !imp.updRegras[0].PostaReverte || !imp.updRegras[0].Ativo {
+	if imp.updRegras[0].ID != 1 || imp.updRegras[0].Descricao != "Regra A" || !imp.updRegras[0].EhReverte() || !imp.updRegras[0].Ativo {
 		t.Fatalf("regra 1 mal interpretada: %#v", imp.updRegras[0])
 	}
-	if imp.updRegras[1].ID != 2 || imp.updRegras[1].Ativo || imp.updRegras[1].PostaReverte {
+	if imp.updRegras[1].ID != 2 || imp.updRegras[1].Ativo || imp.updRegras[1].EhReverte() {
 		t.Fatalf("regra 2 deveria estar inativa e sem posta/reverte: %#v", imp.updRegras[1])
 	}
 	if imp.updConds[0].cond.ID != 10 || imp.updConds[0].cond.IDRegra != 1 || imp.updConds[0].cond.ContaDebito != "1001" {
@@ -46,14 +46,14 @@ func TestParseRegrasCSV(t *testing.T) {
 // nova em regra existente (condicao_id vazio).
 func TestParseRegrasCSV_Criacao(t *testing.T) {
 	csv := strings.Join([]string{
-		"regra_id;descricao;codigo_produto_corporativo;dominio;campo_produto;pre_condicao;regra_ativa;posta_reverte;condicao_id;condicao;conta_debito;conta_credito;campo_valor;campo_moeda;campo_boleto;condicao_ativa",
+		"regra_id;descricao;codigo_produto_corporativo;dominio;campo_produto;pre_condicao;regra_ativa;tipo_lancamento;condicao_id;condicao;conta_debito;conta_credito;campo_valor;campo_moeda;campo_boleto;condicao_ativa",
 		// regra nova por rótulo, 2 condições
-		"NOVA-1;Regra Nova;NDF;Posição;;;Sim;Sim;;v>0;1001;2001;v;m;b;",
-		"NOVA-1;Regra Nova;NDF;Posição;;;Sim;Sim;;v<0;3001;4001;v;m;b;",
+		"NOVA-1;Regra Nova;NDF;Posição;;;Sim;reverte;;v>0;1001;2001;v;m;b;",
+		"NOVA-1;Regra Nova;NDF;Posição;;;Sim;reverte;;v<0;3001;4001;v;m;b;",
 		// regra nova isolada (regra_id vazio)
-		";Outra Nova;SWAP;Liquidação;;;Sim;Não;;x>0;5001;6001;x;m;b;",
+		";Outra Nova;SWAP;Liquidação;;;Sim;nao_reverte;;x>0;5001;6001;x;m;b;",
 		// condição nova em regra existente (id 7), sem condicao_id
-		"7;Existente;NDF;Posição;;;Sim;Sim;;y>0;7001;8001;y;m;b;",
+		"7;Existente;NDF;Posição;;;Sim;reverte;;y>0;7001;8001;y;m;b;",
 	}, "\n") + "\n"
 
 	imp, err := parseRegrasCSV(strings.NewReader(csv))
@@ -85,7 +85,7 @@ func TestParseRegrasCSV_Criacao(t *testing.T) {
 
 // TestRegraIgualCondicaoIgual valida a detecção de "sem mudança".
 func TestRegraIgualCondicaoIgual(t *testing.T) {
-	a := model.RegraContabil{ID: 1, Descricao: "X", Dominio: "Posição", Ativo: true, PostaReverte: true}
+	a := model.RegraContabil{ID: 1, Descricao: "X", Dominio: "Posição", Ativo: true, TipoLancamento: model.TipoReverte}
 	b := a
 	if !regraIgual(a, b) {
 		t.Fatal("regras idênticas deveriam ser iguais")

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"math"
 	"os"
 	"sort"
 	"strings"
@@ -159,6 +160,11 @@ func (s *MovimentoContabilService) GerarMovimento(ctx context.Context, data time
 // grava produto/domínio em cada lançamento e registra a execução por combinação.
 // Retorna a lista de combinações (produto, domínio) BLOQUEADAS pela obrigatoriedade de
 // movimento de D-1 útil (não processadas); as demais são processadas normalmente.
+//
+// Spec: núcleo de geração — RN-100..RN-160 (docs/especificacao.md §5).
+//   RN-100 dia útil · RN-101 posição vigente · RN-110 aplicação de regras/inconsistências ·
+//   RN-120 incremental · RN-130/131 estorno · RN-140 obrigatoriedade D-1 ·
+//   RN-150 versionamento por combo · RN-160 persistência/execução.
 func (s *MovimentoContabilService) GerarMovimentoEscopo(ctx context.Context, data time.Time, produtoFiltro, dominioFiltro string) ([]model.ProdutoDominio, error) {
 	// 0. O contábil só pode ser processado em dias úteis.
 	if !EhDiaUtil(data) {
@@ -193,6 +199,65 @@ func (s *MovimentoContabilService) GerarMovimentoEscopo(ctx context.Context, dat
 	regras, err := s.regraRepo.ListarRegrasAtivas(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("erro ao carregar regras contábeis: %w", err)
+	}
+
+	// Memoiza a obrigatoriedade de D-1 por combinação: exigeMovimentoD1 relê todos os
+	// padrões a cada chamada e é consultado em vários pontos (base incremental e bloqueio
+	// de D-1) para as mesmas combinações — o cache evita a releitura repetida.
+	exigeD1Memo := map[string]bool{}
+	exigeD1De := func(produto, dominio string) bool {
+		k := produto + "\x00" + dominio
+		if v, ok := exigeD1Memo[k]; ok {
+			return v
+		}
+		v := s.exigeMovimentoD1(ctx, produto, dominio)
+		exigeD1Memo[k] = v
+		return v
+	}
+
+	// 2b. Base do cálculo INCREMENTAL (Spec: RN-120, docs/especificacao.md §5.4).
+	// Para regras incrementais, o valor lançado em D0 é
+	// | |valor_D0| - |valor_D-N| | por (produto, domínio, boleto, regra, contas), onde D-N é a
+	// MESMA data-base do estorno (D-1 útil quando o padrão exige D-1; senão o último dia com
+	// movimento antes de D0). O valor_D-N vem de reler a posição de D-N e reavaliar campo_valor.
+	baseIncremental := map[string]float64{}
+	temIncremental := false
+	for _, reg := range regras {
+		if reg.EhIncremental() {
+			temIncremental = true
+			break
+		}
+	}
+	if temIncremental {
+		combosD0 := map[string]model.ProdutoDominio{}
+		for _, p := range posicoes {
+			prod := campoStrModel(p, "produto")
+			dom := campoStrModel(p, "dominio")
+			combosD0[prod+"\x00"+dom] = model.ProdutoDominio{Produto: prod, Dominio: dom}
+		}
+		posDNCache := map[string][]model.PosicaoCarteira{}
+		for _, c := range combosD0 {
+			exigeD1 := exigeD1De(c.Produto, c.Dominio)
+			dn, ok := s.dataEstornoPorCombo(ctx, data, c.Produto, c.Dominio, exigeD1)
+			if !ok {
+				continue // sem D-N → primeira ocorrência: base 0 (lança o valor cheio)
+			}
+			dnStr := dn.Format("2006-01-02")
+			posDN, cached := posDNCache[dnStr]
+			if !cached {
+				posDN, err = s.posicaoRepo.BuscarPorDataEVersaoMaxima(ctx, dn)
+				if err != nil {
+					return nil, fmt.Errorf("erro ao buscar posição de D-N para incremental: %w", err)
+				}
+				posDNCache[dnStr] = posDN
+			}
+			for _, p := range posDN {
+				if campoStrModel(p, "produto") != c.Produto || campoStrModel(p, "dominio") != c.Dominio {
+					continue
+				}
+				s.acumularBaseIncremental(p, regras, baseIncremental)
+			}
+		}
 	}
 
 	// 3. Gerar lançamentos de D em memória
@@ -259,6 +324,12 @@ func (s *MovimentoContabilService) GerarMovimentoEscopo(ctx context.Context, dat
 				}
 				moeda := evaluator.CampoString(env, condicao.CampoMoeda)
 				boletoLanc := evaluator.CampoString(env, campoBoletoOuPadrao(condicao.CampoBoleto))
+				// Incremental: o valor lançado é | |valor_D0| - |valor_D-N| | para a mesma
+				// (produto, domínio, boleto, regra, contas). Sem base (1ª ocorrência) → valor cheio.
+				if regra.EhIncremental() {
+					k := chaveIncremental(produto, dominio, boletoLanc, regra.ID, condicao.ContaDebito, condicao.ContaCredito)
+					valor = math.Abs(math.Abs(valor) - math.Abs(baseIncremental[k]))
+				}
 				lancamentos = append(lancamentos, model.LancamentoContabil{
 					DataLoteContabil:          data,
 					CodigoIdentificadorBoleto: boletoLanc,
@@ -289,7 +360,7 @@ func (s *MovimentoContabilService) GerarMovimentoEscopo(ctx context.Context, dat
 		dataStr := data.Format("2006-01-02")
 		dUtilAnterior := DiaUtilAnterior(data).Format("2006-01-02")
 		for _, c := range combosSet {
-			if !s.exigeMovimentoD1(ctx, c.Produto, c.Dominio) {
+			if !exigeD1De(c.Produto, c.Dominio) {
 				continue
 			}
 			datas, err := s.execucaoRepo.DatasComMovimento(ctx, c.Produto, c.Dominio)
@@ -359,15 +430,15 @@ func (s *MovimentoContabilService) GerarMovimentoEscopo(ctx context.Context, dat
 	// movimento. Combinações sem data de origem (nenhuma execução anterior) não estornam.
 	var estornos []model.LancamentoContabil
 	if len(combosSet) > 0 {
-		regraPostaReverte := make(map[int64]bool, len(regras))
+		regraGeraEstorno := make(map[int64]bool, len(regras))
 		for _, reg := range regras {
-			regraPostaReverte[reg.ID] = reg.PostaReverte
+			regraGeraEstorno[reg.ID] = reg.EhReverte()
 		}
 		// Resolve a data de origem do estorno por combinação e agrupa as datas necessárias.
 		dataOrigemCombo := map[string]time.Time{}
 		datasNecessarias := map[string]time.Time{}
 		for _, c := range combosSet {
-			exigeD1 := s.exigeMovimentoD1(ctx, c.Produto, c.Dominio)
+			exigeD1 := exigeD1De(c.Produto, c.Dominio)
 			dOrig, ok := s.dataEstornoPorCombo(ctx, data, c.Produto, c.Dominio, exigeD1)
 			if !ok {
 				continue
@@ -390,7 +461,7 @@ func (s *MovimentoContabilService) GerarMovimentoEscopo(ctx context.Context, dat
 				if l1.Produto+"\x00"+l1.Dominio != comboKey {
 					continue
 				}
-				if pr, found := regraPostaReverte[l1.IDRegraContabil]; found && !pr {
+				if ge, found := regraGeraEstorno[l1.IDRegraContabil]; found && !ge {
 					continue
 				}
 				estornos = append(estornos, model.LancamentoContabil{
@@ -741,6 +812,54 @@ func valorCasaLista(lista, valor string) bool {
 		}
 	}
 	return false
+}
+
+// chaveIncremental identifica a série incremental por (produto, domínio, boleto, regra, contas).
+func chaveIncremental(produto, dominio, boleto string, idRegra int64, contaDeb, contaCred string) string {
+	return produto + "\x00" + dominio + "\x00" + boleto + "\x00" + fmt.Sprintf("%d", idRegra) + "\x00" + contaDeb + "\x00" + contaCred
+}
+
+// acumularBaseIncremental avalia as regras incrementais sobre uma posição (de D-N) e acumula,
+// por chave, o valor de campo_valor — a base (valor_D-N) usada no cálculo incremental de D0.
+// Mesma lógica de avaliação da geração, porém só para regras incrementais e sem registrar
+// inconsistências (campo ausente em D-N simplesmente não contribui para a base).
+func (s *MovimentoContabilService) acumularBaseIncremental(posicao model.PosicaoCarteira, regras []model.RegraContabil, base map[string]float64) {
+	env := evaluator.PosicaoToEnv(posicao)
+	produto := evaluator.CampoString(env, "produto")
+	dominio := evaluator.CampoString(env, "dominio")
+	for _, regra := range regras {
+		if !regra.EhIncremental() || !regraAplicaAPosicao(regra, env) {
+			continue
+		}
+		if pc := strings.TrimSpace(regra.PreCondicao); pc != "" {
+			if len(camposFaltantes(env, pc)) > 0 {
+				continue
+			}
+			if ok, err := s.evaluator.EvaluateCondition(pc, env); err != nil || !ok {
+				continue
+			}
+		}
+		for _, c := range regra.Condicoes {
+			if !c.Ativo {
+				continue
+			}
+			if len(camposFaltantes(env, c.Condicao)) > 0 {
+				continue
+			}
+			if ok, err := s.evaluator.EvaluateCondition(c.Condicao, env); err != nil || !ok {
+				continue
+			}
+			if len(camposFaltantes(env, c.CampoValor)) > 0 {
+				continue
+			}
+			valor, err := s.evaluator.EvaluateValue(c.CampoValor, env)
+			if err != nil {
+				continue
+			}
+			boleto := evaluator.CampoString(env, campoBoletoOuPadrao(c.CampoBoleto))
+			base[chaveIncremental(produto, dominio, boleto, regra.ID, c.ContaDebito, c.ContaCredito)] += valor
+		}
+	}
 }
 
 // BulkInsertAjuste persiste lançamentos de ajuste gerados pela conciliação IA.

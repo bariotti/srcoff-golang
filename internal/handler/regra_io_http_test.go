@@ -57,7 +57,7 @@ func (f *fakeRegraSvc) ExcluirCondicao(context.Context, int64) error { return ni
 func TestImportarRegrasCSV_UpdateSkipErro(t *testing.T) {
 	svc := &fakeRegraSvc{regras: []model.RegraContabil{
 		{
-			ID: 1, Descricao: "Original", Dominio: "Posição", Ativo: true, PostaReverte: true,
+			ID: 1, Descricao: "Original", Dominio: "Posição", Ativo: true, TipoLancamento: model.TipoReverte,
 			Condicoes: []model.CondicaoRegra{
 				{ID: 10, IDRegra: 1, Condicao: "v>0", ContaDebito: "1001", ContaCredito: "2001", CampoValor: "v", CampoMoeda: "m", CampoBoleto: "b", Ativo: true},
 			},
@@ -69,9 +69,9 @@ func TestImportarRegrasCSV_UpdateSkipErro(t *testing.T) {
 	// condição 10: idêntica → não deve atualizar.
 	// regra 999 / condição 888: ids numéricos inexistentes → erro (não criam).
 	csv := strings.Join([]string{
-		"regra_id;descricao;codigo_produto_corporativo;dominio;campo_produto;pre_condicao;regra_ativa;posta_reverte;condicao_id;condicao;conta_debito;conta_credito;campo_valor;campo_moeda;campo_boleto;condicao_ativa",
-		"1;ALTERADA;;Posição;;;Sim;Sim;10;v>0;1001;2001;v;m;b;Sim",
-		"999;Fantasma;;;;;Sim;Não;888;x>0;1;2;v;m;b;Sim",
+		"regra_id;descricao;codigo_produto_corporativo;dominio;campo_produto;pre_condicao;regra_ativa;tipo_lancamento;condicao_id;condicao;conta_debito;conta_credito;campo_valor;campo_moeda;campo_boleto;condicao_ativa",
+		"1;ALTERADA;;Posição;;;Sim;reverte;10;v>0;1001;2001;v;m;b;Sim",
+		"999;Fantasma;;;;;Sim;nao_reverte;888;x>0;1;2;v;m;b;Sim",
 	}, "\n") + "\n"
 
 	req := multipartReq(t, "/api/v1/regras/import", "arquivo", "regras.csv", csv)
@@ -107,16 +107,16 @@ func TestImportarRegrasCSV_UpdateSkipErro(t *testing.T) {
 // rótulo com condição, e condição nova numa regra existente.
 func TestImportarRegrasCSV_Criacao(t *testing.T) {
 	svc := &fakeRegraSvc{regras: []model.RegraContabil{
-		{ID: 1, Descricao: "Existente", Dominio: "Posição", Ativo: true, PostaReverte: true},
+		{ID: 1, Descricao: "Existente", Dominio: "Posição", Ativo: true, TipoLancamento: model.TipoReverte},
 	}}
 	h := NewRegraContabilHandler(svc)
 
 	csv := strings.Join([]string{
-		"regra_id;descricao;codigo_produto_corporativo;dominio;campo_produto;pre_condicao;regra_ativa;posta_reverte;condicao_id;condicao;conta_debito;conta_credito;campo_valor;campo_moeda;campo_boleto;condicao_ativa",
+		"regra_id;descricao;codigo_produto_corporativo;dominio;campo_produto;pre_condicao;regra_ativa;tipo_lancamento;condicao_id;condicao;conta_debito;conta_credito;campo_valor;campo_moeda;campo_boleto;condicao_ativa",
 		// regra nova (rótulo) + 1 condição nova
-		"NOVA-1;Regra Nova;NDF;Posição;;;Sim;Sim;;v>0;1001;2001;v;m;b;",
+		"NOVA-1;Regra Nova;NDF;Posição;;;Sim;reverte;;v>0;1001;2001;v;m;b;",
 		// condição nova em regra existente (id 1), condicao_id vazio
-		"1;Existente;;Posição;;;Sim;Sim;;y>0;7001;8001;y;m;b;",
+		"1;Existente;;Posição;;;Sim;reverte;;y>0;7001;8001;y;m;b;",
 	}, "\n") + "\n"
 
 	req := multipartReq(t, "/api/v1/regras/import", "arquivo", "regras.csv", csv)

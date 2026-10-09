@@ -32,6 +32,7 @@ func NewRegraContabilHandler(svc regraContabilSvc) *RegraContabilHandler {
 }
 
 // ListarRegras trata GET /api/v1/regras.
+// Spec: RF-022 (docs/especificacao.md §8.1, §11.2).
 func (h *RegraContabilHandler) ListarRegras(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		w.WriteHeader(http.StatusMethodNotAllowed)
@@ -48,6 +49,7 @@ func (h *RegraContabilHandler) ListarRegras(w http.ResponseWriter, r *http.Reque
 }
 
 // CriarRegra trata POST /api/v1/regras.
+// Spec: RF-022 · RN-024 normalização de tipo_lancamento (docs/especificacao.md §8.1, §11.2).
 func (h *RegraContabilHandler) CriarRegra(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		w.WriteHeader(http.StatusMethodNotAllowed)
@@ -70,6 +72,7 @@ func (h *RegraContabilHandler) CriarRegra(w http.ResponseWriter, r *http.Request
 }
 
 // EditarRegra trata PUT /api/v1/regras/{id}.
+// Spec: RF-022 (docs/especificacao.md §8.1, §11.2).
 func (h *RegraContabilHandler) EditarRegra(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPut {
 		w.WriteHeader(http.StatusMethodNotAllowed)
@@ -99,6 +102,7 @@ func (h *RegraContabilHandler) EditarRegra(w http.ResponseWriter, r *http.Reques
 }
 
 // ExcluirRegra trata DELETE /api/v1/regras/{id} (exclusão lógica).
+// Spec: RF-022 (docs/especificacao.md §8.1, §11.2).
 func (h *RegraContabilHandler) ExcluirRegra(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodDelete {
 		w.WriteHeader(http.StatusMethodNotAllowed)
@@ -118,6 +122,7 @@ func (h *RegraContabilHandler) ExcluirRegra(w http.ResponseWriter, r *http.Reque
 }
 
 // ListarCondicoes trata GET /api/v1/regras/{id}/condicoes.
+// Spec: RF-023 (docs/especificacao.md §8.1, §11.2).
 func (h *RegraContabilHandler) ListarCondicoes(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		w.WriteHeader(http.StatusMethodNotAllowed)
@@ -142,6 +147,7 @@ func (h *RegraContabilHandler) ListarCondicoes(w http.ResponseWriter, r *http.Re
 }
 
 // CriarCondicao trata POST /api/v1/regras/{id}/condicoes.
+// Spec: RF-023 (docs/especificacao.md §8.1, §11.2).
 func (h *RegraContabilHandler) CriarCondicao(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		w.WriteHeader(http.StatusMethodNotAllowed)
@@ -173,6 +179,7 @@ func (h *RegraContabilHandler) CriarCondicao(w http.ResponseWriter, r *http.Requ
 }
 
 // EditarCondicao trata PUT /api/v1/condicoes/{id}.
+// Spec: RF-023 (docs/especificacao.md §8.1, §11.2).
 func (h *RegraContabilHandler) EditarCondicao(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPut {
 		w.WriteHeader(http.StatusMethodNotAllowed)
@@ -202,6 +209,7 @@ func (h *RegraContabilHandler) EditarCondicao(w http.ResponseWriter, r *http.Req
 }
 
 // ExcluirCondicao trata DELETE /api/v1/condicoes/{id}.
+// Spec: RF-023 (docs/especificacao.md §8.1, §11.2).
 func (h *RegraContabilHandler) ExcluirCondicao(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodDelete {
 		w.WriteHeader(http.StatusMethodNotAllowed)

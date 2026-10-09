@@ -46,6 +46,7 @@ Tabelas disponíveis no banco de dados srcoff:
    - descricao_condicao_contabil (VARCHAR), id_regra_contabil (BIGINT)
 `
 
+// Spec: RF-073 (docs/especificacao.md §11.6; só backend sqlserver — RNF-001.2).
 func (h *NLQueryHandler) Query(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Pergunta string `json:"pergunta"`

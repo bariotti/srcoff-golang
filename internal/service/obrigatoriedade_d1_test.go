@@ -32,7 +32,7 @@ func posD1(id int64, data time.Time, produto, dominio, boleto string, mtm float6
 
 func regraSimplesD1() model.RegraContabil {
 	return model.RegraContabil{
-		ID: 1, Descricao: "R", Ativo: true, PostaReverte: true,
+		ID: 1, Descricao: "R", Ativo: true, TipoLancamento: model.TipoReverte,
 		Condicoes: []model.CondicaoRegra{{
 			ID: 1, IDRegra: 1, Condicao: "valor_mtm > 0",
 			ContaDebito: "1001", ContaCredito: "2001",

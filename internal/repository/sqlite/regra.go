@@ -21,7 +21,7 @@ func b2i(b bool) int {
 
 func (r *RegraContabilRepo) ListarRegrasAtivas(ctx context.Context) ([]model.RegraContabil, error) {
 	rows, err := r.db.QueryContext(ctx,
-		"SELECT id, descricao, IFNULL(codigo_produto_corporativo,''), IFNULL(dominio,''), IFNULL(campo_produto,''), IFNULL(pre_condicao,''), ativo, IFNULL(posta_reverte,1) FROM regra_contabil WHERE ativo = 1 ORDER BY id")
+		"SELECT id, descricao, IFNULL(codigo_produto_corporativo,''), IFNULL(dominio,''), IFNULL(campo_produto,''), IFNULL(pre_condicao,''), ativo, IFNULL(tipo_lancamento,'reverte') FROM regra_contabil WHERE ativo = 1 ORDER BY id")
 	if err != nil {
 		return nil, err
 	}
@@ -29,7 +29,7 @@ func (r *RegraContabilRepo) ListarRegrasAtivas(ctx context.Context) ([]model.Reg
 	var regras []model.RegraContabil
 	for rows.Next() {
 		var reg model.RegraContabil
-		if err := rows.Scan(&reg.ID, &reg.Descricao, &reg.CodigoProdutoCorporativo, &reg.Dominio, &reg.CampoProduto, &reg.PreCondicao, &reg.Ativo, &reg.PostaReverte); err != nil {
+		if err := rows.Scan(&reg.ID, &reg.Descricao, &reg.CodigoProdutoCorporativo, &reg.Dominio, &reg.CampoProduto, &reg.PreCondicao, &reg.Ativo, &reg.TipoLancamento); err != nil {
 			return nil, err
 		}
 		regras = append(regras, reg)
@@ -49,8 +49,8 @@ func (r *RegraContabilRepo) ListarRegrasAtivas(ctx context.Context) ([]model.Reg
 
 func (r *RegraContabilRepo) CriarRegra(ctx context.Context, regra model.RegraContabil) (int64, error) {
 	res, err := r.db.ExecContext(ctx,
-		"INSERT INTO regra_contabil (descricao, codigo_produto_corporativo, dominio, campo_produto, pre_condicao, ativo, posta_reverte) VALUES (?,?,?,?,?,1,?)",
-		regra.Descricao, regra.CodigoProdutoCorporativo, regra.Dominio, regra.CampoProduto, regra.PreCondicao, b2i(regra.PostaReverte),
+		"INSERT INTO regra_contabil (descricao, codigo_produto_corporativo, dominio, campo_produto, pre_condicao, ativo, tipo_lancamento) VALUES (?,?,?,?,?,1,?)",
+		regra.Descricao, regra.CodigoProdutoCorporativo, regra.Dominio, regra.CampoProduto, regra.PreCondicao, model.NormalizaTipoLancamento(regra.TipoLancamento),
 	)
 	if err != nil {
 		return 0, err
@@ -60,8 +60,8 @@ func (r *RegraContabilRepo) CriarRegra(ctx context.Context, regra model.RegraCon
 
 func (r *RegraContabilRepo) EditarRegra(ctx context.Context, regra model.RegraContabil) error {
 	_, err := r.db.ExecContext(ctx,
-		"UPDATE regra_contabil SET descricao=?, codigo_produto_corporativo=?, dominio=?, campo_produto=?, pre_condicao=?, ativo=?, posta_reverte=? WHERE id=?",
-		regra.Descricao, regra.CodigoProdutoCorporativo, regra.Dominio, regra.CampoProduto, regra.PreCondicao, b2i(regra.Ativo), b2i(regra.PostaReverte), regra.ID,
+		"UPDATE regra_contabil SET descricao=?, codigo_produto_corporativo=?, dominio=?, campo_produto=?, pre_condicao=?, ativo=?, tipo_lancamento=? WHERE id=?",
+		regra.Descricao, regra.CodigoProdutoCorporativo, regra.Dominio, regra.CampoProduto, regra.PreCondicao, b2i(regra.Ativo), model.NormalizaTipoLancamento(regra.TipoLancamento), regra.ID,
 	)
 	return err
 }

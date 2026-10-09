@@ -25,6 +25,7 @@ func NewParametrizacaoHandler(svc parametrizacaoSvc) *ParametrizacaoHandler {
 //   GET    ?categoria=produto            → lista as opções
 //   POST   {categoria, valor}            → adiciona opção
 //   DELETE ?categoria=produto&valor=NDF  → remove opção
+// Spec: RF-043 (docs/especificacao.md §8.4, §11.4).
 func (h *ParametrizacaoHandler) Opcoes(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:

@@ -24,6 +24,7 @@ func NewConfiguracaoHandler(svc configuracaoSvc) *ConfiguracaoHandler {
 // Configuracoes trata /api/v1/configuracoes.
 //   GET → retorna todas as configurações {chave: valor}
 //   PUT {chave, valor} → define uma configuração
+// Spec: RF-044 (docs/especificacao.md §8.4, §11.4).
 func (h *ConfiguracaoHandler) Configuracoes(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:

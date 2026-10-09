@@ -15,6 +15,7 @@ func NewValidarExpressaoHandler() *ValidarExpressaoHandler {
 }
 
 // Validar trata POST /api/v1/validar-expressao
+// Spec: RF-025 (docs/especificacao.md §8.2, §11.6).
 func (h *ValidarExpressaoHandler) Validar(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Expressao string `json:"expressao"`

@@ -246,6 +246,7 @@ func (pw *PastaWatcher) registrar(r ResumoVarredura) ResumoVarredura {
 }
 
 // ScanAgora trata POST /api/v1/posicao/scan-pasta — dispara uma varredura imediata.
+// Spec: RF-092 (docs/especificacao.md §9.2, §11.3).
 func (pw *PastaWatcher) ScanAgora(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		w.WriteHeader(http.StatusMethodNotAllowed)
@@ -260,6 +261,7 @@ func (pw *PastaWatcher) ScanAgora(w http.ResponseWriter, r *http.Request) {
 }
 
 // Status trata GET /api/v1/posicao/scan-pasta — retorna o resumo da última varredura.
+// Spec: RF-092 (docs/especificacao.md §9.2, §11.3).
 func (pw *PastaWatcher) Status(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, pw.UltimoResumo())
 }

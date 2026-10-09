@@ -45,6 +45,7 @@ type dataPayload struct {
 }
 
 // GerarMovimento trata POST /api/v1/movimento-contabil.
+// Spec: RF-030 (docs/especificacao.md §5, §11.1).
 func (h *MovimentoContabilHandler) GerarMovimento(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		w.WriteHeader(http.StatusMethodNotAllowed)
@@ -83,6 +84,7 @@ func (h *MovimentoContabilHandler) GerarMovimento(w http.ResponseWriter, r *http
 }
 
 // GerarEstorno trata POST /api/v1/estorno.
+// Spec: RN-130 (docs/especificacao.md §5.6, §11.1).
 func (h *MovimentoContabilHandler) GerarEstorno(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		w.WriteHeader(http.StatusMethodNotAllowed)
@@ -110,6 +112,7 @@ func (h *MovimentoContabilHandler) GerarEstorno(w http.ResponseWriter, r *http.R
 }
 
 // ConsultarMovimento trata GET /api/v1/movimento-contabil.
+// Spec: RF-050 (docs/especificacao.md §6.1, §11.1).
 func (h *MovimentoContabilHandler) ConsultarMovimento(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		w.WriteHeader(http.StatusMethodNotAllowed)
@@ -184,6 +187,7 @@ func (h *MovimentoContabilHandler) ConsultarMovimento(w http.ResponseWriter, r *
 }
 
 // ExcluirMovimento trata DELETE /api/v1/movimento-contabil?data=...&versao=...
+// Spec: RF-053 (docs/especificacao.md §6.3, §11.1).
 func (h *MovimentoContabilHandler) ExcluirMovimento(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	data, err := time.Parse("2006-01-02", q.Get("data"))

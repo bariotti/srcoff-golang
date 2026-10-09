@@ -25,6 +25,7 @@ func NewInconsistenciaHandler(svc inconsistenciaSvc) *InconsistenciaHandler {
 }
 
 // Listar trata GET /api/v1/inconsistencias?data=YYYY-MM-DD
+// Spec: RF-064 (docs/especificacao.md §10, §11.5).
 func (h *InconsistenciaHandler) Listar(w http.ResponseWriter, r *http.Request) {
 	data, err := time.Parse("2006-01-02", r.URL.Query().Get("data"))
 	if err != nil {
@@ -43,6 +44,7 @@ func (h *InconsistenciaHandler) Listar(w http.ResponseWriter, r *http.Request) {
 }
 
 // Export trata GET /api/v1/inconsistencias/export?data=YYYY-MM-DD → CSV.
+// Spec: RF-064 (docs/especificacao.md §10, §11.5).
 func (h *InconsistenciaHandler) Export(w http.ResponseWriter, r *http.Request) {
 	dataStr := r.URL.Query().Get("data")
 	data, err := time.Parse("2006-01-02", dataStr)

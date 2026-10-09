@@ -20,6 +20,7 @@ func NewConciliacaoHandler(svc conciliacaoSvc) *ConciliacaoHandler {
 	return &ConciliacaoHandler{svc: svc}
 }
 
+// Spec: RF-080 (docs/especificacao.md §7.1, §11.6).
 func (h *ConciliacaoHandler) Conciliar(w http.ResponseWriter, r *http.Request) {
 	dataStr := r.URL.Query().Get("data")
 	data, err := time.Parse("2006-01-02", dataStr)

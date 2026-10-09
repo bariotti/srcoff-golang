@@ -52,6 +52,7 @@ type ConciliacaoIAResponse struct {
 	Sugestao    *SugestaoAjuste `json:"sugestao,omitempty"`
 }
 
+// Spec: RF-081 (docs/especificacao.md §7.2, §11.6).
 func (h *ConciliacaoIAHandler) Analisar(w http.ResponseWriter, r *http.Request) {
 	var req ConciliacaoIARequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Pergunta == "" || req.Data == "" {
@@ -150,6 +151,7 @@ Se não houver sugestão de ajuste, omita o campo "sugestao" ou deixe como null.
 	writeJSON(w, http.StatusOK, resp)
 }
 
+// Spec: RF-081 (docs/especificacao.md §7.2, §11.6).
 func (h *ConciliacaoIAHandler) AplicarAjuste(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Data        string                   `json:"data"`

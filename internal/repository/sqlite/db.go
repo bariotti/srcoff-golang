@@ -81,7 +81,7 @@ CREATE TABLE IF NOT EXISTS regra_contabil (
   campo_produto TEXT,
   pre_condicao TEXT,
   ativo INTEGER NOT NULL DEFAULT 1,
-  posta_reverte INTEGER NOT NULL DEFAULT 1
+  tipo_lancamento TEXT NOT NULL DEFAULT 'reverte'
 );
 CREATE TABLE IF NOT EXISTS condicao_regra (
   id INTEGER PRIMARY KEY AUTOINCREMENT,

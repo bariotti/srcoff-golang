@@ -44,7 +44,7 @@ type sqliteDBs struct {
 func TestRegraCRUD(t *testing.T) {
 	ctx := context.Background()
 	s := abrirTeste(t)
-	id, err := s.regra.CriarRegra(ctx, model.RegraContabil{Descricao: "R1", CodigoProdutoCorporativo: "NDF", Dominio: "Posição", PostaReverte: true})
+	id, err := s.regra.CriarRegra(ctx, model.RegraContabil{Descricao: "R1", CodigoProdutoCorporativo: "NDF", Dominio: "Posição", TipoLancamento: model.TipoReverte})
 	if err != nil || id == 0 {
 		t.Fatalf("CriarRegra: id=%d err=%v", id, err)
 	}
@@ -55,7 +55,7 @@ func TestRegraCRUD(t *testing.T) {
 	if err != nil || len(regras) != 1 {
 		t.Fatalf("ListarRegrasAtivas: n=%d err=%v", len(regras), err)
 	}
-	if !regras[0].PostaReverte || len(regras[0].Condicoes) != 1 || regras[0].Condicoes[0].CampoBoleto != "codigo_identificador_boleto" {
+	if !regras[0].EhReverte() || len(regras[0].Condicoes) != 1 || regras[0].Condicoes[0].CampoBoleto != "codigo_identificador_boleto" {
 		t.Fatalf("regra inesperada: %+v", regras[0])
 	}
 	// Editar condição não desativa.

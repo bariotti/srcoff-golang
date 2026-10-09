@@ -24,6 +24,7 @@ func NewExecucaoHandler(svc execucaoSvc) *ExecucaoHandler {
 }
 
 // Status trata GET /api/v1/movimento-contabil/status?data=YYYY-MM-DD
+// Spec: RF-062 (docs/especificacao.md §10, §11.1).
 func (h *ExecucaoHandler) Status(w http.ResponseWriter, r *http.Request) {
 	data, err := time.Parse("2006-01-02", r.URL.Query().Get("data"))
 	if err != nil {
@@ -44,6 +45,7 @@ func (h *ExecucaoHandler) Status(w http.ResponseWriter, r *http.Request) {
 // Calendario trata GET /api/v1/movimento-contabil/calendario?ano=YYYY&mes=MM
 // Retorna o status agregado de cada dia do mês (completo/parcial/nenhum/não útil/futuro),
 // considerando todas as combinações (produto, domínio) dos padrões de arquivo.
+// Spec: RF-063 (docs/especificacao.md §10, §11.1).
 func (h *ExecucaoHandler) Calendario(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	ano, err := strconv.Atoi(q.Get("ano"))
