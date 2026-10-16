@@ -516,14 +516,27 @@
                 <label class="form-label mb-1">Boleto</label>
                 <input id="s-boleto" class="form-control form-control-sm" placeholder="ex.: BOL-2">
               </div>
+              <div class="col-md-3">
+                <label class="form-label mb-1">Conta contábil</label>
+                <input id="s-conta" class="form-control form-control-sm" placeholder="nº (débito ou crédito)">
+              </div>
+              <div class="col-md-4">
+                <label class="form-label mb-1">Regra</label>
+                <select id="s-regra" class="form-select form-select-sm" onchange="sPreencherCondicoes()"></select>
+              </div>
+              <div class="col-md-4">
+                <label class="form-label mb-1">Condição</label>
+                <select id="s-condicao" class="form-select form-select-sm"></select>
+              </div>
               <div class="col-md-2">
                 <div class="form-check mt-4">
                   <input class="form-check-input" type="checkbox" id="s-com-zero">
                   <label class="form-check-label" for="s-com-zero">Incluir saldo 0</label>
                 </div>
               </div>
-              <div class="col-md-1">
-                <button class="btn btn-primary btn-sm w-100" onclick="carregarSaldos()"><i class="bi bi-search"></i></button>
+              <div class="col-md-2 d-flex gap-2">
+                <button class="btn btn-primary btn-sm flex-fill" onclick="carregarSaldos()"><i class="bi bi-search me-1"></i>Filtrar</button>
+                <button class="btn btn-outline-secondary btn-sm" onclick="sLimparFiltros()" title="Limpar"><i class="bi bi-eraser"></i></button>
               </div>
             </div>
           </div>
@@ -819,6 +832,7 @@ function showPage(name) {
   if (name === 'saldos') {
     preencherSelectOpcoes('s-produto', 'produto', { incluirVazio: true });
     preencherSelectOpcoes('s-dominio', 'dominio', { incluirVazio: true });
+    sCarregarRegras();
     carregarSaldos();
   }
   if (name === 'manual') {
@@ -1702,14 +1716,56 @@ async function lmImportCSV(input) {
 }
 
 // ── Saldos (RF-065) ───────────────────────────────────────
+let sRegras = [];
+
+async function sCarregarRegras() {
+  const r = await api('GET', '/v1/regras');
+  sRegras = Array.isArray(r) ? r : [];
+  const sel = document.getElementById('s-regra');
+  sel.innerHTML = '<option value="">Todas</option>' + sRegras.map(rg => `<option value="${rg.id}">${rg.id} - ${esc(rg.descricao)}</option>`).join('');
+  sPreencherCondicoes();
+}
+
+// A condição é identificada pelo par de contas (débito/crédito) da regra selecionada.
+function sPreencherCondicoes() {
+  const idRegra = parseInt(document.getElementById('s-regra').value || '0', 10);
+  const reg = sRegras.find(r => r.id === idRegra);
+  const sel = document.getElementById('s-condicao');
+  const conds = (reg && reg.condicoes) ? reg.condicoes : [];
+  sel.innerHTML = '<option value="">Todas</option>' +
+    conds.map(c => `<option value="${esc(c.conta_debito)}|${esc(c.conta_credito)}">${esc(c.conta_debito)}/${esc(c.conta_credito)} — ${esc(c.condicao)}</option>`).join('');
+  sel.disabled = conds.length === 0;
+}
+
+function sLimparFiltros() {
+  document.getElementById('s-produto').value = '';
+  document.getElementById('s-dominio').value = '';
+  document.getElementById('s-boleto').value = '';
+  document.getElementById('s-conta').value = '';
+  document.getElementById('s-regra').value = '';
+  document.getElementById('s-com-zero').checked = false;
+  sPreencherCondicoes();
+  carregarSaldos();
+}
+
 async function carregarSaldos() {
   const p = new URLSearchParams();
   const prod = document.getElementById('s-produto').value.trim();
   const dom = document.getElementById('s-dominio').value.trim();
   const bol = document.getElementById('s-boleto').value.trim();
+  const conta = document.getElementById('s-conta').value.trim();
+  const idRegra = document.getElementById('s-regra').value.trim();
+  const cond = document.getElementById('s-condicao').value.trim(); // "debito|credito"
   if (prod) p.set('produto', prod);
   if (dom) p.set('dominio', dom);
   if (bol) p.set('boleto', bol);
+  if (conta) p.set('conta', conta);
+  if (idRegra) p.set('id_regra', idRegra);
+  if (cond) {
+    const [d, c] = cond.split('|');
+    if (d) p.set('conta_debito', d);
+    if (c) p.set('conta_credito', c);
+  }
   if (document.getElementById('s-com-zero').checked) p.set('com_zero', '1');
   const r = await api('GET', '/v1/saldos?' + p.toString());
   const lista = Array.isArray(r) ? r : [];

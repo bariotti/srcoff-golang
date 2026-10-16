@@ -20,10 +20,13 @@ type SaldoConta struct {
 
 // SaldoFiltro restringe a listagem de saldos (campos vazios/zero = sem filtro).
 type SaldoFiltro struct {
-	Produto    string
-	Dominio    string
-	Boleto     string
-	IDRegra    int64
-	RegrasIn   []int64 // se não vazio, só chaves dessas regras (ex.: incremental_reverte)
-	IncluiZero bool    // false (default) oculta saldo == 0
+	Produto      string
+	Dominio      string
+	Boleto       string
+	IDRegra      int64
+	ContaDebito  string  // conta_debito exata (usado pelo filtro de condição = par de contas)
+	ContaCredito string  // conta_credito exata (usado pelo filtro de condição)
+	Conta        string  // nº de conta que casa em conta_debito OU conta_credito (sem informar D/C)
+	RegrasIn     []int64 // se não vazio, só chaves dessas regras (ex.: incremental_reverte)
+	IncluiZero   bool    // false (default) oculta saldo == 0
 }

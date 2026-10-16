@@ -114,3 +114,32 @@ func TestSaldo_ProjecaoRefleteNet(t *testing.T) {
 		t.Fatalf("B2 esperado 800 (net postado), obteve %v", v)
 	}
 }
+
+// TestSaldoFiltros valida os filtros de regra, condição (par de contas) e conta (débito OU crédito).
+func TestSaldoFiltros(t *testing.T) {
+	ctx := context.Background()
+	repo := filerepo.NewSaldoContaRepo(t.TempDir())
+	if err := repo.AplicarDeltas(ctx, []model.SaldoConta{
+		{Produto: "NDF", Dominio: "Posição", CodigoIdentificadorBoleto: "B1", IDRegraContabil: 1, ContaDebito: "1001", ContaCredito: "2001", Saldo: 100},
+		{Produto: "NDF", Dominio: "Posição", CodigoIdentificadorBoleto: "B2", IDRegraContabil: 1, ContaDebito: "3001", ContaCredito: "1001", Saldo: 50},
+		{Produto: "SWAP", Dominio: "Liquidação", CodigoIdentificadorBoleto: "B3", IDRegraContabil: 2, ContaDebito: "9001", ContaCredito: "9002", Saldo: 10},
+	}); err != nil {
+		t.Fatalf("aplicar: %v", err)
+	}
+	// Conta 1001 casa em débito (B1) e crédito (B2) → 2 resultados.
+	if r, _ := repo.Listar(ctx, model.SaldoFiltro{Conta: "1001"}); len(r) != 2 {
+		t.Fatalf("filtro conta=1001 (D ou C): esperava 2, obteve %d", len(r))
+	}
+	// Regra 2 → só B3.
+	if r, _ := repo.Listar(ctx, model.SaldoFiltro{IDRegra: 2}); len(r) != 1 || r[0].CodigoIdentificadorBoleto != "B3" {
+		t.Fatalf("filtro id_regra=2: esperava B3, obteve %+v", r)
+	}
+	// Condição = par 1001/2001 → só B1.
+	if r, _ := repo.Listar(ctx, model.SaldoFiltro{ContaDebito: "1001", ContaCredito: "2001"}); len(r) != 1 || r[0].CodigoIdentificadorBoleto != "B1" {
+		t.Fatalf("filtro condição (1001/2001): esperava B1, obteve %+v", r)
+	}
+	// Combinado: regra 1 + conta 3001 → só B2.
+	if r, _ := repo.Listar(ctx, model.SaldoFiltro{IDRegra: 1, Conta: "3001"}); len(r) != 1 || r[0].CodigoIdentificadorBoleto != "B2" {
+		t.Fatalf("filtro regra=1+conta=3001: esperava B2, obteve %+v", r)
+	}
+}

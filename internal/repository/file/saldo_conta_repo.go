@@ -96,6 +96,15 @@ func (r *SaldoContaRepo) Listar(_ context.Context, f model.SaldoFiltro) ([]model
 		if f.IDRegra != 0 && s.IDRegraContabil != f.IDRegra {
 			continue
 		}
+		if f.ContaDebito != "" && s.ContaDebito != f.ContaDebito {
+			continue
+		}
+		if f.ContaCredito != "" && s.ContaCredito != f.ContaCredito {
+			continue
+		}
+		if f.Conta != "" && s.ContaDebito != f.Conta && s.ContaCredito != f.Conta {
+			continue
+		}
 		if len(regrasIn) > 0 && !regrasIn[s.IDRegraContabil] {
 			continue
 		}

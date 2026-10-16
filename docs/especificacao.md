@@ -562,7 +562,8 @@ Base: `/api/v1`. Rotas registradas em `cmd/api/main.go`. Convenções gerais:
 ### 11.5b Saldo de contas
 
 #### `GET /saldos` — RF-065
-- **Query** (todos opcionais, filtram): `produto`, `dominio`, `boleto`, `id_regra`, `com_zero=1` (inclui saldo 0; default oculta).
+- **Query** (todos opcionais, filtram): `produto`, `dominio`, `boleto`, `id_regra`, `conta_debito`, `conta_credito` (par da **condição**), `conta` (nº que casa em **débito OU crédito**, sem informar D/C), `com_zero=1` (inclui saldo 0; default oculta).
+- **RN-065.1 (Filtro de condição).** A condição é identificada pelo seu **par de contas** (débito/crédito) dentro da regra (não há `id_condicao` persistido). A UI oferece Regra → Condição (combos dependentes) e Conta por número.
 - **200**: `[SaldoConta...]` (§4.10) ordenado por produto/domínio/boleto. Projeção derivada do movimento (RN-170).
 
 ### 11.6 Validação, conciliação e IA

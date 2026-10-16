@@ -86,6 +86,17 @@ func (r *SaldoContaRepo) Listar(ctx context.Context, f model.SaldoFiltro) ([]mod
 	if f.IDRegra != 0 {
 		add("id_regra_contabil=@p%d", f.IDRegra)
 	}
+	if f.ContaDebito != "" {
+		add("conta_debito=@p%d", f.ContaDebito)
+	}
+	if f.ContaCredito != "" {
+		add("conta_credito=@p%d", f.ContaCredito)
+	}
+	if f.Conta != "" {
+		args = append(args, f.Conta)
+		p := len(args)
+		where = append(where, fmt.Sprintf("(conta_debito=@p%d OR conta_credito=@p%d)", p, p))
+	}
 	if len(f.RegrasIn) > 0 {
 		ph := make([]string, len(f.RegrasIn))
 		for i, id := range f.RegrasIn {
