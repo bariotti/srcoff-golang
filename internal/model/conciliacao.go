@@ -19,8 +19,8 @@ type Inconsistencia struct {
 
 // ResultadoConciliacao agrupa o resultado da conciliação de uma data.
 type ResultadoConciliacao struct {
-	Data             string
-	TotalPosicoes    int
-	TotalMovimentos  int
-	Inconsistencias  []Inconsistencia
+	Data            string
+	TotalPosicoes   int
+	TotalMovimentos int
+	Inconsistencias []Inconsistencia
 }

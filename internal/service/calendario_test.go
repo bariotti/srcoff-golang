@@ -58,7 +58,9 @@ func padroesDois() *fakePadraoLookup {
 }
 
 // fakeIncRepo é um leitor de inconsistências por data para testes.
-type fakeIncRepo struct{ itens []model.InconsistenciaProcessamento }
+type fakeIncRepo struct {
+	itens []model.InconsistenciaProcessamento
+}
 
 func (f *fakeIncRepo) ListarPorData(_ context.Context, data time.Time) ([]model.InconsistenciaProcessamento, error) {
 	ds := data.Format("2006-01-02")

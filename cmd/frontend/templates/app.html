@@ -8,7 +8,7 @@
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
   <style>
     body { background: #f8f9fa; }
-    .sidebar { min-height: 100vh; background: #212529; }
+    .sidebar { height: 100vh; position: sticky; top: 0; overflow-y: auto; background: #212529; }
     .sidebar .nav-link { color: #adb5bd; border-radius: 6px; margin: 2px 8px; }
     .sidebar .nav-link:hover, .sidebar .nav-link.active { background: #0d6efd; color: #fff; }
     .sidebar .nav-link i { width: 20px; }
@@ -84,6 +84,8 @@
         <a class="nav-link" href="#" onclick="showPage('consulta')"><i class="bi bi-search me-2"></i>Consulta</a>
         <a class="nav-link" href="#" onclick="showPage('posicao')"><i class="bi bi-table me-2"></i>Posição</a>
         <a class="nav-link" href="#" onclick="showPage('regras')"><i class="bi bi-gear me-2"></i>Regras</a>
+        <a class="nav-link" href="#" onclick="showPage('manual')"><i class="bi bi-pencil-square me-2"></i>Lançamento Manual</a>
+        <a class="nav-link" href="#" onclick="showPage('saldos')"><i class="bi bi-wallet2 me-2"></i>Saldos</a>
         <a class="nav-link" href="#" onclick="showPage('parametrizacoes')"><i class="bi bi-sliders me-2"></i>Parametrizações</a>
       </nav>
       <div class="mt-auto px-3 py-3" style="font-size:0.7rem;color:#6c757d;border-top:1px solid #343a40">
@@ -453,6 +455,82 @@
         </div>
       </div>
 
+      <!-- ==================== LANÇAMENTO MANUAL ==================== -->
+      <div id="page-manual" class="page">
+        <h4 class="mb-4"><i class="bi bi-pencil-square me-2"></i>Lançamento Manual</h4>
+        <p class="text-muted">Insira um ou vários lançamentos contábeis manualmente (em tela ou via CSV). As contas vêm da condição da regra. Lançamentos manuais ficam marcados com origem <span class="badge bg-dark">Manual</span>.</p>
+        <ul class="nav nav-tabs mb-3">
+          <li class="nav-item"><a class="nav-link active" href="#" id="lm-tab-tela" onclick="lmTab('tela');return false">Em tela</a></li>
+          <li class="nav-item"><a class="nav-link" href="#" id="lm-tab-csv" onclick="lmTab('csv');return false">Via CSV</a></li>
+        </ul>
+
+        <div id="lm-pane-tela">
+          <div class="card mb-3"><div class="card-body">
+            <div class="row g-2">
+              <div class="col-md-2"><label class="form-label mb-1">Data *</label><input type="date" id="lm-data" class="form-control form-control-sm"></div>
+              <div class="col-md-2"><label class="form-label mb-1">Produto *</label><select id="lm-produto" class="form-select form-select-sm"></select></div>
+              <div class="col-md-2"><label class="form-label mb-1">Domínio *</label><select id="lm-dominio" class="form-select form-select-sm"></select></div>
+              <div class="col-md-3"><label class="form-label mb-1">Regra *</label><select id="lm-regra" class="form-select form-select-sm" onchange="lmPreencherCondicoes()"></select></div>
+              <div class="col-md-3"><label class="form-label mb-1">Condição *</label><select id="lm-condicao" class="form-select form-select-sm"></select></div>
+              <div class="col-md-2"><label class="form-label mb-1">Boleto *</label><input id="lm-boleto" class="form-control form-control-sm" placeholder="BOL-1"></div>
+              <div class="col-md-2"><label class="form-label mb-1">Valor *</label><input id="lm-valor" type="number" step="any" class="form-control form-control-sm"></div>
+              <div class="col-md-2"><label class="form-label mb-1">Moeda</label><input id="lm-moeda" class="form-control form-control-sm" placeholder="USD"></div>
+              <div class="col-md-2"><div class="form-check mt-4"><input class="form-check-input" type="checkbox" id="lm-estorno"><label class="form-check-label" for="lm-estorno">Estorno</label></div></div>
+              <div class="col-md-4 d-flex align-items-end"><button class="btn btn-outline-primary btn-sm" onclick="lmAdd()"><i class="bi bi-plus-lg me-1"></i>Adicionar à lista</button></div>
+            </div>
+          </div></div>
+          <div id="lm-lista"></div>
+          <div class="mt-3"><button class="btn btn-primary" onclick="lmEnviar()"><i class="bi bi-send me-1"></i>Enviar lançamentos</button></div>
+        </div>
+
+        <div id="lm-pane-csv" style="display:none">
+          <div class="card"><div class="card-body">
+            <p>Envie um CSV (delimitador <code>;</code>) com o cabeçalho:</p>
+            <pre class="bg-light p-2 rounded small"><code>data;produto;dominio;id_regra;id_condicao;boleto;valor;moeda;indicador_reversao
+2026-09-28;NDF;Posição;2;2;BOL-2;1000;USD;Não</code></pre>
+            <ul class="small text-muted">
+              <li><code>data</code> no formato <code>AAAA-MM-DD</code> (dia útil). <code>id_regra</code>/<code>id_condicao</code> são os ids numéricos (veja na tela Regras).</li>
+              <li><code>indicador_reversao</code>: <code>Sim</code>/<code>Não</code> (vazio = lançamento normal). As contas vêm da condição.</li>
+            </ul>
+            <input type="file" accept=".csv" class="form-control" onchange="lmImportCSV(this)">
+          </div></div>
+        </div>
+      </div>
+
+      <!-- ==================== SALDOS ==================== -->
+      <div id="page-saldos" class="page">
+        <h4 class="mb-4"><i class="bi bi-wallet2 me-2"></i>Saldos de Contas</h4>
+        <p class="text-muted">Saldo líquido postado (vigente) por boleto, regra e par de contas. Projeção derivada do movimento contábil.</p>
+        <div class="card mb-3">
+          <div class="card-body">
+            <div class="row g-2 align-items-end">
+              <div class="col-md-3">
+                <label class="form-label mb-1">Produto</label>
+                <select id="s-produto" class="form-select form-select-sm"></select>
+              </div>
+              <div class="col-md-3">
+                <label class="form-label mb-1">Domínio</label>
+                <select id="s-dominio" class="form-select form-select-sm"></select>
+              </div>
+              <div class="col-md-3">
+                <label class="form-label mb-1">Boleto</label>
+                <input id="s-boleto" class="form-control form-control-sm" placeholder="ex.: BOL-2">
+              </div>
+              <div class="col-md-2">
+                <div class="form-check mt-4">
+                  <input class="form-check-input" type="checkbox" id="s-com-zero">
+                  <label class="form-check-label" for="s-com-zero">Incluir saldo 0</label>
+                </div>
+              </div>
+              <div class="col-md-1">
+                <button class="btn btn-primary btn-sm w-100" onclick="carregarSaldos()"><i class="bi bi-search"></i></button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div id="s-lista"></div>
+      </div>
+
       <!-- ==================== PARAMETRIZAÇÕES ==================== -->
       <div id="page-parametrizacoes" class="page">
         <h4 class="mb-4"><i class="bi bi-sliders me-2"></i>Parametrizações</h4>
@@ -623,7 +701,7 @@
           <li>O casamento é por <strong>id</strong>. Linhas <strong>idênticas</strong> ao cadastro não são alteradas.</li>
           <li>Registros que <strong>não estão no CSV</strong> não são tocados — a importação <strong>nunca exclui</strong>.</li>
           <li>Campos obrigatórios ao criar: regra exige <code>descricao</code>; condição exige <code>condicao</code>, <code>conta_debito</code>, <code>conta_credito</code>, <code>campo_valor</code> e <code>campo_moeda</code>. Linhas incompletas entram como erro (sem interromper o resto).</li>
-          <li><code>regra_ativa</code> aceita <code>Sim</code>/<code>Não</code>. <code>tipo_lancamento</code> aceita <code>reverte</code>, <code>nao_reverte</code> ou <code>incremental</code> (vazio = <code>reverte</code>).</li>
+          <li><code>regra_ativa</code> aceita <code>Sim</code>/<code>Não</code>. <code>tipo_lancamento</code> aceita <code>reverte</code>, <code>nao_reverte</code>, <code>incremental</code> ou <code>incremental_reverte</code> (vazio = <code>reverte</code>).</li>
           <li><strong>Atenção:</strong> linhas de criação (rótulo ou <code>regra_id</code> vazio) criam registros <em>a cada importação</em> — reimportar o mesmo arquivo gera duplicatas. Depois de criar, <strong>exporte de novo</strong> para passar a ter os ids numéricos e então só atualizar.</li>
         </ul>
 
@@ -668,9 +746,10 @@ NOVA-1;Minha Regra;NDF;Posição;;;Sim;reverte;;valor_mtm &lt; 0;3333333333;4444
           <select class="form-select" id="r-nova-tipo">
             <option value="reverte">Posta/Reverte</option>
             <option value="nao_reverte">Posta/Não Reverte</option>
-            <option value="incremental">Incremental</option>
+            <option value="incremental">Incremental/Não Reverte</option>
+            <option value="incremental_reverte">Incremental/Reverte</option>
           </select>
-          <small class="text-muted"><strong>Posta/Reverte</strong>: estorna os lançamentos no dia seguinte · <strong>Posta/Não Reverte</strong>: não estorna · <strong>Incremental</strong>: não estorna; lança a diferença |D0 − D-N| por boleto/regra.</small>
+          <small class="text-muted"><strong>Posta/Reverte</strong>: estorna os lançamentos no dia seguinte · <strong>Posta/Não Reverte</strong>: não estorna · <strong>Incremental/Não Reverte</strong>: lança a diferença |D0 − D-N| por boleto/regra; boleto que some mantém o saldo · <strong>Incremental/Reverte</strong>: igual ao incremental, mas boleto que some é baixado (zera o saldo).</small>
         </div>
       </div>
       <div class="modal-footer">
@@ -737,6 +816,16 @@ function showPage(name) {
   });
   currentPage = name;
   if (name === 'regras') { carregarRegras(); carregarCamposPosicao(); preencherCombosRegra(); }
+  if (name === 'saldos') {
+    preencherSelectOpcoes('s-produto', 'produto', { incluirVazio: true });
+    preencherSelectOpcoes('s-dominio', 'dominio', { incluirVazio: true });
+    carregarSaldos();
+  }
+  if (name === 'manual') {
+    preencherSelectOpcoes('lm-produto', 'produto', { incluirVazio: true });
+    preencherSelectOpcoes('lm-dominio', 'dominio', { incluirVazio: true });
+    lmCarregarRegras();
+  }
   if (name === 'posicao') { preencherSelectOpcoes('p-consulta-produto', 'produto', { incluirVazio: true }); preencherSelectOpcoes('p-consulta-dominio', 'dominio', { incluirVazio: true }); }
   if (name === 'consulta') { preencherSelectOpcoes('c-produto', 'produto', { incluirVazio: true }); preencherSelectOpcoes('c-dominio', 'dominio', { incluirVazio: true }); }
   if (name === 'parametrizacoes') { renderParametrizacoes(); }
@@ -1175,6 +1264,7 @@ async function consultarMovimento(pagina) {
     <td class="text-end">${Number(l.valor_lancamento_contabil).toFixed(2)}</td>
     <td>${l.moeda_lancamento_contabil}</td>
     <td>${l.indicador_reversao ? '<span class="badge bg-warning text-dark">Sim</span>' : '<span class="badge bg-secondary">Não</span>'}</td>
+    <td>${(l.origem === 'manual') ? '<span class="badge bg-dark">Manual</span>' : '<span class="badge bg-light text-dark border">Auto</span>'}</td>
     <td>${l.descricao_regra_contabil}</td>
   </tr>`).join('');
 
@@ -1191,7 +1281,7 @@ async function consultarMovimento(pagina) {
 
   el.innerHTML = `<div class="card shadow-sm"><div class="card-body p-0">
     <div class="table-responsive"><table class="table table-sm table-hover table-striped mb-0">
-      <thead class="table-dark"><tr><th>Data</th><th>Produto</th><th>Domínio</th><th>Versão</th><th>Boleto</th><th>Débito</th><th>Crédito</th><th>Valor</th><th>Moeda</th><th>Reversão</th><th>Regra</th></tr></thead>
+      <thead class="table-dark"><tr><th>Data</th><th>Produto</th><th>Domínio</th><th>Versão</th><th>Boleto</th><th>Débito</th><th>Crédito</th><th>Valor</th><th>Moeda</th><th>Reversão</th><th>Origem</th><th>Regra</th></tr></thead>
       <tbody>${rows}</tbody>
     </table></div>
     <div class="px-3 py-2">${pag}</div>
@@ -1511,6 +1601,141 @@ async function carregarRegras() {
   renderizarRegras(todasRegras);
 }
 
+// ── Lançamento Manual (RF-033) ────────────────────────────
+let lmRegras = [];
+let lmPendentes = [];
+
+function lmTab(qual) {
+  document.getElementById('lm-pane-tela').style.display = qual === 'tela' ? '' : 'none';
+  document.getElementById('lm-pane-csv').style.display = qual === 'csv' ? '' : 'none';
+  document.getElementById('lm-tab-tela').classList.toggle('active', qual === 'tela');
+  document.getElementById('lm-tab-csv').classList.toggle('active', qual === 'csv');
+}
+
+async function lmCarregarRegras() {
+  const r = await api('GET', '/v1/regras');
+  lmRegras = Array.isArray(r) ? r : [];
+  const sel = document.getElementById('lm-regra');
+  sel.innerHTML = '<option value="">—</option>' + lmRegras.map(rg => `<option value="${rg.id}">${rg.id} - ${esc(rg.descricao)}</option>`).join('');
+  lmPreencherCondicoes();
+}
+
+function lmPreencherCondicoes() {
+  const idRegra = parseInt(document.getElementById('lm-regra').value || '0', 10);
+  const reg = lmRegras.find(r => r.id === idRegra);
+  const sel = document.getElementById('lm-condicao');
+  const conds = (reg && reg.condicoes) ? reg.condicoes : [];
+  sel.innerHTML = conds.length
+    ? conds.map(c => `<option value="${c.id}">${esc(c.conta_debito)}/${esc(c.conta_credito)} — ${esc(c.condicao)}</option>`).join('')
+    : '<option value="">(regra sem condições)</option>';
+}
+
+function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
+
+function lmAdd() {
+  const idRegra = parseInt(document.getElementById('lm-regra').value || '0', 10);
+  const idCond = parseInt(document.getElementById('lm-condicao').value || '0', 10);
+  const reg = lmRegras.find(r => r.id === idRegra);
+  const cond = reg && reg.condicoes ? reg.condicoes.find(c => c.id === idCond) : null;
+  const item = {
+    data: document.getElementById('lm-data').value,
+    produto: document.getElementById('lm-produto').value.trim(),
+    dominio: document.getElementById('lm-dominio').value.trim(),
+    id_regra: idRegra,
+    id_condicao: idCond,
+    boleto: document.getElementById('lm-boleto').value.trim(),
+    valor: parseFloat(document.getElementById('lm-valor').value),
+    moeda: document.getElementById('lm-moeda').value.trim(),
+    indicador_reversao: document.getElementById('lm-estorno').checked,
+    _regra: reg ? reg.descricao : '', _contas: cond ? (cond.conta_debito + '/' + cond.conta_credito) : ''
+  };
+  if (!item.data || !item.produto || !item.dominio || !item.id_regra || !item.id_condicao || !item.boleto || !item.valor) {
+    toast('Preencha data, produto, domínio, regra, condição, boleto e valor.'); return;
+  }
+  lmPendentes.push(item);
+  document.getElementById('lm-boleto').value = '';
+  document.getElementById('lm-valor').value = '';
+  lmRender();
+}
+
+function lmRemove(i) { lmPendentes.splice(i, 1); lmRender(); }
+
+function lmRender() {
+  const el = document.getElementById('lm-lista');
+  if (!lmPendentes.length) { el.innerHTML = '<div class="p-3 text-muted">Nenhum lançamento na lista.</div>'; return; }
+  const rows = lmPendentes.map((it, i) => `<tr>
+    <td>${esc(it.data)}</td><td>${esc(it.produto)}/${esc(it.dominio)}</td><td>${esc(it.boleto)}</td>
+    <td class="text-muted">${esc(it._regra)}</td><td>${esc(it._contas)}</td>
+    <td class="text-end">${Number(it.valor).toLocaleString('pt-BR',{minimumFractionDigits:2})}</td>
+    <td>${esc(it.moeda)}</td><td>${it.indicador_reversao ? '<span class="badge bg-secondary">Estorno</span>' : ''}</td>
+    <td><button class="btn btn-sm btn-outline-danger" onclick="lmRemove(${i})"><i class="bi bi-x"></i></button></td>
+  </tr>`).join('');
+  el.innerHTML = `<div class="table-responsive"><table class="table table-sm table-hover mb-0">
+    <thead class="table-dark"><tr><th>Data</th><th>Prod/Dom</th><th>Boleto</th><th>Regra</th><th>Contas</th><th class="text-end">Valor</th><th>Moeda</th><th></th><th></th></tr></thead>
+    <tbody>${rows}</tbody></table></div>`;
+}
+
+async function lmEnviar() {
+  if (!lmPendentes.length) { toast('Adicione ao menos um lançamento.'); return; }
+  const payload = { lancamentos: lmPendentes.map(({ _regra, _contas, ...it }) => it) };
+  const r = await api('POST', '/v1/lancamentos-manuais', payload);
+  if (r && r.erro) { toast('Erro: ' + r.erro); return; }
+  toast(r.mensagem || 'Lançamentos inseridos.');
+  lmPendentes = []; lmRender();
+}
+
+async function lmImportCSV(input) {
+  const file = input.files && input.files[0];
+  if (!file) return;
+  const fd = new FormData();
+  fd.append('arquivo', file);
+  spin(true);
+  let r = null;
+  try {
+    const resp = await fetch('/api/v1/lancamentos-manuais/import', { method: 'POST', body: fd });
+    r = await resp.json();
+  } catch (e) { r = { erro: String(e) }; }
+  spin(false);
+  input.value = '';
+  if (r && r.erro) { toast('Erro: ' + r.erro); return; }
+  toast(r.mensagem || 'CSV importado.');
+}
+
+// ── Saldos (RF-065) ───────────────────────────────────────
+async function carregarSaldos() {
+  const p = new URLSearchParams();
+  const prod = document.getElementById('s-produto').value.trim();
+  const dom = document.getElementById('s-dominio').value.trim();
+  const bol = document.getElementById('s-boleto').value.trim();
+  if (prod) p.set('produto', prod);
+  if (dom) p.set('dominio', dom);
+  if (bol) p.set('boleto', bol);
+  if (document.getElementById('s-com-zero').checked) p.set('com_zero', '1');
+  const r = await api('GET', '/v1/saldos?' + p.toString());
+  const lista = Array.isArray(r) ? r : [];
+  renderizarSaldos(lista);
+}
+
+function renderizarSaldos(saldos) {
+  const el = document.getElementById('s-lista');
+  if (!saldos.length) { el.innerHTML = '<div class="p-3 text-muted">Nenhum saldo encontrado.</div>'; return; }
+  const fmt = (v) => Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const rows = saldos.map(s => `<tr>
+    <td>${esc(s.produto)}</td>
+    <td>${esc(s.dominio)}</td>
+    <td>${esc(s.codigo_identificador_boleto)}</td>
+    <td class="text-muted">${esc(s.descricao_regra)}</td>
+    <td class="text-nowrap">${esc(s.conta_debito)} / ${esc(s.conta_credito)}</td>
+    <td>${esc(s.moeda_lancamento)}</td>
+    <td class="text-end ${Number(s.saldo) < 0 ? 'text-danger' : ''}">${fmt(s.saldo)}</td>
+  </tr>`).join('');
+  el.innerHTML = `<div class="table-responsive"><table class="table table-sm table-hover mb-0">
+    <thead class="table-dark"><tr><th>Produto</th><th>Domínio</th><th>Boleto</th><th>Regra</th><th>Contas (D/C)</th><th>Moeda</th><th class="text-end">Saldo</th></tr></thead>
+    <tbody>${rows}</tbody>
+  </table></div>`;
+}
+
 // Exporta todas as regras e condições (ativas) para um único CSV.
 function exportarRegras() {
   window.open('/api/v1/regras/export', '_blank');
@@ -1583,7 +1808,8 @@ function rotuloRegra(reg) {
 function rotuloTipoLancamento(tipo) {
   switch (tipo) {
     case 'nao_reverte': return '<span class="badge bg-warning text-dark">Posta/Não Reverte</span>';
-    case 'incremental': return '<span class="badge bg-info text-dark">Incremental</span>';
+    case 'incremental': return '<span class="badge bg-info text-dark">Incremental/Não Reverte</span>';
+    case 'incremental_reverte': return '<span class="badge bg-primary">Incremental/Reverte</span>';
     default: return '<span class="badge bg-success">Posta/Reverte</span>';
   }
 }

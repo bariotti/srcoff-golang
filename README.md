@@ -665,8 +665,14 @@ sqlcmd -S localhost\SQLEXPRESS -d srcoff -i migrations/012_padrao_coluna_boleto.
 # Contagem bruta de movimento por execução (base da validação D-1)
 sqlcmd -S localhost\SQLEXPRESS -d srcoff -i migrations/013_execucao_qtd_movimento.sql
 
-# Tipo de lançamento da regra (reverte | nao_reverte | incremental)
+# Tipo de lançamento da regra (reverte | nao_reverte | incremental | incremental_reverte)
 sqlcmd -S localhost\SQLEXPRESS -d srcoff -i migrations/014_regra_tipo_lancamento.sql
+
+# Remove o seed de opções de combos em bases existentes (ADR-009) — opcional
+sqlcmd -S localhost\SQLEXPRESS -d srcoff -i migrations/015_remove_seed_parametrizacao.sql
+
+# Projeção materializada de saldo por conta/boleto/regra (ADR-010, menu Saldos)
+sqlcmd -S localhost\SQLEXPRESS -d srcoff -i migrations/016_saldo_conta.sql
 ```
 
 

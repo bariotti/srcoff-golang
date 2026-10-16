@@ -77,6 +77,21 @@ type NotificacaoRepository interface {
 	MarcarTodasLidas(ctx context.Context) error
 }
 
+// SaldoContaRepository persiste a projeção materializada de saldo por chave
+// (produto, domínio, boleto, id_regra, contas). É um cache derivado do movimento
+// contábil (RN-170); nunca é fonte da verdade.
+type SaldoContaRepository interface {
+	// AplicarDeltas soma (upsert) os deltas aos saldos das chaves informadas.
+	AplicarDeltas(ctx context.Context, deltas []model.SaldoConta) error
+	// SubstituirCombos zera e regrava os saldos das combinações informadas (usado na
+	// recomputação após exclusão e na reconstrução).
+	SubstituirCombos(ctx context.Context, combos []model.ProdutoDominio, saldos []model.SaldoConta) error
+	// Listar retorna os saldos conforme o filtro.
+	Listar(ctx context.Context, filtro model.SaldoFiltro) ([]model.SaldoConta, error)
+	// EstaVazio informa se a tabela ainda não tem nenhum registro (base recém-criada).
+	EstaVazio(ctx context.Context) (bool, error)
+}
+
 // MovimentoContabilRepository define o contrato de acesso ao movimento contábil.
 type MovimentoContabilRepository interface {
 	BulkInsert(ctx context.Context, lancamentos []model.LancamentoContabil) error

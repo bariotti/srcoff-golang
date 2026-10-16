@@ -7,8 +7,8 @@ import (
 
 // Chaves de configuração conhecidas.
 const (
-	ConfigPastaMonitorada     = "pasta_monitorada"
-	ConfigPastaProcessados    = "pasta_processados"
+	ConfigPastaMonitorada      = "pasta_monitorada"
+	ConfigPastaProcessados     = "pasta_processados"
 	ConfigIntervaloScanMinutos = "intervalo_scan_minutos"
 )
 

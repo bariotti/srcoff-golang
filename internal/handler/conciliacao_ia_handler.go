@@ -29,7 +29,7 @@ type ConciliacaoIAHandler struct {
 }
 
 type posicaoIASvcWrapper struct {
-	movSvc    conciliacaoIASvc
+	movSvc     conciliacaoIASvc
 	posicaoSvc posicaoIASvc
 }
 
@@ -43,8 +43,8 @@ type ConciliacaoIARequest struct {
 }
 
 type SugestaoAjuste struct {
-	Descricao    string                   `json:"descricao"`
-	Lancamentos  []model.LancamentoContabil `json:"lancamentos"`
+	Descricao   string                     `json:"descricao"`
+	Lancamentos []model.LancamentoContabil `json:"lancamentos"`
 }
 
 type ConciliacaoIAResponse struct {
@@ -154,7 +154,7 @@ Se não houver sugestão de ajuste, omita o campo "sugestao" ou deixe como null.
 // Spec: RF-081 (docs/especificacao.md §7.2, §11.6).
 func (h *ConciliacaoIAHandler) AplicarAjuste(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		Data        string                   `json:"data"`
+		Data        string                     `json:"data"`
 		Lancamentos []model.LancamentoContabil `json:"lancamentos"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {

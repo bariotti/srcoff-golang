@@ -13,7 +13,9 @@ import (
 // MovimentoContabilRepo implementa repository.MovimentoContabilRepository em SQLite.
 type MovimentoContabilRepo struct{ db *sql.DB }
 
-func NewMovimentoContabilRepo(db *sql.DB) *MovimentoContabilRepo { return &MovimentoContabilRepo{db: db} }
+func NewMovimentoContabilRepo(db *sql.DB) *MovimentoContabilRepo {
+	return &MovimentoContabilRepo{db: db}
+}
 
 // colsMov é a lista de colunas (com alias opcional) usada nos SELECTs de lançamento.
 func colsMov(alias string) string {
@@ -24,7 +26,8 @@ func colsMov(alias string) string {
 	return a + "id, " + a + "data_lote_contabil, " + a + "codigo_versao_conteudo, " + a + "codigo_identificador_boleto, " +
 		a + "valor_lancamento_contabil, " + a + "moeda_lancamento_contabil, " + a + "conta_debito, " + a + "conta_credito, " +
 		"IFNULL(" + a + "produto,''), IFNULL(" + a + "dominio,''), " + a + "indicador_reversao, " +
-		"IFNULL(" + a + "descricao_regra_contabil,''), IFNULL(" + a + "descricao_condicao_contabil,''), IFNULL(" + a + "id_regra_contabil,0)"
+		"IFNULL(" + a + "descricao_regra_contabil,''), IFNULL(" + a + "descricao_condicao_contabil,''), IFNULL(" + a + "id_regra_contabil,0), " +
+		"IFNULL(" + a + "origem,'automatico')"
 }
 
 func scanLancamentos(rows *sql.Rows) ([]model.LancamentoContabil, error) {
@@ -35,7 +38,7 @@ func scanLancamentos(rows *sql.Rows) ([]model.LancamentoContabil, error) {
 		var rev int
 		if err := rows.Scan(&l.ID, &dataStr, &l.CodigoVersaoConteudo, &l.CodigoIdentificadorBoleto,
 			&l.ValorLancamentoContabil, &l.MoedaLancamentoContabil, &l.ContaDebito, &l.ContaCredito,
-			&l.Produto, &l.Dominio, &rev, &l.DescricaoRegraContabil, &l.DescricaoCondicaoContabil, &l.IDRegraContabil); err != nil {
+			&l.Produto, &l.Dominio, &rev, &l.DescricaoRegraContabil, &l.DescricaoCondicaoContabil, &l.IDRegraContabil, &l.Origem); err != nil {
 			return nil, err
 		}
 		l.DataLoteContabil = parseData(dataStr)
@@ -55,7 +58,7 @@ func (r *MovimentoContabilRepo) BulkInsert(ctx context.Context, lancamentos []mo
 	}
 	defer tx.Rollback()
 	stmt, err := tx.PrepareContext(ctx,
-		"INSERT INTO movimento_contabil (data_lote_contabil, codigo_versao_conteudo, codigo_identificador_boleto, valor_lancamento_contabil, moeda_lancamento_contabil, conta_debito, conta_credito, produto, dominio, indicador_reversao, descricao_regra_contabil, descricao_condicao_contabil, id_regra_contabil) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)")
+		"INSERT INTO movimento_contabil (data_lote_contabil, codigo_versao_conteudo, codigo_identificador_boleto, valor_lancamento_contabil, moeda_lancamento_contabil, conta_debito, conta_credito, produto, dominio, indicador_reversao, descricao_regra_contabil, descricao_condicao_contabil, id_regra_contabil, origem) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)")
 	if err != nil {
 		return err
 	}
@@ -64,7 +67,7 @@ func (r *MovimentoContabilRepo) BulkInsert(ctx context.Context, lancamentos []mo
 		if _, err := stmt.ExecContext(ctx,
 			fmtData(l.DataLoteContabil), l.CodigoVersaoConteudo, l.CodigoIdentificadorBoleto,
 			l.ValorLancamentoContabil, l.MoedaLancamentoContabil, l.ContaDebito, l.ContaCredito,
-			l.Produto, l.Dominio, b2i(l.IndicadorReversao), l.DescricaoRegraContabil, l.DescricaoCondicaoContabil, l.IDRegraContabil,
+			l.Produto, l.Dominio, b2i(l.IndicadorReversao), l.DescricaoRegraContabil, l.DescricaoCondicaoContabil, l.IDRegraContabil, l.OrigemOuPadrao(),
 		); err != nil {
 			return err
 		}

@@ -3,14 +3,19 @@ package model
 import "strings"
 
 // Tipos de lançamento de uma regra contábil (combo obrigatório no cadastro):
-//   - TipoReverte:     posta e, no dia seguinte, estorna os lançamentos (comportamento clássico);
-//   - TipoNaoReverte:  posta e NÃO estorna (lançamentos definitivos);
-//   - TipoIncremental: NÃO estorna; o valor lançado em D0 é |valor_D0 - valor_D-N| para a
-//     mesma (boleto, regra), onde D-N é a mesma data-base usada no estorno.
+//   - TipoReverte:            posta e, no dia seguinte, estorna os lançamentos (comportamento clássico);
+//   - TipoNaoReverte:         posta e NÃO estorna (lançamentos definitivos);
+//   - TipoIncremental:        rótulo "Incremental/Não Reverte". NÃO estorna; o valor lançado em D0 é
+//     |valor_D0 - valor_D-N| para a mesma (boleto, regra), onde D-N é a mesma data-base do estorno.
+//     Se o boleto some da posição, o saldo permanece (sem baixa).
+//   - TipoIncrementalReverte: rótulo "Incremental/Reverte". Igual ao incremental no cálculo diário,
+//     porém se o boleto some da posição de D0, gera uma BAIXA que zera o saldo líquido postado
+//     do boleto para a regra (RN-121).
 const (
-	TipoReverte     = "reverte"
-	TipoNaoReverte  = "nao_reverte"
-	TipoIncremental = "incremental"
+	TipoReverte            = "reverte"
+	TipoNaoReverte         = "nao_reverte"
+	TipoIncremental        = "incremental"
+	TipoIncrementalReverte = "incremental_reverte"
 )
 
 type RegraContabil struct {
@@ -31,9 +36,22 @@ func (r RegraContabil) EhReverte() bool {
 	return r.TipoLancamento == TipoReverte || r.TipoLancamento == ""
 }
 
-// EhIncremental indica se a regra usa o cálculo incremental (|D0 - D-N|, sem estorno).
+// EhIncremental indica se a regra é do tipo incremental "Não Reverte"
+// (cálculo |D0 - D-N|; boleto que some mantém o saldo).
 func (r RegraContabil) EhIncremental() bool {
 	return r.TipoLancamento == TipoIncremental
+}
+
+// EhIncrementalReverte indica se a regra é do tipo incremental "Reverte"
+// (cálculo |D0 - D-N|; boleto que some é baixado — RN-121).
+func (r RegraContabil) EhIncrementalReverte() bool {
+	return r.TipoLancamento == TipoIncrementalReverte
+}
+
+// UsaCalculoIncremental indica se a regra usa o cálculo incremental diário
+// (|D0 - D-N|), comum aos tipos incremental e incremental_reverte.
+func (r RegraContabil) UsaCalculoIncremental() bool {
+	return r.EhIncremental() || r.EhIncrementalReverte()
 }
 
 // Spec: RN-024 / ADR-001 (docs/especificacao.md §5.3, §12).
@@ -47,6 +65,8 @@ func NormalizaTipoLancamento(t string) string {
 		return TipoNaoReverte
 	case TipoIncremental:
 		return TipoIncremental
+	case TipoIncrementalReverte:
+		return TipoIncrementalReverte
 	default:
 		return TipoReverte
 	}

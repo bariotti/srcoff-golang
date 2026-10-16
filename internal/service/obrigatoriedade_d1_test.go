@@ -23,8 +23,8 @@ func posD1(id int64, data time.Time, produto, dominio, boleto string, mtm float6
 		ID: id, DataPosicaoCarteira: data, CodigoVersaoConteudo: 1,
 		Campos: map[string]interface{}{
 			"produto": produto, "dominio": dominio,
-			"codigo_identificador_boleto": boleto,
-			"valor_mtm":                   mtm,
+			"codigo_identificador_boleto":  boleto,
+			"valor_mtm":                    mtm,
 			"moeda_principal_remanescente": "USD",
 		},
 	}

@@ -12,15 +12,6 @@ BEGIN
     CREATE UNIQUE INDEX UX_parametrizacao_cat_valor ON parametrizacao (categoria, valor);
 END;
 
--- Seed de opções padrão (só insere as que ainda não existem).
-INSERT INTO parametrizacao (categoria, valor)
-SELECT c, v FROM (VALUES
-    ('produto', 'NDF'),
-    ('produto', 'SWAP'),
-    ('produto', 'FXO'),
-    ('dominio', 'Posição'),
-    ('dominio', 'Liquidação')
-) AS seed(c, v)
-WHERE NOT EXISTS (
-    SELECT 1 FROM parametrizacao p WHERE p.categoria = seed.c AND p.valor = seed.v
-);
+-- Sem seed de opções padrão (ADR-009): os combos (Produto/Domínio) nascem vazios e são
+-- cadastrados pelo usuário via Parametrizações. Mantido em paridade com os backends
+-- file e sqlite. (Bases já provisionadas não são afetadas — nada é removido aqui.)

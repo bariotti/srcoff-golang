@@ -63,9 +63,9 @@ func (s *ConciliacaoService) Conciliar(ctx context.Context, data time.Time) (*mo
 
 	// Validação 2: duplicidade (mesmo boleto + regra + indicador_reversao)
 	type chaveDup struct {
-		boleto    string
-		regra     string
-		reversao  bool
+		boleto   string
+		regra    string
+		reversao bool
 	}
 	contagem := make(map[chaveDup]int)
 	regrasPorChave := make(map[chaveDup]string)

@@ -407,6 +407,10 @@ func parseTipoLancamentoCSV(s string) string {
 	switch strings.ToLower(strings.TrimSpace(s)) {
 	case "não reverte", "nao reverte", "posta/nao reverte", "posta/não reverte":
 		return model.TipoNaoReverte
+	case "incremental/não reverte", "incremental/nao reverte", "incremental nao reverte":
+		return model.TipoIncremental
+	case "incremental/reverte", "incremental reverte":
+		return model.TipoIncrementalReverte
 	default:
 		return model.NormalizaTipoLancamento(s)
 	}

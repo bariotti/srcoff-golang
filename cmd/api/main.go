@@ -21,7 +21,7 @@ func main() {
 	// 1. Selecionar backend de armazenamento via STORAGE_BACKEND (sqlserver | file | sqlite)
 	backend := os.Getenv("STORAGE_BACKEND")
 	if backend == "" {
-		backend = "file"
+		backend = "sqlite"
 	}
 
 	var (
@@ -34,6 +34,7 @@ func main() {
 		configuracaoRepo   repository.ConfiguracaoRepository
 		execucaoRepo       repository.ExecucaoRepository
 		notificacaoRepo    repository.NotificacaoRepository
+		saldoRepo          repository.SaldoContaRepository
 	)
 
 	var rawSQLDB *sql.DB
@@ -54,6 +55,7 @@ func main() {
 		configuracaoRepo = filerepo.NewConfiguracaoRepo(dir)
 		execucaoRepo = filerepo.NewExecucaoRepo(dir)
 		notificacaoRepo = filerepo.NewNotificacaoRepo(dir)
+		saldoRepo = filerepo.NewSaldoContaRepo(dir)
 
 	case "sqlite":
 		path := os.Getenv("SQLITE_PATH")
@@ -75,6 +77,7 @@ func main() {
 		configuracaoRepo = sqliterepo.NewConfiguracaoRepo(sdb)
 		execucaoRepo = sqliterepo.NewExecucaoRepo(sdb)
 		notificacaoRepo = sqliterepo.NewNotificacaoRepo(sdb)
+		saldoRepo = sqliterepo.NewSaldoContaRepo(sdb)
 
 	default: // sqlserver
 		rawSQLDB = db.Connect()
@@ -89,6 +92,7 @@ func main() {
 		configuracaoRepo = repository.NewConfiguracaoRepo(rawSQLDB)
 		execucaoRepo = repository.NewExecucaoRepo(rawSQLDB)
 		notificacaoRepo = repository.NewNotificacaoRepo(rawSQLDB)
+		saldoRepo = repository.NewSaldoContaRepo(rawSQLDB)
 	}
 
 	// 2. Instanciar avaliador de expressões
@@ -98,7 +102,16 @@ func main() {
 	movimentoSvc := service.NewMovimentoContabilService(posicaoRepo, regraRepo, movimentoRepo, eval).
 		ComInconsistenciaRepo(inconsistenciaRepo).
 		ComExecucaoRepo(execucaoRepo).
-		ComPadraoRepo(padraoArquivoRepo)
+		ComPadraoRepo(padraoArquivoRepo).
+		ComSaldoRepo(saldoRepo)
+
+	// Projeção de saldo (RN-170): se a tabela estiver vazia (base recém-criada/migrada),
+	// reconstrói a partir do movimento vigente existente. Operação única.
+	if vazio, err := movimentoSvc.SaldoVazio(context.Background()); err == nil && vazio {
+		if err := movimentoSvc.ReconstruirSaldos(context.Background()); err != nil {
+			log.Printf("[saldo] falha ao reconstruir projeção de saldo na inicialização: %v", err)
+		}
+	}
 	inconsistenciaSvc := service.NewInconsistenciaService(inconsistenciaRepo)
 	execucaoSvc := service.NewExecucaoService(execucaoRepo, padraoArquivoRepo).
 		ComInconsistenciaRepo(inconsistenciaRepo)
@@ -215,6 +228,11 @@ func main() {
 	http.HandleFunc("/api/v1/movimento-contabil/status", execucaoHandler.Status)
 	http.HandleFunc("/api/v1/movimento-contabil/calendario", execucaoHandler.Calendario)
 	http.HandleFunc("/api/v1/notificacoes", notificacaoHandler.Notificacoes)
+	saldoHandler := handler.NewSaldoHandler(movimentoSvc)
+	http.HandleFunc("/api/v1/saldos", saldoHandler.Listar)
+	lancManualHandler := handler.NewLancamentoManualHandler(movimentoSvc)
+	http.HandleFunc("/api/v1/lancamentos-manuais", lancManualHandler.Inserir)
+	http.HandleFunc("/api/v1/lancamentos-manuais/import", lancManualHandler.ImportarCSV)
 
 	// 6. Ler porta
 	port := os.Getenv("API_PORT")

@@ -20,33 +20,13 @@ type ParametrizacaoRepo struct {
 	st *parametrizacaoStore
 }
 
-// opcoesPadrao são criadas na primeira execução para que os combos não iniciem vazios.
-var opcoesPadrao = map[string][]string{
-	"produto": {"NDF", "SWAP", "FXO"},
-	"dominio": {"Posição", "Liquidação"},
-}
-
 func NewParametrizacaoRepo(dir string) *ParametrizacaoRepo {
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		panic("file store: não foi possível criar diretório " + dir + ": " + err.Error())
 	}
+	// Sem seed de opções padrão: os combos (Produto/Domínio) nascem vazios e são
+	// cadastrados pelo usuário via Parametrizações (ADR-009, docs/especificacao.md §8.4).
 	st := &parametrizacaoStore{path: filepath.Join(dir, "parametrizacoes.json")}
-	// Semeia opções padrão se o arquivo ainda não existe.
-	if _, err := os.Stat(st.path); os.IsNotExist(err) {
-		_ = st.save(opcoesPadrao)
-	} else if m, err := st.load(); err == nil {
-		// Instalação existente: acrescenta categorias padrão que ainda não existam.
-		alterado := false
-		for cat, vals := range opcoesPadrao {
-			if _, ok := m[cat]; !ok {
-				m[cat] = vals
-				alterado = true
-			}
-		}
-		if alterado {
-			_ = st.save(m)
-		}
-	}
 	return &ParametrizacaoRepo{st: st}
 }
 

@@ -73,8 +73,8 @@ func (h *NLQueryHandler) Query(w http.ResponseWriter, r *http.Request) {
 	rows, err := h.db.QueryContext(r.Context(), sqlQuery)
 	if err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]interface{}{
-			"erro":  "erro ao executar SQL: " + err.Error(),
-			"sql":   sqlQuery,
+			"erro": "erro ao executar SQL: " + err.Error(),
+			"sql":  sqlQuery,
 		})
 		return
 	}
@@ -130,7 +130,7 @@ SQL:`, dbSchema, pergunta)
 			{"parts": []map[string]string{{"text": prompt}}},
 		},
 		"generationConfig": map[string]interface{}{
-			"temperature": 0,
+			"temperature":     0,
 			"maxOutputTokens": 1024,
 		},
 	}

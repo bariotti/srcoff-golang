@@ -99,8 +99,8 @@ func TestP8_LoteConsolidadoContemExatamenteTodosLancamentosEEstornos(t *testing.
 
 	properties.Property("consulta retorna exatamente lançamentos + estornos sem omissões ou duplicatas", prop.ForAll(
 		func(n, m int) bool {
-			numLanc := (n % 10) + 1  // 1-10 lançamentos
-			numEstorno := m % 6      // 0-5 estornos
+			numLanc := (n % 10) + 1 // 1-10 lançamentos
+			numEstorno := m % 6     // 0-5 estornos
 
 			repo := &fakeMovimentoRepoPaginado{}
 
@@ -110,9 +110,9 @@ func TestP8_LoteConsolidadoContemExatamenteTodosLancamentosEEstornos(t *testing.
 
 			for i := 0; i < numLanc; i++ {
 				l := model.LancamentoContabil{
-					ID:               idCounter,
-					DataLoteContabil: baseDate,
-					IndicadorReversao: false,
+					ID:                        idCounter,
+					DataLoteContabil:          baseDate,
+					IndicadorReversao:         false,
 					CodigoIdentificadorBoleto: "BOLETO",
 					ValorLancamentoContabil:   float64(i + 1),
 				}
@@ -124,9 +124,9 @@ func TestP8_LoteConsolidadoContemExatamenteTodosLancamentosEEstornos(t *testing.
 			// Pre-populate with estornos (indicadorReversao=true)
 			for i := 0; i < numEstorno; i++ {
 				l := model.LancamentoContabil{
-					ID:               idCounter,
-					DataLoteContabil: baseDate,
-					IndicadorReversao: true,
+					ID:                        idCounter,
+					DataLoteContabil:          baseDate,
+					IndicadorReversao:         true,
 					CodigoIdentificadorBoleto: "BOLETO",
 					ValorLancamentoContabil:   float64(i + 1),
 				}
@@ -200,7 +200,7 @@ func TestP9_PaginacaoRetornaSubconjuntoCorretoETotalConsistente(t *testing.T) {
 
 	properties.Property("união de todas as páginas == conjunto completo, sem duplicatas, total consistente", prop.ForAll(
 		func(n, pageSize int) bool {
-			numLanc := (n % 20) + 1  // 1-20
+			numLanc := (n % 20) + 1         // 1-20
 			tamPagina := (pageSize % 5) + 1 // 1-5
 
 			repo := &fakeMovimentoRepoPaginado{}
@@ -210,9 +210,9 @@ func TestP9_PaginacaoRetornaSubconjuntoCorretoETotalConsistente(t *testing.T) {
 			for i := 0; i < numLanc; i++ {
 				id := int64(i + 1)
 				l := model.LancamentoContabil{
-					ID:               id,
-					DataLoteContabil: baseDate,
-					IndicadorReversao: false,
+					ID:                        id,
+					DataLoteContabil:          baseDate,
+					IndicadorReversao:         false,
 					CodigoIdentificadorBoleto: "BOLETO",
 					ValorLancamentoContabil:   float64(i + 1),
 				}

@@ -36,9 +36,9 @@ func TestEhDiaUtil(t *testing.T) {
 
 func TestDiaUtilAnterior(t *testing.T) {
 	casos := []struct {
-		data      string
-		esperado  string
-		nota      string
+		data     string
+		esperado string
+		nota     string
 	}{
 		{"2026-01-05", "2026-01-02", "segunda → sexta (pula fim de semana)"},
 		{"2026-01-02", "2025-12-31", "sexta → quarta (pula Ano Novo e feriado? só Ano Novo 01/01 e quinta 01/01 é feriado)"},

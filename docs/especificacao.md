@@ -131,7 +131,7 @@ dominio                     string   (lista separada por vírgula; vazio = todos
 campo_produto               string   (nome do campo da posição comparado ao produto)
 pre_condicao                string   (expressão opcional, combinada com AND a cada condição)
 ativo                       bool
-tipo_lancamento             string   (reverte | nao_reverte | incremental)   ← RN-024
+tipo_lancamento             string   (reverte | nao_reverte | incremental | incremental_reverte)   ← RN-024
 condicoes                   []CondicaoRegra
 ```
 
@@ -154,8 +154,10 @@ id, data_lote_contabil, codigo_versao_conteudo,
 codigo_identificador_boleto, valor_lancamento_contabil, moeda_lancamento_contabil,
 conta_debito, conta_credito, produto, dominio,
 indicador_reversao (false=lançamento, true=estorno),
-descricao_regra_contabil, descricao_condicao_contabil, id_regra_contabil
+descricao_regra_contabil, descricao_condicao_contabil, id_regra_contabil,
+origem (automatico | manual; vazio = automatico)   ← RN-033.3
 ```
+- **RN-030.1 (Origem).** Todo lançamento tem `origem`: **`automatico`** (gerado pelo motor) ou **`manual`** (inserido pelo usuário — RF-033). Vazio é tratado como `automatico`. É apenas marcação/exibição; não altera nenhuma lógica de geração. (ADR-012)
 
 ### 4.5 PadraoArquivo — RF-040
 ```
@@ -197,6 +199,18 @@ id, tipo (POSICAO_IMPORTADA | CONTABIL_EXECUTADO), data_lote, produto, dominio, 
 
 ---
 
+### 4.10 SaldoConta (projeção materializada) — RF-065 / RN-170
+```
+produto, dominio, codigo_identificador_boleto string
+id_regra_contabil int64
+conta_debito, conta_credito string
+saldo float64   (net postado vigente: Σ lançamentos − Σ estornos)
+```
+- **RN-170.1 (Projeção derivada).** `saldo_conta` é um **cache** do net vigente do `movimento_contabil` por chave `(produto, domínio, boleto, id_regra, conta_deb, conta_cred)`. A **fonte da verdade continua sendo `movimento_contabil`**; `saldo_conta` é reconstruível a partir dele (`ReconstruirSaldos`).
+- **RN-170.2 (Manutenção aditiva, fora dos repositórios de movimento).** É atualizada pelo **serviço**, após cada geração, aplicando `delta(chave) = net(novas linhas) − net(versão vigente anterior da mesma data/combo)`. Os métodos `BulkInsert`/`ExcluirPorDataEVersao` do movimento **não são alterados** (nenhum resultado existente muda). (ADR-010)
+- **RN-170.3 (Exclusão).** Ao excluir movimento, o serviço **recomputa** os saldos das combinações afetadas a partir do vigente.
+- **RN-170.4 (Escopo de leitura).** É **lida** apenas: (a) pela baixa do `incremental_reverte` (RN-121) e (b) pela consulta de saldo (RF-065). **Não** participa do cálculo diário do incremental (que segue usando a posição de D-N — ADR-002).
+
 ## 5. Motor de geração do movimento contábil (núcleo)
 
 Serviço: `MovimentoContabilService.GerarMovimentoEscopo(ctx, data, produtoFiltro, dominioFiltro)`.
@@ -222,19 +236,22 @@ Para cada posição e cada regra ativa:
 
 ### 5.3 Tipo de lançamento — RN-024 / ADR-001
 
-`tipo_lancamento` (combo **obrigatório**) define a estratégia. Normalização canônica única: `model.NormalizaTipoLancamento` (trim + lower; vazio/desconhecido ⇒ `reverte`). Helpers: `EhReverte()` (inclui vazio), `EhIncremental()`.
+`tipo_lancamento` (combo **obrigatório**) define a estratégia. Normalização canônica única: `model.NormalizaTipoLancamento` (trim + lower; vazio/desconhecido ⇒ `reverte`). Helpers: `EhReverte()` (inclui vazio), `EhIncremental()`, `EhIncrementalReverte()`, `UsaCalculoIncremental()` (= incremental **ou** incremental_reverte).
 
-| Tipo | Estorno (RN-130)? | Valor do lançamento em D0 |
-|------|-------------------|---------------------------|
-| **`reverte`** (Posta/Reverte) | **Sim** | Valor cheio de `campo_valor`. |
-| **`nao_reverte`** (Posta/Não Reverte) | Não | Valor cheio de `campo_valor`. |
-| **`incremental`** | Não | `\| \|valor_D0\| − \|valor_D-N\| \|` (RN-120). |
+| Tipo (valor canônico) | Rótulo na UI | Estorno (RN-130)? | Valor do lançamento em D0 |
+|------|------|-------------------|---------------------------|
+| **`reverte`** | Posta/Reverte | **Sim** (D-1) | Valor cheio de `campo_valor`. |
+| **`nao_reverte`** | Posta/Não Reverte | Não | Valor cheio de `campo_valor`. |
+| **`incremental`** | Incremental/Não Reverte | Não | `\| \|valor_D0\| − \|valor_D-N\| \|` (RN-120). |
+| **`incremental_reverte`** | Incremental/Reverte | Não (D-1); **sim na baixa** (RN-121) | `\| \|valor_D0\| − \|valor_D-N\| \|` (RN-120), igual ao incremental. |
 
 - **RN-024.1** Normalização aplicada em **toda escrita** (API/CSV/3 backends) e na exportação; o valor persistido é sempre canônico, independentemente de maiúsculas/espaços. (ADR-001)
+- **RN-024.4 (Rótulos vs. valores).** Os rótulos "Incremental/Não Reverte" e "Incremental/Reverte" são apenas de **exibição**; os valores canônicos armazenados permanecem `incremental` e `incremental_reverte` (rename sem migração de dados).
 
 ### 5.4 Cálculo Incremental — RN-120
 
-Para regras `incremental`, o valor lançado em D0 é a **diferença absoluta** entre o valor de D0 e o valor de D-N:
+Aplica-se aos tipos `incremental` **e** `incremental_reverte` (ambos `UsaCalculoIncremental()`).
+Para essas regras, o valor lançado em D0 é a **diferença absoluta** entre o valor de D0 e o valor de D-N:
 
 ```
 valor_lançado = | |valor_D0| − |valor_D-N| |
@@ -246,20 +263,36 @@ valor_lançado = | |valor_D0| − |valor_D-N| |
 - **RN-120.4 (Primeira ocorrência).** Sem D-N (nenhuma execução anterior) → base 0 → lança o **valor cheio**.
 - **RN-120.5 (Queda / absoluto).** O valor lançado é **absoluto** (sem sinal), inclusive quando o valor cai (ex.: D-N 1300, D0 900 → lança 400). A persistência mantém o valor como calculado.
 - **RN-120.6 (Reprocessamento).** D-N é sempre estritamente anterior a D0, então reprocessar D0 **desconsidera** D0.
-- **RN-120.7 (Baixa por desaparecimento — fora de escopo).** Se um boleto existe em D-N mas **não** em D0, nenhum lançamento é gerado e o saldo contábil **permanece** (sem baixa automática). Comportamento correto por decisão de negócio. (ADR-003)
+- **RN-120.7 (Baixa por desaparecimento).** Se um boleto existe em D-N mas **não** em D0:
+  - Tipo `incremental` (Não Reverte): nenhum lançamento é gerado e o saldo contábil **permanece** (sem baixa). (ADR-003)
+  - Tipo `incremental_reverte` (Reverte): gera **baixa** zerando o saldo do boleto (RN-121).
 - **RN-120.8 (Unicidade de posição).** Assume-se **no máximo uma posição por (boleto, dia, versão)**; portanto a acumulação da base soma exatamente uma vez por chave. (ADR-004)
 - **RN-120.9** As regras `reverte` e `nao_reverte` **não** têm sua lógica alterada pelo incremental. (ADR-005)
 
 Implementação: bloco "2b" de `GerarMovimentoEscopo` + `acumularBaseIncremental` + `chaveIncremental`.
 
-### 5.5 Obrigatoriedade de movimento de D-1 — RN-140
+### 5.5 Baixa por desaparecimento (Incremental/Reverte) — RN-121 / RF-031 / ADR-007
+
+Exclusivo do tipo `incremental_reverte`. Em cada processamento de D0, para cada boleto que **tinha saldo** em movimento contábil de alguma regra `incremental_reverte` e que **não existe mais na posição de D0**, gera-se um **estorno de baixa** que zera o saldo daquele boleto para a regra.
+
+- **RN-121.1 (Gatilho).** Dispara quando o boleto está **ausente da posição de D0** (verificação por existência na **posição**, não por geração de lançamento — um boleto presente em D0 cujas condições deram `false` **não** é baixado).
+- **RN-121.2 (Valor = saldo líquido real).** O valor da baixa é o **saldo líquido efetivamente postado** para a chave (produto, domínio, boleto, id_regra, conta_débito, conta_crédito): `Σ(lançamentos) − Σ(estornos)` vigente até D-N. Isso **zera de fato** a conta, inclusive quando houve quedas (onde o valor absoluto do incremental faz o saldo postado divergir do valor de posição). (ADR-007 — difere deliberadamente do ADR-002: aqui soma-se o postado, não se relê a posição.)
+  - **RN-121.2a (Fonte do saldo).** Quando há `saldo_conta` (RN-170) injetado, a baixa **lê o saldo materializado** (`saldo − net do vigente de D0`), com **resultado idêntico** à varredura. Sem ele (ex.: testes legados), usa o caminho de varredura do histórico vigente. (ADR-011)
+- **RN-121.3 (Lançamento da baixa).** Estorno com **contas invertidas** em relação à orientação canônica do saldo, `indicador_reversao = true`, `data_lote_contabil = D0`, mesma versão do combo (RN-150).
+- **RN-121.4 (Idempotência).** Como o valor vem do saldo líquido vigente, um boleto já baixado tem saldo 0 e **não** é baixado de novo em reprocessamentos ou dias seguintes.
+- **RN-121.5 (Escopo e bloqueio).** Respeita o filtro de escopo (produto/domínio) e **não** processa baixas de combinações bloqueadas por D-1 (RN-140). O combo de uma baixa é incluído no versionamento/execução (RN-150/RN-160) mesmo que não tenha lançamentos de D0.
+- **RN-121.6 (Chave por regra, todas as contas).** "Todo o saldo ... para a Regra" cobre **todos os pares de contas** (condições) da regra para aquele boleto.
+
+Implementação: bloco "4b" de `GerarMovimentoEscopo` (lê o movimento vigente histórico via `ConsultarPaginadoFiltrado` com `versao_modo=vigente`, agrega o saldo líquido por chave e emite as baixas).
+
+### 5.6 Obrigatoriedade de movimento de D-1 — RN-140
 
 Quando o padrão da combinação **exige D-1** (RN-040.1) e há movimento contábil em alguma data anterior:
 - **RN-140.1** Se **não** houver movimento no **D-1 útil**, a combinação é **bloqueada** (não processa lançamentos nem inconsistências naquela data).
 - **RN-140.2** Se não há movimento anterior nenhum (primeira vez) → **não** bloqueia.
 - **RN-140.3** A base é o **movimento real** (`DatasComMovimento`, `qtd_lancamentos > 0`), não o mero log de execução. (RN-060.1)
 
-### 5.6 Estorno — RN-130 / RN-131
+### 5.7 Estorno — RN-130 / RN-131
 
 - **RN-130.1** Apenas regras `EhReverte()` geram estorno. `nao_reverte` e `incremental` **nunca** estornam.
 - **RN-130.2** O estorno copia o lançamento de origem **invertendo** débito↔crédito, com `indicador_reversao = true` e valor igual.
@@ -268,13 +301,13 @@ Quando o padrão da combinação **exige D-1** (RN-040.1) e há movimento contá
   - Não exige D-1 → **maior data anterior com movimento** (`DatasComMovimento`).
   - Sem data de origem (nenhuma execução anterior) → **não estorna**.
 
-### 5.7 Versionamento por combinação — RN-150
+### 5.8 Versionamento por combinação — RN-150
 
 - **RN-150.1** A versão (`codigo_versao_conteudo`) é calculada **por (produto, domínio)**: `max(versão vigente da combinação) + 1`.
 - **RN-150.2** Cada combinação versiona de forma **independente**: a 1ª execução de um novo combo na data começa em **v1**, mesmo que outro combo já esteja em versão maior.
 - **RN-150.3** Lançamentos e estornos da mesma execução recebem a mesma versão do combo.
 
-### 5.8 Persistência e registro — RN-160
+### 5.9 Persistência e registro — RN-160
 
 - **RN-160.1** Lançamentos + estornos são persistidos em um único `BulkInsert`.
 - **RN-160.2** Inconsistências são persistidas com `SubstituirPorEscopo` (substitui apenas as combinações do escopo na data).
@@ -287,6 +320,19 @@ Quando o padrão da combinação **exige D-1** (RN-040.1) e há movimento contá
 - **CA-D1** (`obrigatoriedade_d1_test.go`): bloqueio quando falta D-1 útil e já há contábil anterior.
 
 ---
+
+## 5b. Lançamento manual — RF-033 / RN-033
+
+Permite ao usuário inserir **um ou N** lançamentos contábeis manualmente, **em tela** ou **via CSV**.
+
+- **RN-033.1 (Campos).** Por lançamento: `data` (dia útil), `produto`, `dominio`, `id_regra`, `id_condicao`, `boleto`, `valor` (≠ 0), `moeda`, `indicador_reversao` (opcional; default lançamento). As **contas débito/crédito** e as descrições de regra/condição **vêm da condição referenciada** (não são digitadas) — a condição **vai** no lançamento (`descricao_condicao_contabil`).
+- **RN-033.2 (Validação tudo-ou-nada).** Se qualquer linha for inválida (data não útil, regra/condição inexistente, valor zero, campos faltando), **nada** é inserido.
+- **RN-033.3 (Origem).** Lançamentos manuais recebem `origem = manual` (RN-030.1); os gerados pelo motor, `automatico`.
+- **RN-033.4 (Versionamento — anexa à vigente).** Cada lançamento manual é **anexado à versão vigente** do seu (produto, domínio, data) — ou **versão 1** se não houver movimento. Assim aparece junto do movimento existente na consulta. Se depois o contábil for **gerado/reprocessado** para essa data/combo, cria-se uma versão nova que **supersede** (comportamento normal de versionamento). (ADR-013)
+- **RN-033.5 (Saldo).** A inserção manual atualiza a projeção de saldo (RN-170) somando o net das linhas.
+- **RN-033.6 (Sem execução).** Não registra execução (RF-060) nem inconsistências — é inserção direta, não geração.
+
+Implementação: `InserirLancamentosManuais`; handler `POST /lancamentos-manuais` (JSON) e `/import` (CSV).
 
 ## 6. Consulta e extração do movimento
 
@@ -324,7 +370,7 @@ Compara posição × movimento e aponta inconsistências:
 - **RF-022** CRUD de regras (`/api/v1/regras`, `/api/v1/regras/{id}`).
 - **RF-023** CRUD de condições (`/api/v1/regras/{id}/condicoes`, `/api/v1/condicoes/{id}`).
 - **RF-024 (Import/Export CSV).** Export (`/regras/export`) e import (`/regras/import`) de regras+condições em um único CSV.
-  - **RN-024.2** Coluna `tipo_lancamento` aceita `reverte | nao_reverte | incremental` (vazio = `reverte`); também aceita rótulos amigáveis de "não reverte". Normalização via `model.NormalizaTipoLancamento`.
+  - **RN-024.2** Coluna `tipo_lancamento` aceita `reverte | nao_reverte | incremental | incremental_reverte` (vazio = `reverte`); também aceita rótulos amigáveis ("não reverte", "incremental/reverte", "incremental/não reverte"). Normalização via `model.NormalizaTipoLancamento`.
   - **RN-024.3** Casamento por `id`; linhas idênticas não são alteradas; import **nunca exclui**; linhas de criação (rótulo/`regra_id` vazio) criam a cada importação (risco de duplicata — reexportar após criar).
 
 ### 8.2 Expressões — RF-025 / RN-025
@@ -338,6 +384,7 @@ Compara posição × movimento e aponta inconsistências:
 
 ### 8.4 Parametrizações e configurações — RF-043 / RF-044
 - **RF-043** Opções de combos (produto, domínio) (`/api/v1/parametrizacoes/opcoes`).
+  - **RN-043.1 (Sem seed padrão).** Um banco/instalação novo nasce **sem** opções de combos; o usuário cadastra Produto/Domínio manualmente. Vale para os 3 backends (file, sqlite, SQL Server). (ADR-009)
 - **RF-044** Configurações chave→valor, incl. pastas monitoradas (`/api/v1/configuracoes`).
 
 ---
@@ -379,10 +426,11 @@ Base: `/api/v1`. Rotas registradas em `cmd/api/main.go`. Convenções gerais:
 
 ### 11.1 Movimento contábil
 
-#### `POST /movimento-contabil` — RF-030 (gerar)
+#### `POST /movimento-contabil` — RF-030 (gerar) · RF-031 (baixa por desaparecimento)
 - **Body**: `{ "data": "YYYY-MM-DD", "produto": "<opcional>", "dominio": "<opcional>" }` (`produto`/`dominio` vazios = todas as combinações).
 - **200**: `{"mensagem":"movimento contábil gerado com sucesso"}`; ou, se houver combinações bloqueadas por D-1 (RN-140), `{"mensagem":"O contábil de <p/d, ...> deve ser executado para datas anteriores..."}`; ou a mensagem de erro de negócio (ex.: data não útil, sem posição) — sempre 200.
 - **400**: data ausente/malformada.
+- **RF-031**: no mesmo processamento, regras `incremental_reverte` geram as baixas de boletos que sumiram da posição (RN-121).
 
 #### `GET /movimento-contabil` — RF-050 (consultar)
 - **Query** (modo filtrado, quando ao menos um de `data_inicio|data_fim|boleto|produto|dominio` vier):
@@ -390,6 +438,14 @@ Base: `/api/v1`. Rotas registradas em `cmd/api/main.go`. Convenções gerais:
 - **Query** (modo compatível data única): `data`, `pagina`, `tamanho`.
 - **200**: `PaginaLancamentos` (sem pares de saldo zero — RN-050.1).
 - **400**: datas malformadas.
+
+#### `POST /lancamentos-manuais` — RF-033 (inserir em tela)
+- **Body**: `{ "lancamentos": [ { data, produto, dominio, id_regra, id_condicao, boleto, valor, moeda, indicador_reversao } ] }`.
+- **201**: `{ inseridos: N, mensagem }`. **400**: validação (mensagem indica a linha).
+
+#### `POST /lancamentos-manuais/import` — RF-033 (inserir via CSV)
+- **multipart/form-data**: campo `arquivo` (CSV `;`), cabeçalho: `data;produto;dominio;id_regra;id_condicao;boleto;valor;moeda;indicador_reversao`.
+- **201**: `{ inseridos: N, mensagem }`. **400**: CSV vazio/validação.
 
 #### `DELETE /movimento-contabil` — RF-053 (excluir)
 - **Query**: `data` (obrigatória), `versao` (opcional; 0 = conforme serviço).
@@ -503,6 +559,12 @@ Base: `/api/v1`. Rotas registradas em `cmd/api/main.go`. Convenções gerais:
 - **GET Query**: `limite` (default 30). **200**: `{ "nao_lidas": N, "itens": [Notificacao...] }`.
 - **POST**: marca todas como lidas → `{"mensagem":"notificações marcadas como lidas"}`.
 
+### 11.5b Saldo de contas
+
+#### `GET /saldos` — RF-065
+- **Query** (todos opcionais, filtram): `produto`, `dominio`, `boleto`, `id_regra`, `com_zero=1` (inclui saldo 0; default oculta).
+- **200**: `[SaldoConta...]` (§4.10) ordenado por produto/domínio/boleto. Projeção derivada do movimento (RN-170).
+
 ### 11.6 Validação, conciliação e IA
 
 #### `POST /validar-expressao` — RF-025
@@ -539,6 +601,13 @@ Base: `/api/v1`. Rotas registradas em `cmd/api/main.go`. Convenções gerais:
 | **ADR-004** | Assumir **no máximo 1 posição por (boleto, dia, versão)**; acumulação incremental soma uma vez por chave. | Confirmado pelo usuário (2026-10-09): não há boleto duplicado por dia/versão. | Vigente |
 | **ADR-005** | `reverte` e `nao_reverte` não têm a lógica alterada pela introdução do incremental. | Restrição explícita do usuário. | Implementado |
 | **ADR-006** | Memoização de `exigeMovimentoD1` por combinação dentro de `GerarMovimentoEscopo`. | Evitar releitura repetida dos padrões; sem mudança de comportamento. | Implementado |
+| **ADR-007** | Novo tipo `incremental_reverte`: baixa por desaparecimento usa o **saldo líquido real postado** (`Σ lançamentos − Σ estornos` do movimento vigente), **não** a releitura da posição D-N. | Decisão do usuário (2026-10-11): "estornar todo o saldo" deve **zerar a conta**, o que só a soma do postado garante quando houve quedas (valor absoluto). Difere do ADR-002, que vale só para o cálculo diário. | Vigente |
+| **ADR-008** | Rename de rótulos: `incremental` → "Incremental/Não Reverte"; novo `incremental_reverte` → "Incremental/Reverte". Valores canônicos inalterados (sem migração). | Pedido do usuário; evita migração de dados e mantém retrocompatibilidade. | Vigente |
+| **ADR-010** | Tabela `saldo_conta` como projeção materializada do net vigente, mantida pelo **serviço** (aditiva), sem alterar `BulkInsert`/`ExcluirPorDataEVersao`. Fonte da verdade continua o `movimento_contabil`; reconstruível. | Performance da baixa `incremental_reverte` em escala (500k/dia) sem varrer o histórico; e consulta direta de saldo. | Implementado |
+| **ADR-012** | Campo `origem` (automatico\|manual) no `movimento_contabil` para diferenciar lançamentos gerados dos inseridos manualmente. Default `automatico`; não altera lógica de geração. | Pedido do usuário (2026-10-16): diferenciar gerado × manual. | Implementado |
+| **ADR-013** | Lançamento manual **anexa à versão vigente** do combo/data (ou v1). Reprocesso posterior supersede. | Mostrar o manual junto do movimento existente sem esconder o gerado. | Implementado |
+| **ADR-011** | A baixa do `incremental_reverte` passa a **ler** o `saldo_conta` quando presente (resultado idêntico à varredura); mantém o caminho de varredura como fallback. Nenhum outro tipo de regra é afetado. | Atende "nada do que funciona hoje muda, exceto o estorno do incremental com reversão". | Implementado |
+| **ADR-009** | Remoção do seed de opções de combos (Produto NDF/SWAP/FXO, Domínio Posição/Liquidação) na criação do banco/instalação, nos 3 backends. Para bases SQL Server já existentes, a `migration 015` remove explicitamente esses 5 pares (robusta a code page; não toca opções cadastradas pelo usuário). | Pedido do usuário (2026-10-11): instalação nova deve nascer sem combos padrão. | Implementado |
 
 ---
 

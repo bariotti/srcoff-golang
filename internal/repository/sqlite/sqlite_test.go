@@ -220,11 +220,11 @@ func TestPadraoParamConfigNotif(t *testing.T) {
 		t.Fatalf("padrão deveria ter sido excluído")
 	}
 
-	// Defaults semeados no Open (paridade com os outros backends).
-	if prod, _ := s.param.ListarOpcoes(ctx, "produto"); len(prod) != 3 {
-		t.Fatalf("defaults de produto esperados (NDF,SWAP,FXO), obteve %v", prod)
+	// Sem seed de defaults (ADR-009): combos nascem vazios.
+	if prod, _ := s.param.ListarOpcoes(ctx, "produto"); len(prod) != 0 {
+		t.Fatalf("sem seed: produto deveria iniciar vazio, obteve %v", prod)
 	}
-	// Parametrização: duplicata ignorada (categoria não-semeada).
+	// Parametrização: adicionar e duplicata ignorada.
 	_ = s.param.AdicionarOpcao(ctx, "teste", "X")
 	_ = s.param.AdicionarOpcao(ctx, "teste", "X")
 	if op, _ := s.param.ListarOpcoes(ctx, "teste"); len(op) != 1 {

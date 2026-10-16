@@ -7,14 +7,16 @@ import "testing"
 // "Incremental" vindo da API vire "reverte" silenciosamente.
 func TestNormalizaTipoLancamento(t *testing.T) {
 	casos := map[string]string{
-		"reverte":        TipoReverte,
-		"nao_reverte":    TipoNaoReverte,
-		"incremental":    TipoIncremental,
-		"Incremental":    TipoIncremental, // maiúscula
-		"  incremental ": TipoIncremental, // espaços
-		"NAO_REVERTE":    TipoNaoReverte,
-		"":               TipoReverte, // vazio = reverte
-		"qualquer":       TipoReverte, // desconhecido = reverte
+		"reverte":             TipoReverte,
+		"nao_reverte":         TipoNaoReverte,
+		"incremental":         TipoIncremental,
+		"Incremental":         TipoIncremental, // maiúscula
+		"incremental_reverte": TipoIncrementalReverte,
+		"Incremental_Reverte": TipoIncrementalReverte, // maiúsculas
+		"  incremental ":      TipoIncremental,        // espaços
+		"NAO_REVERTE":         TipoNaoReverte,
+		"":                    TipoReverte, // vazio = reverte
+		"qualquer":            TipoReverte, // desconhecido = reverte
 	}
 	for entrada, esperado := range casos {
 		if got := NormalizaTipoLancamento(entrada); got != esperado {

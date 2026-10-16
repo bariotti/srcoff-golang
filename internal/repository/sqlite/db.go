@@ -36,25 +36,57 @@ func Open(path string) (*sql.DB, error) {
 	if err := CriarSchema(context.Background(), db); err != nil {
 		return nil, err
 	}
-	if err := seedDefaults(context.Background(), db); err != nil {
+	// Migração leve de colunas em bancos JÁ existentes (CREATE TABLE IF NOT EXISTS não
+	// altera tabela existente; o SQLite não tem "ADD COLUMN IF NOT EXISTS").
+	if err := migrarColunas(context.Background(), db); err != nil {
 		return nil, err
 	}
+	// Sem seed de opções padrão: os combos (Produto/Domínio) nascem vazios e são
+	// cadastrados pelo usuário via Parametrizações (ADR-009, docs/especificacao.md §8.4).
 	return db, nil
 }
 
-// seedDefaults insere as opções padrão dos combos (Produto/Domínio), em paridade com o
-// backend de arquivo e com a migration 004 do SQL Server. Idempotente (índice único).
-func seedDefaults(ctx context.Context, db *sql.DB) error {
-	defaults := []struct{ cat, val string }{
-		{"produto", "NDF"}, {"produto", "SWAP"}, {"produto", "FXO"},
-		{"dominio", "Posição"}, {"dominio", "Liquidação"},
+// migrarColunas garante colunas adicionadas ao longo da evolução do schema em bancos
+// já existentes. Idempotente: só executa o ALTER quando a coluna não existe.
+func migrarColunas(ctx context.Context, db *sql.DB) error {
+	alteracoes := []struct{ tabela, coluna, ddl string }{
+		{"movimento_contabil", "origem", "origem TEXT NOT NULL DEFAULT 'automatico'"},
+		{"regra_contabil", "tipo_lancamento", "tipo_lancamento TEXT NOT NULL DEFAULT 'reverte'"},
+		{"movimento_execucao", "qtd_movimento", "qtd_movimento INTEGER NOT NULL DEFAULT 0"},
 	}
-	for _, d := range defaults {
-		if _, err := db.ExecContext(ctx, "INSERT OR IGNORE INTO parametrizacao (categoria, valor) VALUES (?, ?)", d.cat, d.val); err != nil {
+	for _, a := range alteracoes {
+		existe, err := colunaExiste(ctx, db, a.tabela, a.coluna)
+		if err != nil {
 			return err
+		}
+		if !existe {
+			if _, err := db.ExecContext(ctx, "ALTER TABLE "+a.tabela+" ADD COLUMN "+a.ddl); err != nil {
+				return err
+			}
 		}
 	}
 	return nil
+}
+
+// colunaExiste consulta o PRAGMA table_info para saber se a coluna já existe na tabela.
+func colunaExiste(ctx context.Context, db *sql.DB, tabela, coluna string) (bool, error) {
+	rows, err := db.QueryContext(ctx, "PRAGMA table_info("+tabela+")")
+	if err != nil {
+		return false, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var cid, notnull, pk int
+		var name, ctype string
+		var dflt sql.NullString
+		if err := rows.Scan(&cid, &name, &ctype, &notnull, &dflt, &pk); err != nil {
+			return false, err
+		}
+		if name == coluna {
+			return true, nil
+		}
+	}
+	return false, rows.Err()
 }
 
 // CriarSchema cria todas as tabelas/índices (idempotente). Executa cada statement
@@ -115,7 +147,8 @@ CREATE TABLE IF NOT EXISTS movimento_contabil (
   indicador_reversao INTEGER NOT NULL DEFAULT 0,
   descricao_regra_contabil TEXT,
   descricao_condicao_contabil TEXT,
-  id_regra_contabil INTEGER
+  id_regra_contabil INTEGER,
+  origem TEXT NOT NULL DEFAULT 'automatico'
 );
 CREATE INDEX IF NOT EXISTS IX_movimento_data_versao ON movimento_contabil (data_lote_contabil, codigo_versao_conteudo);
 CREATE INDEX IF NOT EXISTS IX_movimento_data_reversao ON movimento_contabil (data_lote_contabil, indicador_reversao);
@@ -176,12 +209,26 @@ CREATE TABLE IF NOT EXISTS notificacao (
   lida INTEGER NOT NULL DEFAULT 0,
   criado_em TEXT
 );
+CREATE TABLE IF NOT EXISTS saldo_conta (
+  produto TEXT NOT NULL,
+  dominio TEXT NOT NULL,
+  codigo_identificador_boleto TEXT NOT NULL,
+  id_regra_contabil INTEGER NOT NULL,
+  conta_debito TEXT NOT NULL,
+  conta_credito TEXT NOT NULL,
+  saldo REAL NOT NULL DEFAULT 0,
+  moeda_lancamento TEXT,
+  descricao_regra TEXT,
+  descricao_condicao TEXT,
+  PRIMARY KEY (produto, dominio, codigo_identificador_boleto, id_regra_contabil, conta_debito, conta_credito)
+);
+CREATE INDEX IF NOT EXISTS IX_saldo_combo ON saldo_conta (produto, dominio);
 `
 
 // ── Helpers de data/hora (SQLite guarda como TEXT) ──────────────────────────
 
 func fmtData(t time.Time) string { return t.Format("2006-01-02") }
-func fmtTS(t time.Time) string    { return t.Format("2006-01-02 15:04:05") }
+func fmtTS(t time.Time) string   { return t.Format("2006-01-02 15:04:05") }
 
 // parseData converte "YYYY-MM-DD..." em time.Time (apenas a data).
 func parseData(s string) time.Time {

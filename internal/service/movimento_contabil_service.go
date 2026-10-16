@@ -63,6 +63,17 @@ type MovimentoContabilService struct {
 	inconsistenciaRepo inconsistenciaRepoWriter
 	execucaoRepo       execucaoRepoWriter
 	padraoRepo         padraoFlagLookup
+	saldoRepo          saldoContaWriter
+}
+
+// saldoContaWriter mantém e consulta a projeção materializada de saldo (RN-170).
+// Opcional: quando ausente, a baixa do incremental_reverte usa a varredura do histórico
+// (resultado idêntico) e nenhum saldo é mantido.
+type saldoContaWriter interface {
+	AplicarDeltas(ctx context.Context, deltas []model.SaldoConta) error
+	SubstituirCombos(ctx context.Context, combos []model.ProdutoDominio, saldos []model.SaldoConta) error
+	Listar(ctx context.Context, filtro model.SaldoFiltro) ([]model.SaldoConta, error)
+	EstaVazio(ctx context.Context) (bool, error)
 }
 
 // NewMovimentoContabilService cria uma nova instância do serviço com as dependências injetadas.
@@ -98,6 +109,13 @@ func (s *MovimentoContabilService) ComExecucaoRepo(r execucaoRepoWriter) *Movime
 // se a validação de obrigatoriedade do movimento de D-1 se aplica a cada combinação.
 func (s *MovimentoContabilService) ComPadraoRepo(r padraoFlagLookup) *MovimentoContabilService {
 	s.padraoRepo = r
+	return s
+}
+
+// ComSaldoRepo injeta a projeção de saldo (opcional, RN-170). Quando presente, a baixa
+// do incremental_reverte lê o saldo materializado e o serviço o mantém a cada geração.
+func (s *MovimentoContabilService) ComSaldoRepo(r saldoContaWriter) *MovimentoContabilService {
+	s.saldoRepo = r
 	return s
 }
 
@@ -162,9 +180,10 @@ func (s *MovimentoContabilService) GerarMovimento(ctx context.Context, data time
 // movimento de D-1 útil (não processadas); as demais são processadas normalmente.
 //
 // Spec: núcleo de geração — RN-100..RN-160 (docs/especificacao.md §5).
-//   RN-100 dia útil · RN-101 posição vigente · RN-110 aplicação de regras/inconsistências ·
-//   RN-120 incremental · RN-130/131 estorno · RN-140 obrigatoriedade D-1 ·
-//   RN-150 versionamento por combo · RN-160 persistência/execução.
+//
+//	RN-100 dia útil · RN-101 posição vigente · RN-110 aplicação de regras/inconsistências ·
+//	RN-120 incremental · RN-130/131 estorno · RN-140 obrigatoriedade D-1 ·
+//	RN-150 versionamento por combo · RN-160 persistência/execução.
 func (s *MovimentoContabilService) GerarMovimentoEscopo(ctx context.Context, data time.Time, produtoFiltro, dominioFiltro string) ([]model.ProdutoDominio, error) {
 	// 0. O contábil só pode ser processado em dias úteis.
 	if !EhDiaUtil(data) {
@@ -223,7 +242,7 @@ func (s *MovimentoContabilService) GerarMovimentoEscopo(ctx context.Context, dat
 	baseIncremental := map[string]float64{}
 	temIncremental := false
 	for _, reg := range regras {
-		if reg.EhIncremental() {
+		if reg.UsaCalculoIncremental() {
 			temIncremental = true
 			break
 		}
@@ -324,9 +343,10 @@ func (s *MovimentoContabilService) GerarMovimentoEscopo(ctx context.Context, dat
 				}
 				moeda := evaluator.CampoString(env, condicao.CampoMoeda)
 				boletoLanc := evaluator.CampoString(env, campoBoletoOuPadrao(condicao.CampoBoleto))
-				// Incremental: o valor lançado é | |valor_D0| - |valor_D-N| | para a mesma
-				// (produto, domínio, boleto, regra, contas). Sem base (1ª ocorrência) → valor cheio.
-				if regra.EhIncremental() {
+				// Incremental (Não Reverte e Reverte): o valor lançado é
+				// | |valor_D0| - |valor_D-N| | para a mesma (produto, domínio, boleto, regra, contas).
+				// Sem base (1ª ocorrência) → valor cheio.
+				if regra.UsaCalculoIncremental() {
 					k := chaveIncremental(produto, dominio, boletoLanc, regra.ID, condicao.ContaDebito, condicao.ContaCredito)
 					valor = math.Abs(math.Abs(valor) - math.Abs(baseIncremental[k]))
 				}
@@ -482,11 +502,163 @@ func (s *MovimentoContabilService) GerarMovimentoEscopo(ctx context.Context, dat
 		}
 	}
 
+	// 4b. BAIXA por desaparecimento — tipo incremental_reverte (Spec: RN-121, §5.5).
+	// Para boletos que tinham saldo em regras incremental_reverte e que NÃO existem mais na
+	// posição de D0, gera estornos que ZERAM o saldo líquido postado (Σ lançamentos − Σ estornos),
+	// lido do próprio movimento vigente até D-1 (ADR-007: usa o postado, não relê a posição).
+	temIncRev := false
+	for _, reg := range regras {
+		if reg.EhIncrementalReverte() {
+			temIncRev = true
+			break
+		}
+	}
+	if temIncRev {
+		// Regras incremental_reverte e os campos de boleto que elas usam.
+		regraIncRev := map[int64]bool{}
+		cbSet := map[string]bool{}
+		for _, reg := range regras {
+			if !reg.EhIncrementalReverte() {
+				continue
+			}
+			regraIncRev[reg.ID] = true
+			for _, c := range reg.Condicoes {
+				cbSet[campoBoletoOuPadrao(c.CampoBoleto)] = true
+			}
+		}
+		// Boletos presentes na posição de D0, por combinação (RN-121.1 — existência na POSIÇÃO).
+		presenteD0 := map[string]bool{} // chave: produto\x00dominio\x00boleto
+		for _, p := range posicoes {
+			env := evaluator.PosicaoToEnv(p)
+			prod := evaluator.CampoString(env, "produto")
+			dom := evaluator.CampoString(env, "dominio")
+			for cb := range cbSet {
+				if b := evaluator.CampoString(env, cb); b != "" {
+					presenteD0[prod+"\x00"+dom+"\x00"+b] = true
+				}
+			}
+		}
+		// Saldo líquido postado até D-1 (movimento vigente, incluindo estornos), por chave incremental.
+		type metaSaldo struct {
+			produto, dominio, boleto, moeda string
+			idRegra                         int64
+			contaDeb, contaCred             string
+			descRegra, descCond             string
+		}
+		saldo := map[string]float64{}
+		meta := map[string]metaSaldo{}
+		if s.saldoRepo != nil {
+			// Caminho MATERIALIZADO (RN-170/ADR-011): lê o saldo e subtrai a contribuição do
+			// vigente atual de D0 (prevNet), obtendo o net <= D-1 — resultado idêntico à varredura.
+			prevNet := map[string]float64{}
+			for _, ind := range []bool{false, true} {
+				ls, err := s.movimentoRepo.BuscarPorDataEIndicador(ctx, data, ind)
+				if err != nil {
+					return nil, fmt.Errorf("erro ao ler vigente de D0 para baixa incremental_reverte: %w", err)
+				}
+				for _, l := range ls {
+					if !regraIncRev[l.IDRegraContabil] {
+						continue
+					}
+					if l.IndicadorReversao {
+						prevNet[chaveIncremental(l.Produto, l.Dominio, l.CodigoIdentificadorBoleto, l.IDRegraContabil, l.ContaCredito, l.ContaDebito)] -= l.ValorLancamentoContabil
+					} else {
+						prevNet[chaveIncremental(l.Produto, l.Dominio, l.CodigoIdentificadorBoleto, l.IDRegraContabil, l.ContaDebito, l.ContaCredito)] += l.ValorLancamentoContabil
+					}
+				}
+			}
+			var regrasIDs []int64
+			for id := range regraIncRev {
+				regrasIDs = append(regrasIDs, id)
+			}
+			saldos, err := s.saldoRepo.Listar(ctx, model.SaldoFiltro{RegrasIn: regrasIDs, IncluiZero: true})
+			if err != nil {
+				return nil, fmt.Errorf("erro ao ler saldo para baixa incremental_reverte: %w", err)
+			}
+			for _, sc := range saldos {
+				k := chaveIncremental(sc.Produto, sc.Dominio, sc.CodigoIdentificadorBoleto, sc.IDRegraContabil, sc.ContaDebito, sc.ContaCredito)
+				saldo[k] = sc.Saldo - prevNet[k]
+				meta[k] = metaSaldo{sc.Produto, sc.Dominio, sc.CodigoIdentificadorBoleto, sc.MoedaLancamento, sc.IDRegraContabil, sc.ContaDebito, sc.ContaCredito, sc.DescricaoRegra, sc.DescricaoCondicao}
+			}
+		} else {
+			// Fallback (sem saldo materializado): varre o movimento vigente até D-1 e soma.
+			hist, err := s.movimentoRepo.ConsultarPaginadoFiltrado(ctx, time.Date(1900, 1, 1, 0, 0, 0, 0, time.UTC), DiaUtilAnterior(data), "", 0, "vigente", 1, 999999)
+			if err != nil {
+				return nil, fmt.Errorf("erro ao ler movimento para baixa incremental_reverte: %w", err)
+			}
+			for _, l := range hist.Lancamentos {
+				if !regraIncRev[l.IDRegraContabil] {
+					continue
+				}
+				if l.IndicadorReversao {
+					k := chaveIncremental(l.Produto, l.Dominio, l.CodigoIdentificadorBoleto, l.IDRegraContabil, l.ContaCredito, l.ContaDebito)
+					saldo[k] -= l.ValorLancamentoContabil
+				} else {
+					k := chaveIncremental(l.Produto, l.Dominio, l.CodigoIdentificadorBoleto, l.IDRegraContabil, l.ContaDebito, l.ContaCredito)
+					saldo[k] += l.ValorLancamentoContabil
+					if _, ok := meta[k]; !ok {
+						meta[k] = metaSaldo{l.Produto, l.Dominio, l.CodigoIdentificadorBoleto, l.MoedaLancamentoContabil, l.IDRegraContabil, l.ContaDebito, l.ContaCredito, l.DescricaoRegraContabil, l.DescricaoCondicaoContabil}
+					}
+				}
+			}
+		}
+		const epsSaldo = 1e-9
+		for k, v := range saldo {
+			if math.Abs(v) <= epsSaldo {
+				continue // saldo zerado (ex.: já baixado) → nada a fazer (RN-121.4)
+			}
+			m, ok := meta[k]
+			if !ok {
+				continue
+			}
+			if produtoFiltro != "" && m.produto != produtoFiltro {
+				continue
+			}
+			if dominioFiltro != "" && m.dominio != dominioFiltro {
+				continue
+			}
+			if bloqueados[m.produto+"\x00"+m.dominio] {
+				continue
+			}
+			if presenteD0[m.produto+"\x00"+m.dominio+"\x00"+m.boleto] {
+				continue // boleto ainda existe na posição de D0 → não baixa
+			}
+			// Estorno de baixa: zera o saldo (contas invertidas em relação à orientação do saldo).
+			deb, cred := m.contaCred, m.contaDeb
+			if v < 0 {
+				deb, cred = m.contaDeb, m.contaCred
+			}
+			estornos = append(estornos, model.LancamentoContabil{
+				DataLoteContabil:          data,
+				CodigoIdentificadorBoleto: m.boleto,
+				ValorLancamentoContabil:   math.Abs(v),
+				MoedaLancamentoContabil:   m.moeda,
+				ContaDebito:               deb,
+				ContaCredito:              cred,
+				Produto:                   m.produto,
+				Dominio:                   m.dominio,
+				IndicadorReversao:         true,
+				DescricaoRegraContabil:    m.descRegra,
+				DescricaoCondicaoContabil: m.descCond,
+				IDRegraContabil:           m.idRegra,
+			})
+			// Garante o combo no versionamento/execução mesmo sem lançamentos de D0 (RN-121.5).
+			ck := m.produto + "\x00" + m.dominio
+			if _, ok := combosSet[ck]; !ok {
+				combosSet[ck] = model.ProdutoDominio{Produto: m.produto, Dominio: m.dominio}
+			}
+		}
+	}
+
 	// 5. Calcular a próxima versão POR combinação (produto, domínio) e aplicá-la a
 	// lançamentos e estornos. Cada combinação versiona de forma independente, então
 	// a primeira execução de um novo produto/domínio na data começa na versão 1,
 	// mesmo que outras combinações já tenham versões maiores.
 	maxVersaoCombo := map[string]int{}
+	// Para a manutenção do saldo (RN-170): net da versão vigente ANTERIOR por chave,
+	// restrito aos combos que serão reescritos nesta geração.
+	prevNetMaint := map[string]float64{}
+	prevMetaMaint := map[string]model.SaldoConta{}
 	for _, ind := range []bool{false, true} {
 		vigentes, err := s.movimentoRepo.BuscarPorDataEIndicador(ctx, data, ind)
 		if err != nil {
@@ -496,6 +668,19 @@ func (s *MovimentoContabilService) GerarMovimentoEscopo(ctx context.Context, dat
 			k := l.Produto + "\x00" + l.Dominio
 			if l.CodigoVersaoConteudo > maxVersaoCombo[k] {
 				maxVersaoCombo[k] = l.CodigoVersaoConteudo
+			}
+			if s.saldoRepo != nil {
+				if _, ok := combosSet[k]; ok {
+					key, cd, cc := canonChaveLanc(l)
+					sgn := 1.0
+					if l.IndicadorReversao {
+						sgn = -1
+					}
+					prevNetMaint[key] += sgn * l.ValorLancamentoContabil
+					if _, ok := prevMetaMaint[key]; !ok {
+						prevMetaMaint[key] = model.SaldoConta{Produto: l.Produto, Dominio: l.Dominio, CodigoIdentificadorBoleto: l.CodigoIdentificadorBoleto, IDRegraContabil: l.IDRegraContabil, ContaDebito: cd, ContaCredito: cc, MoedaLancamento: l.MoedaLancamentoContabil, DescricaoRegra: l.DescricaoRegraContabil, DescricaoCondicao: l.DescricaoCondicaoContabil}
+					}
+				}
 			}
 		}
 	}
@@ -515,6 +700,41 @@ func (s *MovimentoContabilService) GerarMovimentoEscopo(ctx context.Context, dat
 	todos := append(lancamentos, estornos...)
 	if err := s.movimentoRepo.BulkInsert(ctx, todos); err != nil {
 		return nil, fmt.Errorf("erro ao persistir lançamentos: %w", err)
+	}
+
+	// 6b. Manutenção da projeção de saldo (RN-170/ADR-010): delta por chave =
+	// net das linhas novas − net da versão vigente anterior (dos combos reescritos).
+	// É aditivo e NÃO altera o movimento; falha aqui não aborta a geração (projeção reconstruível).
+	if s.saldoRepo != nil {
+		deltaByKey := map[string]float64{}
+		metaByKey := map[string]model.SaldoConta{}
+		for _, l := range todos {
+			key, cd, cc := canonChaveLanc(l)
+			sgn := 1.0
+			if l.IndicadorReversao {
+				sgn = -1
+			}
+			deltaByKey[key] += sgn * l.ValorLancamentoContabil
+			metaByKey[key] = model.SaldoConta{Produto: l.Produto, Dominio: l.Dominio, CodigoIdentificadorBoleto: l.CodigoIdentificadorBoleto, IDRegraContabil: l.IDRegraContabil, ContaDebito: cd, ContaCredito: cc, MoedaLancamento: l.MoedaLancamentoContabil, DescricaoRegra: l.DescricaoRegraContabil, DescricaoCondicao: l.DescricaoCondicaoContabil}
+		}
+		for key, v := range prevNetMaint {
+			deltaByKey[key] -= v
+			if _, ok := metaByKey[key]; !ok {
+				metaByKey[key] = prevMetaMaint[key]
+			}
+		}
+		var deltas []model.SaldoConta
+		for key, v := range deltaByKey {
+			if v == 0 {
+				continue
+			}
+			sc := metaByKey[key]
+			sc.Saldo = v
+			deltas = append(deltas, sc)
+		}
+		if err := s.saldoRepo.AplicarDeltas(ctx, deltas); err != nil {
+			log.Printf("[saldo] falha ao aplicar deltas (projeção; reconstruível): %v", err)
+		}
 	}
 
 	// Contagem por combinação (produto, domínio), usada no registro de execução e no log.
@@ -628,7 +848,107 @@ func (s *MovimentoContabilService) ConsultarLancamentosFiltradoEscopo(ctx contex
 
 // ExcluirMovimento exclui lançamentos de uma data e opcionalmente de uma versão específica.
 func (s *MovimentoContabilService) ExcluirMovimento(ctx context.Context, data time.Time, versao int) error {
-	return s.movimentoRepo.ExcluirPorDataEVersao(ctx, data, versao)
+	// Captura os combos afetados ANTES de excluir (para recomputar o saldo — RN-170.3).
+	var afetados []model.ProdutoDominio
+	if s.saldoRepo != nil {
+		set := map[string]model.ProdutoDominio{}
+		for _, ind := range []bool{false, true} {
+			if ls, err := s.movimentoRepo.BuscarPorDataEIndicador(ctx, data, ind); err == nil {
+				for _, l := range ls {
+					set[l.Produto+"\x00"+l.Dominio] = model.ProdutoDominio{Produto: l.Produto, Dominio: l.Dominio}
+				}
+			}
+		}
+		for _, c := range set {
+			afetados = append(afetados, c)
+		}
+	}
+	if err := s.movimentoRepo.ExcluirPorDataEVersao(ctx, data, versao); err != nil {
+		return err
+	}
+	// Recomputa o saldo dos combos afetados a partir do movimento vigente (projeção; não falha a exclusão).
+	if s.saldoRepo != nil && len(afetados) > 0 {
+		filtro := map[string]bool{}
+		for _, c := range afetados {
+			filtro[c.Produto+"\x00"+c.Dominio] = true
+		}
+		if saldos, err := s.calcularSaldos(ctx, filtro); err == nil {
+			if err := s.saldoRepo.SubstituirCombos(ctx, afetados, saldos); err != nil {
+				log.Printf("[saldo] falha ao recomputar após exclusão (reconstruível): %v", err)
+			}
+		} else {
+			log.Printf("[saldo] falha ao calcular saldos após exclusão (reconstruível): %v", err)
+		}
+	}
+	return nil
+}
+
+// calcularSaldos recomputa o net vigente por chave canônica a partir do movimento_contabil
+// (fonte da verdade). Se filtroCombos != nil, restringe aos combos informados. Base da
+// reconstrução (RN-170.1) e da recomputação pós-exclusão.
+func (s *MovimentoContabilService) calcularSaldos(ctx context.Context, filtroCombos map[string]bool) ([]model.SaldoConta, error) {
+	pag, err := s.movimentoRepo.ConsultarPaginadoFiltrado(ctx, time.Date(1900, 1, 1, 0, 0, 0, 0, time.UTC), time.Date(2999, 12, 31, 0, 0, 0, 0, time.UTC), "", 0, "vigente", 1, 999999)
+	if err != nil {
+		return nil, err
+	}
+	net := map[string]float64{}
+	meta := map[string]model.SaldoConta{}
+	for _, l := range pag.Lancamentos {
+		if filtroCombos != nil && !filtroCombos[l.Produto+"\x00"+l.Dominio] {
+			continue
+		}
+		key, cd, cc := canonChaveLanc(l)
+		sgn := 1.0
+		if l.IndicadorReversao {
+			sgn = -1
+		}
+		net[key] += sgn * l.ValorLancamentoContabil
+		meta[key] = model.SaldoConta{Produto: l.Produto, Dominio: l.Dominio, CodigoIdentificadorBoleto: l.CodigoIdentificadorBoleto, IDRegraContabil: l.IDRegraContabil, ContaDebito: cd, ContaCredito: cc, MoedaLancamento: l.MoedaLancamentoContabil, DescricaoRegra: l.DescricaoRegraContabil, DescricaoCondicao: l.DescricaoCondicaoContabil}
+	}
+	out := make([]model.SaldoConta, 0, len(net))
+	for key, v := range net {
+		sc := meta[key]
+		sc.Saldo = v
+		out = append(out, sc)
+	}
+	return out, nil
+}
+
+// ReconstruirSaldos recompõe toda a projeção de saldo a partir do movimento vigente.
+// Usada na primeira carga (base recém-criada) ou para corrigir eventual divergência.
+func (s *MovimentoContabilService) ReconstruirSaldos(ctx context.Context) error {
+	if s.saldoRepo == nil {
+		return nil
+	}
+	saldos, err := s.calcularSaldos(ctx, nil)
+	if err != nil {
+		return err
+	}
+	comboSet := map[string]model.ProdutoDominio{}
+	for _, sc := range saldos {
+		comboSet[sc.Produto+"\x00"+sc.Dominio] = model.ProdutoDominio{Produto: sc.Produto, Dominio: sc.Dominio}
+	}
+	var combos []model.ProdutoDominio
+	for _, c := range comboSet {
+		combos = append(combos, c)
+	}
+	return s.saldoRepo.SubstituirCombos(ctx, combos, saldos)
+}
+
+// ListarSaldos expõe a projeção de saldo para consulta (RF-065).
+func (s *MovimentoContabilService) ListarSaldos(ctx context.Context, filtro model.SaldoFiltro) ([]model.SaldoConta, error) {
+	if s.saldoRepo == nil {
+		return []model.SaldoConta{}, nil
+	}
+	return s.saldoRepo.Listar(ctx, filtro)
+}
+
+// SaldoVazio informa se a projeção de saldo ainda não foi populada.
+func (s *MovimentoContabilService) SaldoVazio(ctx context.Context) (bool, error) {
+	if s.saldoRepo == nil {
+		return true, nil
+	}
+	return s.saldoRepo.EstaVazio(ctx)
 }
 
 // GerarEstorno é o endpoint público — pode ser chamado manualmente pelo operador.
@@ -819,6 +1139,17 @@ func chaveIncremental(produto, dominio, boleto string, idRegra int64, contaDeb, 
 	return produto + "\x00" + dominio + "\x00" + boleto + "\x00" + fmt.Sprintf("%d", idRegra) + "\x00" + contaDeb + "\x00" + contaCred
 }
 
+// canonChaveLanc devolve a chave canônica de um lançamento (orientação de débito/crédito do
+// lançamento NÃO-estorno), de modo que um lançamento e seu estorno mapeiem para a MESMA chave.
+// Retorna também as contas na orientação canônica.
+func canonChaveLanc(l model.LancamentoContabil) (chave, contaDeb, contaCred string) {
+	contaDeb, contaCred = l.ContaDebito, l.ContaCredito
+	if l.IndicadorReversao {
+		contaDeb, contaCred = l.ContaCredito, l.ContaDebito
+	}
+	return chaveIncremental(l.Produto, l.Dominio, l.CodigoIdentificadorBoleto, l.IDRegraContabil, contaDeb, contaCred), contaDeb, contaCred
+}
+
 // acumularBaseIncremental avalia as regras incrementais sobre uma posição (de D-N) e acumula,
 // por chave, o valor de campo_valor — a base (valor_D-N) usada no cálculo incremental de D0.
 // Mesma lógica de avaliação da geração, porém só para regras incrementais e sem registrar
@@ -828,7 +1159,7 @@ func (s *MovimentoContabilService) acumularBaseIncremental(posicao model.Posicao
 	produto := evaluator.CampoString(env, "produto")
 	dominio := evaluator.CampoString(env, "dominio")
 	for _, regra := range regras {
-		if !regra.EhIncremental() || !regraAplicaAPosicao(regra, env) {
+		if !regra.UsaCalculoIncremental() || !regraAplicaAPosicao(regra, env) {
 			continue
 		}
 		if pc := strings.TrimSpace(regra.PreCondicao); pc != "" {
@@ -864,6 +1195,143 @@ func (s *MovimentoContabilService) acumularBaseIncremental(posicao model.Posicao
 
 // BulkInsertAjuste persiste lançamentos de ajuste gerados pela conciliação IA.
 // Usa a próxima versão disponível para a data.
+// InserirLancamentosManuais insere N lançamentos informados pelo usuário (tela ou CSV).
+// As contas/descrições vêm da regra+condição referenciadas; os lançamentos são marcados como
+// origem=manual e anexados à versão vigente do combo/data (ou versão 1 se não houver). Atualiza
+// a projeção de saldo (RN-170). Validação é "tudo ou nada": se qualquer linha for inválida,
+// nada é inserido. Spec: RF-033 (docs/especificacao.md §5b, §11.1).
+func (s *MovimentoContabilService) InserirLancamentosManuais(ctx context.Context, itens []model.LancamentoManualInput) (int, error) {
+	if len(itens) == 0 {
+		return 0, nil
+	}
+	regras, err := s.regraRepo.ListarRegrasAtivas(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("erro ao carregar regras: %w", err)
+	}
+	regraByID := map[int64]model.RegraContabil{}
+	for _, r := range regras {
+		regraByID[r.ID] = r
+	}
+
+	lancs := make([]model.LancamentoContabil, 0, len(itens))
+	for i, it := range itens {
+		linha := i + 1
+		data, err := time.Parse("2006-01-02", strings.TrimSpace(it.Data))
+		if err != nil {
+			return 0, fmt.Errorf("linha %d: data inválida (use YYYY-MM-DD)", linha)
+		}
+		if !EhDiaUtil(data) {
+			return 0, fmt.Errorf("linha %d: %s não é dia útil", linha, data.Format("2006-01-02"))
+		}
+		if strings.TrimSpace(it.Produto) == "" || strings.TrimSpace(it.Dominio) == "" {
+			return 0, fmt.Errorf("linha %d: produto e domínio são obrigatórios", linha)
+		}
+		if strings.TrimSpace(it.Boleto) == "" {
+			return 0, fmt.Errorf("linha %d: boleto é obrigatório", linha)
+		}
+		if it.Valor == 0 {
+			return 0, fmt.Errorf("linha %d: valor deve ser diferente de zero", linha)
+		}
+		reg, ok := regraByID[it.IDRegra]
+		if !ok {
+			return 0, fmt.Errorf("linha %d: regra %d não encontrada (ou inativa)", linha, it.IDRegra)
+		}
+		var cond *model.CondicaoRegra
+		for j := range reg.Condicoes {
+			if reg.Condicoes[j].ID == it.IDCondicao {
+				cond = &reg.Condicoes[j]
+				break
+			}
+		}
+		if cond == nil {
+			return 0, fmt.Errorf("linha %d: condição %d não pertence à regra %d (ou inativa)", linha, it.IDCondicao, it.IDRegra)
+		}
+		lancs = append(lancs, model.LancamentoContabil{
+			DataLoteContabil:          data,
+			CodigoIdentificadorBoleto: strings.TrimSpace(it.Boleto),
+			ValorLancamentoContabil:   it.Valor,
+			MoedaLancamentoContabil:   strings.TrimSpace(it.Moeda),
+			ContaDebito:               cond.ContaDebito,
+			ContaCredito:              cond.ContaCredito,
+			Produto:                   strings.TrimSpace(it.Produto),
+			Dominio:                   strings.TrimSpace(it.Dominio),
+			IndicadorReversao:         it.IndicadorReversao,
+			DescricaoRegraContabil:    reg.Descricao,
+			DescricaoCondicaoContabil: cond.Condicao,
+			IDRegraContabil:           reg.ID,
+			Origem:                    model.OrigemManual,
+		})
+	}
+
+	// Versão por combo/data: anexa à vigente atual (max) ou versão 1 se não houver.
+	versaoCache := map[string]int{}
+	for i := range lancs {
+		l := &lancs[i]
+		ck := fmtDataSvc(l.DataLoteContabil) + "\x00" + l.Produto + "\x00" + l.Dominio
+		v, ok := versaoCache[ck]
+		if !ok {
+			v = s.versaoVigenteCombo(ctx, l.DataLoteContabil, l.Produto, l.Dominio)
+			versaoCache[ck] = v
+		}
+		l.CodigoVersaoConteudo = v
+	}
+
+	if err := s.movimentoRepo.BulkInsert(ctx, lancs); err != nil {
+		return 0, fmt.Errorf("erro ao inserir lançamentos manuais: %w", err)
+	}
+
+	// Manutenção do saldo (RN-170): anexo à vigente → soma o net das linhas inseridas.
+	if s.saldoRepo != nil {
+		deltaByKey := map[string]float64{}
+		metaByKey := map[string]model.SaldoConta{}
+		for _, l := range lancs {
+			key, cd, cc := canonChaveLanc(l)
+			sgn := 1.0
+			if l.IndicadorReversao {
+				sgn = -1
+			}
+			deltaByKey[key] += sgn * l.ValorLancamentoContabil
+			metaByKey[key] = model.SaldoConta{Produto: l.Produto, Dominio: l.Dominio, CodigoIdentificadorBoleto: l.CodigoIdentificadorBoleto, IDRegraContabil: l.IDRegraContabil, ContaDebito: cd, ContaCredito: cc, MoedaLancamento: l.MoedaLancamentoContabil, DescricaoRegra: l.DescricaoRegraContabil, DescricaoCondicao: l.DescricaoCondicaoContabil}
+		}
+		var deltas []model.SaldoConta
+		for key, v := range deltaByKey {
+			if v == 0 {
+				continue
+			}
+			sc := metaByKey[key]
+			sc.Saldo = v
+			deltas = append(deltas, sc)
+		}
+		if err := s.saldoRepo.AplicarDeltas(ctx, deltas); err != nil {
+			log.Printf("[saldo] falha ao aplicar deltas de lançamento manual (reconstruível): %v", err)
+		}
+	}
+	return len(lancs), nil
+}
+
+// versaoVigenteCombo devolve a maior versão vigente do combo na data (ou 1 se não houver).
+func (s *MovimentoContabilService) versaoVigenteCombo(ctx context.Context, data time.Time, produto, dominio string) int {
+	maxv := 0
+	for _, ind := range []bool{false, true} {
+		ls, err := s.movimentoRepo.BuscarPorDataEIndicador(ctx, data, ind)
+		if err != nil {
+			continue
+		}
+		for _, l := range ls {
+			if l.Produto == produto && l.Dominio == dominio && l.CodigoVersaoConteudo > maxv {
+				maxv = l.CodigoVersaoConteudo
+			}
+		}
+	}
+	if maxv == 0 {
+		return 1
+	}
+	return maxv
+}
+
+// fmtDataSvc formata a data no padrão ISO (chave de cache).
+func fmtDataSvc(t time.Time) string { return t.Format("2006-01-02") }
+
 func (s *MovimentoContabilService) BulkInsertAjuste(ctx context.Context, lancamentos []model.LancamentoContabil) error {
 	if len(lancamentos) == 0 {
 		return nil

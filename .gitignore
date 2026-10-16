@@ -5,3 +5,6 @@
 
 # Binários de backup gerados pelo build
 *.exe~
+
+# Massa de testes gerada por cmd/massa_testes
+data-massa/
