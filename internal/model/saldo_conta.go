@@ -18,6 +18,14 @@ type SaldoConta struct {
 	DescricaoCondicao string `json:"descricao_condicao"`
 }
 
+// SaldoPagina é uma página de saldos (consulta do menu Saldos).
+type SaldoPagina struct {
+	Total   int          `json:"total"`
+	Pagina  int          `json:"pagina"`
+	Tamanho int          `json:"tamanho"`
+	Saldos  []SaldoConta `json:"saldos"`
+}
+
 // SaldoFiltro restringe a listagem de saldos (campos vazios/zero = sem filtro).
 type SaldoFiltro struct {
 	Produto      string

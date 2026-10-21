@@ -103,18 +103,18 @@ func (r *MovimentoContabilRepo) ObterVersaoAtual(_ context.Context, data time.Ti
 }
 
 func (r *MovimentoContabilRepo) ConsultarPaginado(ctx context.Context, data time.Time, pagina, tamanho int) (*model.PaginaLancamentos, error) {
-	return r.ConsultarPaginadoFiltrado(ctx, data, data, "", 0, "todas", pagina, tamanho)
+	return r.ConsultarPaginadoFiltrado(ctx, model.FiltroMovimento{DataInicio: data, DataFim: data, VersaoModo: "todas", Pagina: pagina, Tamanho: tamanho})
 }
 
-func (r *MovimentoContabilRepo) ConsultarPaginadoFiltrado(_ context.Context, dataInicio, dataFim time.Time, boleto string, versao int, versaoModo string, pagina, tamanho int) (*model.PaginaLancamentos, error) {
+func (r *MovimentoContabilRepo) ConsultarPaginadoFiltrado(_ context.Context, f model.FiltroMovimento) (*model.PaginaLancamentos, error) {
 	all, err := r.st.load()
 	if err != nil {
 		return nil, err
 	}
-	return paginarFiltrado(all, dataInicio, dataFim, boleto, versao, versaoModo, pagina, tamanho), nil
+	return paginarFiltrado(all, f), nil
 }
 
-func (r *MovimentoContabilRepo) ConsultarPaginadoFiltradoSemCancelados(ctx context.Context, dataInicio, dataFim time.Time, boleto string, versao int, versaoModo string, pagina, tamanho int) (*model.PaginaLancamentos, error) {
+func (r *MovimentoContabilRepo) ConsultarPaginadoFiltradoSemCancelados(ctx context.Context, f model.FiltroMovimento) (*model.PaginaLancamentos, error) {
 	all, err := r.st.load()
 	if err != nil {
 		return nil, err
@@ -122,8 +122,8 @@ func (r *MovimentoContabilRepo) ConsultarPaginadoFiltradoSemCancelados(ctx conte
 
 	// Calcular versão vigente por (data, produto, domínio)
 	maxVersaoPorCombo := map[string]int{}
-	inicioStr := dataInicio.Format("2006-01-02")
-	fimStr := dataFim.Format("2006-01-02")
+	inicioStr := f.DataInicio.Format("2006-01-02")
+	fimStr := f.DataFim.Format("2006-01-02")
 	for _, l := range all {
 		d := l.DataLoteContabil.Format("2006-01-02")
 		if d >= inicioStr && d <= fimStr && l.CodigoVersaoConteudo > maxVersaoPorCombo[comboKeyMov(l)] {
@@ -167,8 +167,8 @@ func (r *MovimentoContabilRepo) ConsultarPaginadoFiltradoSemCancelados(ctx conte
 		}
 	}
 
-	// Aplicar filtros normais (período, boleto, versaoModo)
-	result := paginarFiltrado(all, dataInicio, dataFim, boleto, versao, versaoModo, 1, 999999)
+	// Aplicar filtros normais (período, boleto, veículo, versaoModo) sem paginar ainda.
+	result := paginarFiltrado(all, model.FiltroMovimento{DataInicio: f.DataInicio, DataFim: f.DataFim, Boleto: f.Boleto, Veiculo: f.Veiculo, Versao: f.Versao, VersaoModo: f.VersaoModo, Pagina: 1, Tamanho: 999999})
 
 	// Remover lançamentos com saldo zero
 	var filtered []model.LancamentoContabil
@@ -190,15 +190,15 @@ func (r *MovimentoContabilRepo) ConsultarPaginadoFiltradoSemCancelados(ctx conte
 	}
 
 	total := len(filtered)
-	offset := (pagina - 1) * tamanho
+	offset := (f.Pagina - 1) * f.Tamanho
 	if offset >= total {
-		return &model.PaginaLancamentos{Total: total, Pagina: pagina, Tamanho: tamanho, Lancamentos: []model.LancamentoContabil{}}, nil
+		return &model.PaginaLancamentos{Total: total, Pagina: f.Pagina, Tamanho: f.Tamanho, Lancamentos: []model.LancamentoContabil{}}, nil
 	}
-	end := offset + tamanho
+	end := offset + f.Tamanho
 	if end > total {
 		end = total
 	}
-	return &model.PaginaLancamentos{Total: total, Pagina: pagina, Tamanho: tamanho, Lancamentos: filtered[offset:end]}, nil
+	return &model.PaginaLancamentos{Total: total, Pagina: f.Pagina, Tamanho: f.Tamanho, Lancamentos: filtered[offset:end]}, nil
 }
 
 func (r *MovimentoContabilRepo) ExcluirPorDataEVersao(_ context.Context, data time.Time, versao int) error {
@@ -220,13 +220,13 @@ func (r *MovimentoContabilRepo) ExcluirPorDataEVersao(_ context.Context, data ti
 }
 
 // paginarFiltrado aplica filtros e paginação em memória.
-func paginarFiltrado(all []model.LancamentoContabil, dataInicio, dataFim time.Time, boleto string, versao int, versaoModo string, pagina, tamanho int) *model.PaginaLancamentos {
-	inicioStr := dataInicio.Format("2006-01-02")
-	fimStr := dataFim.Format("2006-01-02")
+func paginarFiltrado(all []model.LancamentoContabil, f model.FiltroMovimento) *model.PaginaLancamentos {
+	inicioStr := f.DataInicio.Format("2006-01-02")
+	fimStr := f.DataFim.Format("2006-01-02")
 
 	// Calcular versão vigente por (data, produto, domínio) para modo vigente
 	maxVersaoPorCombo := map[string]int{}
-	if versaoModo == "vigente" {
+	if f.VersaoModo == "vigente" {
 		for _, l := range all {
 			d := l.DataLoteContabil.Format("2006-01-02")
 			if d >= inicioStr && d <= fimStr && l.CodigoVersaoConteudo > maxVersaoPorCombo[comboKeyMov(l)] {
@@ -241,12 +241,15 @@ func paginarFiltrado(all []model.LancamentoContabil, dataInicio, dataFim time.Ti
 		if d < inicioStr || d > fimStr {
 			continue
 		}
-		if boleto != "" && !strings.Contains(l.CodigoIdentificadorBoleto, boleto) {
+		if f.Boleto != "" && !strings.Contains(l.CodigoIdentificadorBoleto, f.Boleto) {
 			continue
 		}
-		switch versaoModo {
+		if f.Veiculo != "" && l.Veiculo != f.Veiculo {
+			continue
+		}
+		switch f.VersaoModo {
 		case "especifica":
-			if l.CodigoVersaoConteudo != versao {
+			if l.CodigoVersaoConteudo != f.Versao {
 				continue
 			}
 		case "vigente":
@@ -258,13 +261,13 @@ func paginarFiltrado(all []model.LancamentoContabil, dataInicio, dataFim time.Ti
 	}
 
 	total := len(filtered)
-	offset := (pagina - 1) * tamanho
+	offset := (f.Pagina - 1) * f.Tamanho
 	if offset >= total {
-		return &model.PaginaLancamentos{Total: total, Pagina: pagina, Tamanho: tamanho, Lancamentos: []model.LancamentoContabil{}}
+		return &model.PaginaLancamentos{Total: total, Pagina: f.Pagina, Tamanho: f.Tamanho, Lancamentos: []model.LancamentoContabil{}}
 	}
-	end := offset + tamanho
+	end := offset + f.Tamanho
 	if end > total {
 		end = total
 	}
-	return &model.PaginaLancamentos{Total: total, Pagina: pagina, Tamanho: tamanho, Lancamentos: filtered[offset:end]}
+	return &model.PaginaLancamentos{Total: total, Pagina: f.Pagina, Tamanho: f.Tamanho, Lancamentos: filtered[offset:end]}
 }

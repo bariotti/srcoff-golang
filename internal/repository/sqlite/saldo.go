@@ -66,7 +66,10 @@ func (r *SaldoContaRepo) SubstituirCombos(ctx context.Context, combos []model.Pr
 	return tx.Commit()
 }
 
-func (r *SaldoContaRepo) Listar(ctx context.Context, f model.SaldoFiltro) ([]model.SaldoConta, error) {
+const colsSaldoSel = "produto, dominio, codigo_identificador_boleto, id_regra_contabil, conta_debito, conta_credito, saldo, IFNULL(moeda_lancamento,''), IFNULL(descricao_regra,''), IFNULL(descricao_condicao,'')"
+
+// saldoWhere monta a cláusula WHERE (com os placeholders e args) a partir do filtro.
+func saldoWhere(f model.SaldoFiltro) (string, []interface{}) {
 	var where []string
 	var args []interface{}
 	if f.Produto != "" {
@@ -108,16 +111,13 @@ func (r *SaldoContaRepo) Listar(ctx context.Context, f model.SaldoFiltro) ([]mod
 	if !f.IncluiZero {
 		where = append(where, "saldo <> 0")
 	}
-	q := "SELECT produto, dominio, codigo_identificador_boleto, id_regra_contabil, conta_debito, conta_credito, saldo, IFNULL(moeda_lancamento,''), IFNULL(descricao_regra,''), IFNULL(descricao_condicao,'') FROM saldo_conta"
-	if len(where) > 0 {
-		q += " WHERE " + strings.Join(where, " AND ")
+	if len(where) == 0 {
+		return "", args
 	}
-	q += " ORDER BY produto, dominio, codigo_identificador_boleto, id_regra_contabil"
-	rows, err := r.db.QueryContext(ctx, q, args...)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
+	return " WHERE " + strings.Join(where, " AND "), args
+}
+
+func scanSaldos(rows *sql.Rows) ([]model.SaldoConta, error) {
 	var out []model.SaldoConta
 	for rows.Next() {
 		var s model.SaldoConta
@@ -127,6 +127,42 @@ func (r *SaldoContaRepo) Listar(ctx context.Context, f model.SaldoFiltro) ([]mod
 		out = append(out, s)
 	}
 	return out, rows.Err()
+}
+
+func (r *SaldoContaRepo) Listar(ctx context.Context, f model.SaldoFiltro) ([]model.SaldoConta, error) {
+	w, args := saldoWhere(f)
+	rows, err := r.db.QueryContext(ctx, "SELECT "+colsSaldoSel+" FROM saldo_conta"+w+" ORDER BY produto, dominio, codigo_identificador_boleto, id_regra_contabil", args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	return scanSaldos(rows)
+}
+
+func (r *SaldoContaRepo) ListarPaginado(ctx context.Context, f model.SaldoFiltro, pagina, tamanho int) (*model.SaldoPagina, error) {
+	w, args := saldoWhere(f)
+	var total int
+	if err := r.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM saldo_conta"+w, args...).Scan(&total); err != nil {
+		return nil, err
+	}
+	if pagina < 1 {
+		pagina = 1
+	}
+	if tamanho < 1 {
+		tamanho = 50
+	}
+	q := "SELECT " + colsSaldoSel + " FROM saldo_conta" + w + " ORDER BY produto, dominio, codigo_identificador_boleto, id_regra_contabil LIMIT ? OFFSET ?"
+	pArgs := append(append([]interface{}{}, args...), tamanho, (pagina-1)*tamanho)
+	rows, err := r.db.QueryContext(ctx, q, pArgs...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out, err := scanSaldos(rows)
+	if err != nil {
+		return nil, err
+	}
+	return &model.SaldoPagina{Total: total, Pagina: pagina, Tamanho: tamanho, Saldos: out}, nil
 }
 
 func (r *SaldoContaRepo) EstaVazio(ctx context.Context) (bool, error) {

@@ -29,9 +29,7 @@ func (s *ConciliacaoService) Conciliar(ctx context.Context, data time.Time) (*mo
 	}
 
 	// Buscar todos os movimentos da data (versão vigente — maior versão por data)
-	inicio := data
-	fim := data
-	movimentos, err := s.movimentoRepo.ConsultarPaginadoFiltrado(ctx, inicio, fim, "", 0, "vigente", 1, 999999)
+	movimentos, err := s.movimentoRepo.ConsultarPaginadoFiltrado(ctx, model.FiltroMovimento{DataInicio: data, DataFim: data, VersaoModo: "vigente", Pagina: 1, Tamanho: 999999})
 	if err != nil {
 		return nil, fmt.Errorf("erro ao buscar movimentos: %w", err)
 	}

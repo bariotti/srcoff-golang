@@ -9,9 +9,27 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/xuri/excelize/v2"
+	"golang.org/x/text/encoding/charmap"
+
+	"srcoff/internal/evaluator"
 )
+
+// decodificarParaUTF8 garante que o conteúdo esteja em UTF-8. Arquivos de Excel/Windows
+// costumam vir em Windows-1252 (Latin-1); quando o conteúdo não é UTF-8 válido, decodifica
+// de Windows-1252 — assim nomes de coluna e valores acentuados (ex.: "Data Posição Carteira")
+// são lidos corretamente e a normalização casa com o padrão de arquivo.
+func decodificarParaUTF8(data []byte) []byte {
+	if utf8.Valid(data) {
+		return data
+	}
+	if dec, err := charmap.Windows1252.NewDecoder().Bytes(data); err == nil {
+		return dec
+	}
+	return data
+}
 
 // detectarColunaData descobre qual coluna do arquivo contém a data da posição.
 // Prefere o nome canônico `data_posicao_carteira`; senão, a primeira coluna cujo
@@ -92,8 +110,9 @@ type parseConfig struct {
 	delimitador  rune   // 0 = auto-detecta
 	sepDecimal   string // "" = auto
 	sepMilhar    string // "" = nenhum
-	formatoData  string // layout Go das datas (ex: "02/01/2006"); "" = automático (lista multi-formato)
-	colunaBoleto string // nome normalizado da coluna do boleto; sempre persistida como texto
+	formatoData   string // layout Go das datas (ex: "02/01/2006"); "" = automático (lista multi-formato)
+	colunaBoleto  string // nome normalizado da coluna do boleto; sempre persistida como texto
+	colunaVeiculo string // nome normalizado da coluna do veículo; sempre persistida como texto
 }
 
 // parsePosicaoArquivo lê um arquivo de posição (.csv ou .xlsx) com detecção automática.
@@ -121,6 +140,7 @@ func parseCSV(r io.Reader, cfg parseConfig) ([]map[string]interface{}, []string,
 		return nil, nil, err
 	}
 	data = bytes.TrimPrefix(data, []byte{0xEF, 0xBB, 0xBF}) // remove BOM UTF-8
+	data = decodificarParaUTF8(data)                        // Windows-1252 → UTF-8 quando necessário
 
 	delim := cfg.delimitador
 	if delim == 0 {
@@ -235,53 +255,16 @@ func normalizarCabecalho(cols []string) []string {
 	return out
 }
 
-func normalizarNome(s string) string {
-	s = strings.TrimSpace(strings.ToLower(s))
-	s = removerAcentos(s)
-	var b strings.Builder
-	prevUnderscore := false
-	for _, r := range s {
-		switch {
-		case (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9'):
-			b.WriteRune(r)
-			prevUnderscore = false
-		default:
-			if !prevUnderscore && b.Len() > 0 {
-				b.WriteRune('_')
-				prevUnderscore = true
-			}
-		}
-	}
-	return strings.Trim(b.String(), "_")
-}
-
-var acentos = map[rune]rune{
-	'á': 'a', 'à': 'a', 'ã': 'a', 'â': 'a', 'ä': 'a',
-	'é': 'e', 'ê': 'e', 'è': 'e', 'ë': 'e',
-	'í': 'i', 'î': 'i', 'ì': 'i', 'ï': 'i',
-	'ó': 'o', 'õ': 'o', 'ô': 'o', 'ò': 'o', 'ö': 'o',
-	'ú': 'u', 'û': 'u', 'ù': 'u', 'ü': 'u',
-	'ç': 'c', 'ñ': 'n',
-}
-
-func removerAcentos(s string) string {
-	var b strings.Builder
-	for _, r := range s {
-		if sub, ok := acentos[r]; ok {
-			b.WriteRune(sub)
-		} else {
-			b.WriteRune(r)
-		}
-	}
-	return b.String()
-}
+// normalizarNome delega à fonte única em evaluator (snake_case sem acento), para que a
+// normalização do cabeçalho na importação e a resolução de colunas na geração coincidam.
+func normalizarNome(s string) string { return evaluator.NormalizarNome(s) }
 
 // inferirCelula converte o valor de uma célula aplicando a configuração do padrão.
 // A coluna do boleto configurada é SEMPRE mantida como texto (sem conversão para
 // número/data), preservando zeros à esquerda e a precisão de identificadores longos;
 // célula vazia vira nil. As demais colunas seguem a inferência automática.
 func inferirCelula(col, celula string, cfg parseConfig) interface{} {
-	if cfg.colunaBoleto != "" && col == cfg.colunaBoleto {
+	if (cfg.colunaBoleto != "" && col == cfg.colunaBoleto) || (cfg.colunaVeiculo != "" && col == cfg.colunaVeiculo) {
 		if celula == "" {
 			return nil
 		}

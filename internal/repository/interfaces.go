@@ -86,8 +86,10 @@ type SaldoContaRepository interface {
 	// SubstituirCombos zera e regrava os saldos das combinações informadas (usado na
 	// recomputação após exclusão e na reconstrução).
 	SubstituirCombos(ctx context.Context, combos []model.ProdutoDominio, saldos []model.SaldoConta) error
-	// Listar retorna os saldos conforme o filtro.
+	// Listar retorna os saldos conforme o filtro (sem paginação — usado pela baixa).
 	Listar(ctx context.Context, filtro model.SaldoFiltro) ([]model.SaldoConta, error)
+	// ListarPaginado retorna uma página de saldos conforme o filtro (consulta do menu).
+	ListarPaginado(ctx context.Context, filtro model.SaldoFiltro, pagina, tamanho int) (*model.SaldoPagina, error)
 	// EstaVazio informa se a tabela ainda não tem nenhum registro (base recém-criada).
 	EstaVazio(ctx context.Context) (bool, error)
 }
@@ -99,7 +101,7 @@ type MovimentoContabilRepository interface {
 	ObterProximaVersao(ctx context.Context, data time.Time) (int, error)
 	ObterVersaoAtual(ctx context.Context, data time.Time) (int, error)
 	ConsultarPaginado(ctx context.Context, data time.Time, pagina, tamanho int) (*model.PaginaLancamentos, error)
-	ConsultarPaginadoFiltrado(ctx context.Context, dataInicio, dataFim time.Time, boleto string, versao int, versaoModo string, pagina, tamanho int) (*model.PaginaLancamentos, error)
-	ConsultarPaginadoFiltradoSemCancelados(ctx context.Context, dataInicio, dataFim time.Time, boleto string, versao int, versaoModo string, pagina, tamanho int) (*model.PaginaLancamentos, error)
+	ConsultarPaginadoFiltrado(ctx context.Context, f model.FiltroMovimento) (*model.PaginaLancamentos, error)
+	ConsultarPaginadoFiltradoSemCancelados(ctx context.Context, f model.FiltroMovimento) (*model.PaginaLancamentos, error)
 	ExcluirPorDataEVersao(ctx context.Context, data time.Time, versao int) error
 }

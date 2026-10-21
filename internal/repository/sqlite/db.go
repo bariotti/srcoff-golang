@@ -51,8 +51,10 @@ func Open(path string) (*sql.DB, error) {
 func migrarColunas(ctx context.Context, db *sql.DB) error {
 	alteracoes := []struct{ tabela, coluna, ddl string }{
 		{"movimento_contabil", "origem", "origem TEXT NOT NULL DEFAULT 'automatico'"},
+		{"movimento_contabil", "veiculo", "veiculo TEXT NOT NULL DEFAULT ''"},
 		{"regra_contabil", "tipo_lancamento", "tipo_lancamento TEXT NOT NULL DEFAULT 'reverte'"},
 		{"movimento_execucao", "qtd_movimento", "qtd_movimento INTEGER NOT NULL DEFAULT 0"},
+		{"padrao_arquivo", "coluna_veiculo", "coluna_veiculo TEXT"},
 	}
 	for _, a := range alteracoes {
 		existe, err := colunaExiste(ctx, db, a.tabela, a.coluna)
@@ -148,7 +150,8 @@ CREATE TABLE IF NOT EXISTS movimento_contabil (
   descricao_regra_contabil TEXT,
   descricao_condicao_contabil TEXT,
   id_regra_contabil INTEGER,
-  origem TEXT NOT NULL DEFAULT 'automatico'
+  origem TEXT NOT NULL DEFAULT 'automatico',
+  veiculo TEXT NOT NULL DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS IX_movimento_data_versao ON movimento_contabil (data_lote_contabil, codigo_versao_conteudo);
 CREATE INDEX IF NOT EXISTS IX_movimento_data_reversao ON movimento_contabil (data_lote_contabil, indicador_reversao);
@@ -183,6 +186,7 @@ CREATE TABLE IF NOT EXISTS padrao_arquivo (
   formato_data TEXT,
   coluna_data TEXT,
   coluna_boleto TEXT,
+  coluna_veiculo TEXT,
   obrigatorio_mov_d1 INTEGER
 );
 CREATE TABLE IF NOT EXISTS configuracao (

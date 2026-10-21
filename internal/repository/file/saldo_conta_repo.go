@@ -2,6 +2,7 @@ package file
 
 import (
 	"context"
+	"sort"
 
 	"srcoff/internal/model"
 )
@@ -114,6 +115,42 @@ func (r *SaldoContaRepo) Listar(_ context.Context, f model.SaldoFiltro) ([]model
 		out = append(out, s)
 	}
 	return out, nil
+}
+
+func (r *SaldoContaRepo) ListarPaginado(ctx context.Context, f model.SaldoFiltro, pagina, tamanho int) (*model.SaldoPagina, error) {
+	todos, err := r.Listar(ctx, f)
+	if err != nil {
+		return nil, err
+	}
+	sort.Slice(todos, func(i, j int) bool {
+		a, b := todos[i], todos[j]
+		if a.Produto != b.Produto {
+			return a.Produto < b.Produto
+		}
+		if a.Dominio != b.Dominio {
+			return a.Dominio < b.Dominio
+		}
+		if a.CodigoIdentificadorBoleto != b.CodigoIdentificadorBoleto {
+			return a.CodigoIdentificadorBoleto < b.CodigoIdentificadorBoleto
+		}
+		return a.IDRegraContabil < b.IDRegraContabil
+	})
+	total := len(todos)
+	if pagina < 1 {
+		pagina = 1
+	}
+	if tamanho < 1 {
+		tamanho = 50
+	}
+	ini := (pagina - 1) * tamanho
+	if ini > total {
+		ini = total
+	}
+	fim := ini + tamanho
+	if fim > total {
+		fim = total
+	}
+	return &model.SaldoPagina{Total: total, Pagina: pagina, Tamanho: tamanho, Saldos: todos[ini:fim]}, nil
 }
 
 func (r *SaldoContaRepo) EstaVazio(_ context.Context) (bool, error) {

@@ -25,6 +25,11 @@ type PadraoArquivo struct {
 	// esquerda e a precisão de identificadores longos (sem conversão para número).
 	// Comparada após normalização (snake_case). Vazio = comportamento legado.
 	ColunaBoleto string `json:"coluna_boleto"`
+	// Nome da coluna do arquivo que contém o veículo da operação (obrigatório no cadastro).
+	// Na importação é SEMPRE persistida como texto (preserva zeros à esquerda e precisão),
+	// e na geração do contábil é copiada para o lançamento. Comparada após normalização
+	// (snake_case). Vazio = padrão legado (anterior a este campo). Spec: RF-034/RN-180.
+	ColunaVeiculo string `json:"coluna_veiculo"`
 	// ObrigatorioMovD1 indica se o contábil exige que o movimento de D-1 útil já exista
 	// antes de processar (quando já houver movimento em alguma data para o produto/domínio).
 	// nil = padrão (true). Quando false, não valida e o estorno usa o movimento da maior

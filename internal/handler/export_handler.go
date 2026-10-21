@@ -14,8 +14,8 @@ import (
 )
 
 type exportMovimentoSvc interface {
-	ConsultarLancamentosFiltrado(ctx context.Context, dataInicio, dataFim time.Time, boleto string, versao int, versaoModo string, pagina, tamanho int) (*model.PaginaLancamentos, error)
-	ConsultarLancamentosFiltradoEscopo(ctx context.Context, dataInicio, dataFim time.Time, boleto, produto, dominio string, versao int, versaoModo string, pagina, tamanho int) (*model.PaginaLancamentos, error)
+	ConsultarLancamentosFiltrado(ctx context.Context, dataInicio, dataFim time.Time, boleto, veiculo string, versao int, versaoModo string, pagina, tamanho int) (*model.PaginaLancamentos, error)
+	ConsultarLancamentosFiltradoEscopo(ctx context.Context, dataInicio, dataFim time.Time, boleto, veiculo, produto, dominio string, versao int, versaoModo string, pagina, tamanho int) (*model.PaginaLancamentos, error)
 }
 
 type ExportHandler struct {
@@ -35,6 +35,7 @@ func (h *ExportHandler) ExportMovimentoCSV(w http.ResponseWriter, r *http.Reques
 	dataInicioStr := q.Get("data_inicio")
 	dataFimStr := q.Get("data_fim")
 	boleto := q.Get("boleto")
+	veiculo := strings.TrimSpace(q.Get("veiculo"))
 	produto := strings.TrimSpace(q.Get("produto"))
 	dominio := strings.TrimSpace(q.Get("dominio"))
 	versaoModo := q.Get("versao_modo")
@@ -64,7 +65,7 @@ func (h *ExportHandler) ExportMovimentoCSV(w http.ResponseWriter, r *http.Reques
 	}
 
 	// Buscar todos os registros sem paginação
-	resultado, err := h.svc.ConsultarLancamentosFiltradoEscopo(r.Context(), dataInicio, dataFim, boleto, produto, dominio, versao, versaoModo, 1, 999999)
+	resultado, err := h.svc.ConsultarLancamentosFiltradoEscopo(r.Context(), dataInicio, dataFim, boleto, veiculo, produto, dominio, versao, versaoModo, 1, 999999)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"erro": err.Error()})
 		return
@@ -82,6 +83,7 @@ func (h *ExportHandler) ExportMovimentoCSV(w http.ResponseWriter, r *http.Reques
 		"Data Lote",
 		"Versão",
 		"Boleto",
+		"Veículo",
 		"Conta Débito",
 		"Conta Crédito",
 		"Valor",
@@ -100,6 +102,7 @@ func (h *ExportHandler) ExportMovimentoCSV(w http.ResponseWriter, r *http.Reques
 			l.DataLoteContabil.Format("2006-01-02"),
 			strconv.Itoa(l.CodigoVersaoConteudo),
 			l.CodigoIdentificadorBoleto,
+			l.Veiculo,
 			l.ContaDebito,
 			l.ContaCredito,
 			fmt.Sprintf("%.6f", l.ValorLancamentoContabil),
@@ -130,7 +133,7 @@ func (h *ExportHandler) ExportMovimentoTXT(w http.ResponseWriter, r *http.Reques
 	}
 
 	// Buscar lançamentos da data (versão vigente, sem cancelados)
-	resultado, err := h.svc.ConsultarLancamentosFiltrado(r.Context(), data, data, "", 0, "vigente", 1, 999999)
+	resultado, err := h.svc.ConsultarLancamentosFiltrado(r.Context(), data, data, "", "", 0, "vigente", 1, 999999)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"erro": err.Error()})
 		return

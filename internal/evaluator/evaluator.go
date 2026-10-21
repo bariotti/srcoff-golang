@@ -3,11 +3,14 @@ package evaluator
 import (
 	"fmt"
 	"log"
+	"strings"
+	"sync"
 	"time"
 
 	"github.com/expr-lang/expr"
 	"github.com/expr-lang/expr/ast"
 	"github.com/expr-lang/expr/parser"
+	"github.com/expr-lang/expr/vm"
 	"srcoff/internal/model"
 )
 
@@ -18,24 +21,60 @@ type Evaluator interface {
 }
 
 // ExprEvaluator implementa Evaluator usando github.com/expr-lang/expr.
-type ExprEvaluator struct{}
+// Mantém um cache de programas compilados por expressão (a compilação depende só do
+// texto, não do env), evitando recompilar a mesma expressão para cada posição — ganho
+// grande de CPU na geração (dezenas de milhares de posições).
+type ExprEvaluator struct {
+	mu    sync.RWMutex
+	cache map[string]*vm.Program
+}
 
 // New retorna uma nova instância de ExprEvaluator.
 func New() *ExprEvaluator {
-	return &ExprEvaluator{}
+	return &ExprEvaluator{cache: map[string]*vm.Program{}}
 }
 
-// EvaluateCondition compila e executa uma expressão booleana sobre o env fornecido.
+// compilar devolve o programa compilado da expressão, usando/preenchendo o cache.
+// A chave inclui o modo (bool x valor), pois expr.AsBool() gera programa diferente.
+func (e *ExprEvaluator) compilar(expression string, asBool bool) (*vm.Program, error) {
+	key := "v\x00" + expression
+	if asBool {
+		key = "b\x00" + expression
+	}
+	e.mu.RLock()
+	p, ok := e.cache[key]
+	e.mu.RUnlock()
+	if ok {
+		return p, nil
+	}
+	var (
+		prog *vm.Program
+		err  error
+	)
+	// Compila sem expr.Env para não fazer type-checking estático, permitindo colunas
+	// dinâmicas da posição.
+	if asBool {
+		prog, err = expr.Compile(expression, expr.AsBool())
+	} else {
+		prog, err = expr.Compile(expression)
+	}
+	if err != nil {
+		return nil, err
+	}
+	e.mu.Lock()
+	e.cache[key] = prog
+	e.mu.Unlock()
+	return prog, nil
+}
+
+// EvaluateCondition compila (com cache) e executa uma expressão booleana sobre o env.
 func (e *ExprEvaluator) EvaluateCondition(expression string, env map[string]interface{}) (bool, error) {
-	safeEnv := sanitizeEnv(env)
-	// Compila sem expr.Env para não fazer type-checking estático,
-	// permitindo que colunas dinâmicas da posição sejam usadas sem recompilação.
-	program, err := expr.Compile(expression, expr.AsBool())
+	program, err := e.compilar(expression, true)
 	if err != nil {
 		return false, fmt.Errorf("erro ao compilar expressão de condição %q: %w", expression, err)
 	}
 
-	result, err := expr.Run(program, safeEnv)
+	result, err := expr.Run(program, sanitizeEnv(env))
 	if err != nil {
 		return false, fmt.Errorf("erro ao avaliar expressão de condição %q: %w", expression, err)
 	}
@@ -51,13 +90,12 @@ func (e *ExprEvaluator) EvaluateCondition(expression string, env map[string]inte
 // EvaluateValue compila e executa uma expressão aritmética sobre o env fornecido,
 // retornando o resultado como float64. Suporta resultados int e float64.
 func (e *ExprEvaluator) EvaluateValue(expression string, env map[string]interface{}) (float64, error) {
-	safeEnv := sanitizeEnv(env)
-	program, err := expr.Compile(expression)
+	program, err := e.compilar(expression, false)
 	if err != nil {
 		return 0, fmt.Errorf("erro ao compilar expressão de valor %q: %w", expression, err)
 	}
 
-	result, err := expr.Run(program, safeEnv)
+	result, err := expr.Run(program, sanitizeEnv(env))
 	if err != nil {
 		return 0, fmt.Errorf("erro ao avaliar expressão de valor %q: %w", expression, err)
 	}
@@ -113,7 +151,14 @@ func (f visitorFunc) Visit(n *ast.Node) { f(n) }
 // expressão. Nomes de funções (callees) e literais booleanos/nil não são campos e
 // portanto não são retornados. Usado para detectar expressões que referenciam
 // colunas ausentes na posição.
+// camposRefCache memoiza o resultado de CamposReferenciados por expressão (o parse não
+// depende do env). Evita re-parsear a mesma expressão para cada posição.
+var camposRefCache sync.Map // string -> []string
+
 func CamposReferenciados(expression string) ([]string, error) {
+	if v, ok := camposRefCache.Load(expression); ok {
+		return v.([]string), nil
+	}
 	tree, err := parser.Parse(expression)
 	if err != nil {
 		return nil, err
@@ -139,6 +184,7 @@ func CamposReferenciados(expression string) ([]string, error) {
 		}
 		campos = append(campos, nome)
 	}
+	camposRefCache.Store(expression, campos)
 	return campos, nil
 }
 
@@ -196,4 +242,45 @@ func CampoString(env map[string]interface{}, campo string) string {
 	default:
 		return fmt.Sprintf("%v", t)
 	}
+}
+
+// acentosNorm mapeia caracteres acentuados para o equivalente sem acento.
+var acentosNorm = map[rune]rune{
+	'á': 'a', 'à': 'a', 'ã': 'a', 'â': 'a', 'ä': 'a',
+	'é': 'e', 'ê': 'e', 'è': 'e', 'ë': 'e',
+	'í': 'i', 'î': 'i', 'ì': 'i', 'ï': 'i',
+	'ó': 'o', 'õ': 'o', 'ô': 'o', 'ò': 'o', 'ö': 'o',
+	'ú': 'u', 'û': 'u', 'ù': 'u', 'ü': 'u',
+	'ç': 'c', 'ñ': 'n',
+}
+
+// NormalizarNome converte um nome de coluna para snake_case sem acento. É a fonte
+// única de normalização usada tanto na importação (cabeçalho da posição) quanto na
+// geração (resolução da coluna do veículo), para que os nomes casem exatamente.
+func NormalizarNome(s string) string {
+	s = strings.TrimSpace(strings.ToLower(s))
+	var sb strings.Builder
+	for _, r := range s {
+		if sub, ok := acentosNorm[r]; ok {
+			sb.WriteRune(sub)
+		} else {
+			sb.WriteRune(r)
+		}
+	}
+	s = sb.String()
+	var b strings.Builder
+	prevUnderscore := false
+	for _, r := range s {
+		switch {
+		case (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9'):
+			b.WriteRune(r)
+			prevUnderscore = false
+		default:
+			if !prevUnderscore && b.Len() > 0 {
+				b.WriteRune('_')
+				prevUnderscore = true
+			}
+		}
+	}
+	return strings.Trim(b.String(), "_")
 }

@@ -673,6 +673,12 @@ sqlcmd -S localhost\SQLEXPRESS -d srcoff -i migrations/015_remove_seed_parametri
 
 # Projeção materializada de saldo por conta/boleto/regra (ADR-010, menu Saldos)
 sqlcmd -S localhost\SQLEXPRESS -d srcoff -i migrations/016_saldo_conta.sql
+
+# Origem do lançamento (automatico | manual) no movimento
+sqlcmd -S localhost\SQLEXPRESS -d srcoff -i migrations/017_movimento_origem.sql
+
+# Torna codigo_identificador_boleto anulável na posição dinâmica (corrige insert no SQL Server)
+sqlcmd -S localhost\SQLEXPRESS -d srcoff -i migrations/018_posicao_boleto_nullable.sql
 ```
 
 

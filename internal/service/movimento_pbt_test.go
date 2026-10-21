@@ -71,11 +71,11 @@ func (f *fakeMovimentoRepo) ObterVersaoAtual(ctx context.Context, data time.Time
 	return f.versaoAtual, nil
 }
 
-func (f *fakeMovimentoRepo) ConsultarPaginadoFiltrado(ctx context.Context, dataInicio, dataFim time.Time, boleto string, versao int, versaoModo string, pagina, tamanho int) (*model.PaginaLancamentos, error) {
+func (f *fakeMovimentoRepo) ConsultarPaginadoFiltrado(ctx context.Context, filtro model.FiltroMovimento) (*model.PaginaLancamentos, error) {
 	return &model.PaginaLancamentos{}, nil
 }
 
-func (f *fakeMovimentoRepo) ConsultarPaginadoFiltradoSemCancelados(ctx context.Context, dataInicio, dataFim time.Time, boleto string, versao int, versaoModo string, pagina, tamanho int) (*model.PaginaLancamentos, error) {
+func (f *fakeMovimentoRepo) ConsultarPaginadoFiltradoSemCancelados(ctx context.Context, filtro model.FiltroMovimento) (*model.PaginaLancamentos, error) {
 	return &model.PaginaLancamentos{}, nil
 }
 
@@ -136,11 +136,11 @@ func (f *fakeMovimentoRepoTracked) ObterVersaoAtual(ctx context.Context, data ti
 	return f.versaoAtual, nil
 }
 
-func (f *fakeMovimentoRepoTracked) ConsultarPaginadoFiltrado(ctx context.Context, dataInicio, dataFim time.Time, boleto string, versao int, versaoModo string, pagina, tamanho int) (*model.PaginaLancamentos, error) {
+func (f *fakeMovimentoRepoTracked) ConsultarPaginadoFiltrado(ctx context.Context, filtro model.FiltroMovimento) (*model.PaginaLancamentos, error) {
 	return &model.PaginaLancamentos{}, nil
 }
 
-func (f *fakeMovimentoRepoTracked) ConsultarPaginadoFiltradoSemCancelados(ctx context.Context, dataInicio, dataFim time.Time, boleto string, versao int, versaoModo string, pagina, tamanho int) (*model.PaginaLancamentos, error) {
+func (f *fakeMovimentoRepoTracked) ConsultarPaginadoFiltradoSemCancelados(ctx context.Context, filtro model.FiltroMovimento) (*model.PaginaLancamentos, error) {
 	return &model.PaginaLancamentos{}, nil
 }
 

@@ -54,7 +54,7 @@ func TestExecucaoBateComConsulta(t *testing.T) {
 	}
 
 	// Consulta (fonte da verdade): quantidade visível para a segunda.
-	consulta, err := svc.ConsultarLancamentosFiltrado(ctx, segunda, segunda, "", 0, "vigente", 1, 1000)
+	consulta, err := svc.ConsultarLancamentosFiltrado(ctx, segunda, segunda, "", "", 0, "vigente", 1, 1000)
 	if err != nil {
 		t.Fatalf("consulta: %v", err)
 	}

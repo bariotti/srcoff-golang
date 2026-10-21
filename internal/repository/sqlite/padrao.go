@@ -14,7 +14,7 @@ func NewPadraoArquivoRepo(db *sql.DB) *PadraoArquivoRepo { return &PadraoArquivo
 
 func (r *PadraoArquivoRepo) Listar(ctx context.Context) ([]model.PadraoArquivo, error) {
 	rows, err := r.db.QueryContext(ctx,
-		"SELECT id, padrao, produto, IFNULL(dominio,''), IFNULL(delimitador,''), IFNULL(separador_decimal,''), IFNULL(separador_milhar,''), IFNULL(formato_data,''), IFNULL(coluna_data,''), IFNULL(coluna_boleto,''), IFNULL(obrigatorio_mov_d1,1) FROM padrao_arquivo ORDER BY id")
+		"SELECT id, padrao, produto, IFNULL(dominio,''), IFNULL(delimitador,''), IFNULL(separador_decimal,''), IFNULL(separador_milhar,''), IFNULL(formato_data,''), IFNULL(coluna_data,''), IFNULL(coluna_boleto,''), IFNULL(coluna_veiculo,''), IFNULL(obrigatorio_mov_d1,1) FROM padrao_arquivo ORDER BY id")
 	if err != nil {
 		return nil, err
 	}
@@ -23,7 +23,7 @@ func (r *PadraoArquivoRepo) Listar(ctx context.Context) ([]model.PadraoArquivo, 
 	for rows.Next() {
 		var p model.PadraoArquivo
 		var obrigD1 int
-		if err := rows.Scan(&p.ID, &p.Padrao, &p.Produto, &p.Dominio, &p.Delimitador, &p.SeparadorDecimal, &p.SeparadorMilhar, &p.FormatoData, &p.ColunaData, &p.ColunaBoleto, &obrigD1); err != nil {
+		if err := rows.Scan(&p.ID, &p.Padrao, &p.Produto, &p.Dominio, &p.Delimitador, &p.SeparadorDecimal, &p.SeparadorMilhar, &p.FormatoData, &p.ColunaData, &p.ColunaBoleto, &p.ColunaVeiculo, &obrigD1); err != nil {
 			return nil, err
 		}
 		b := obrigD1 != 0
@@ -39,8 +39,8 @@ func (r *PadraoArquivoRepo) Criar(ctx context.Context, p model.PadraoArquivo) (i
 		obrigD1 = 0
 	}
 	res, err := r.db.ExecContext(ctx,
-		"INSERT INTO padrao_arquivo (padrao, produto, dominio, delimitador, separador_decimal, separador_milhar, formato_data, coluna_data, coluna_boleto, obrigatorio_mov_d1) VALUES (?,?,?,?,?,?,?,?,?,?)",
-		p.Padrao, p.Produto, p.Dominio, p.Delimitador, p.SeparadorDecimal, p.SeparadorMilhar, p.FormatoData, p.ColunaData, p.ColunaBoleto, obrigD1,
+		"INSERT INTO padrao_arquivo (padrao, produto, dominio, delimitador, separador_decimal, separador_milhar, formato_data, coluna_data, coluna_boleto, coluna_veiculo, obrigatorio_mov_d1) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+		p.Padrao, p.Produto, p.Dominio, p.Delimitador, p.SeparadorDecimal, p.SeparadorMilhar, p.FormatoData, p.ColunaData, p.ColunaBoleto, p.ColunaVeiculo, obrigD1,
 	)
 	if err != nil {
 		return 0, err

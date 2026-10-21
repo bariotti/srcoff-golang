@@ -23,7 +23,22 @@ type LancamentoContabil struct {
 	DescricaoRegraContabil    string    `json:"descricao_regra_contabil"`
 	DescricaoCondicaoContabil string    `json:"descricao_condicao_contabil"`
 	IDRegraContabil           int64     `json:"id_regra_contabil"`
-	Origem                    string    `json:"origem"` // automatico | manual (vazio = automatico)
+	Origem                    string    `json:"origem"`  // automatico | manual (vazio = automatico)
+	Veiculo                   string    `json:"veiculo"` // veículo da operação, copiado da posição (RF-034/RN-180)
+}
+
+// FiltroMovimento parametriza a consulta paginada de lançamentos contábeis
+// (período, boleto, veículo, versão). Substitui a lista de parâmetros soltos para
+// que novos filtros não quebrem a assinatura do repositório. Spec: RF-034/RN-180.
+type FiltroMovimento struct {
+	DataInicio time.Time
+	DataFim    time.Time
+	Boleto     string
+	Veiculo    string
+	Versao     int
+	VersaoModo string // "vigente" | "todas" | "especifica"
+	Pagina     int
+	Tamanho    int
 }
 
 // OrigemOuPadrao devolve a origem normalizada (vazio = automatico), para exibição/filtro.
@@ -44,6 +59,7 @@ type LancamentoManualInput struct {
 	Produto           string  `json:"produto"`
 	Dominio           string  `json:"dominio"`
 	Boleto            string  `json:"boleto"`
+	Veiculo           string  `json:"veiculo"`
 	Moeda             string  `json:"moeda"`
 	IDRegra           int64   `json:"id_regra"`
 	IDCondicao        int64   `json:"id_condicao"`

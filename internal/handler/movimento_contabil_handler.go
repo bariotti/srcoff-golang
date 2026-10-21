@@ -16,8 +16,8 @@ type movimentoContabilSvc interface {
 	GerarMovimentoEscopo(ctx context.Context, data time.Time, produto, dominio string) ([]model.ProdutoDominio, error)
 	GerarEstorno(ctx context.Context, data time.Time) error
 	ConsultarLancamentos(ctx context.Context, data time.Time, pagina, tamanho int) (*model.PaginaLancamentos, error)
-	ConsultarLancamentosFiltrado(ctx context.Context, dataInicio, dataFim time.Time, boleto string, versao int, versaoModo string, pagina, tamanho int) (*model.PaginaLancamentos, error)
-	ConsultarLancamentosFiltradoEscopo(ctx context.Context, dataInicio, dataFim time.Time, boleto, produto, dominio string, versao int, versaoModo string, pagina, tamanho int) (*model.PaginaLancamentos, error)
+	ConsultarLancamentosFiltrado(ctx context.Context, dataInicio, dataFim time.Time, boleto, veiculo string, versao int, versaoModo string, pagina, tamanho int) (*model.PaginaLancamentos, error)
+	ConsultarLancamentosFiltradoEscopo(ctx context.Context, dataInicio, dataFim time.Time, boleto, veiculo, produto, dominio string, versao int, versaoModo string, pagina, tamanho int) (*model.PaginaLancamentos, error)
 	ExcluirMovimento(ctx context.Context, data time.Time, versao int) error
 }
 
@@ -131,6 +131,7 @@ func (h *MovimentoContabilHandler) ConsultarMovimento(w http.ResponseWriter, r *
 	}
 
 	boleto := q.Get("boleto")
+	veiculo := strings.TrimSpace(q.Get("veiculo"))
 	produto := strings.TrimSpace(q.Get("produto"))
 	dominio := strings.TrimSpace(q.Get("dominio"))
 	dataInicioStr := q.Get("data_inicio")
@@ -138,7 +139,7 @@ func (h *MovimentoContabilHandler) ConsultarMovimento(w http.ResponseWriter, r *
 	dataStr := q.Get("data")
 
 	// Suporte ao filtro por período
-	if dataInicioStr != "" || dataFimStr != "" || boleto != "" || produto != "" || dominio != "" {
+	if dataInicioStr != "" || dataFimStr != "" || boleto != "" || veiculo != "" || produto != "" || dominio != "" {
 		if dataInicioStr == "" {
 			dataInicioStr = "2000-01-01"
 		}
@@ -163,7 +164,7 @@ func (h *MovimentoContabilHandler) ConsultarMovimento(w http.ResponseWriter, r *
 		if versaoModo == "especifica" {
 			versao, _ = strconv.Atoi(q.Get("versao"))
 		}
-		resultado, err := h.svc.ConsultarLancamentosFiltradoEscopo(r.Context(), dataInicio, dataFim, boleto, produto, dominio, versao, versaoModo, pagina, tamanho)
+		resultado, err := h.svc.ConsultarLancamentosFiltradoEscopo(r.Context(), dataInicio, dataFim, boleto, veiculo, produto, dominio, versao, versaoModo, pagina, tamanho)
 		if err != nil {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"erro": err.Error()})
 			return

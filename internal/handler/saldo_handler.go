@@ -11,7 +11,7 @@ import (
 
 // saldoSvc expõe a consulta da projeção de saldo (RN-170).
 type saldoSvc interface {
-	ListarSaldos(ctx context.Context, filtro model.SaldoFiltro) ([]model.SaldoConta, error)
+	ListarSaldosPaginado(ctx context.Context, filtro model.SaldoFiltro, pagina, tamanho int) (*model.SaldoPagina, error)
 }
 
 type SaldoHandler struct {
@@ -44,13 +44,21 @@ func (h *SaldoHandler) Listar(w http.ResponseWriter, r *http.Request) {
 			filtro.IDRegra = id
 		}
 	}
-	saldos, err := h.svc.ListarSaldos(r.Context(), filtro)
+	pagina := 1
+	if v, err := strconv.Atoi(q.Get("pagina")); err == nil && v > 0 {
+		pagina = v
+	}
+	tamanho := 50
+	if v, err := strconv.Atoi(q.Get("tamanho")); err == nil && v > 0 {
+		tamanho = v
+	}
+	pag, err := h.svc.ListarSaldosPaginado(r.Context(), filtro, pagina, tamanho)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"erro": err.Error()})
 		return
 	}
-	if saldos == nil {
-		saldos = []model.SaldoConta{}
+	if pag.Saldos == nil {
+		pag.Saldos = []model.SaldoConta{}
 	}
-	writeJSON(w, http.StatusOK, saldos)
+	writeJSON(w, http.StatusOK, pag)
 }

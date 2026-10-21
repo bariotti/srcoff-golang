@@ -53,7 +53,7 @@ func (h *LancamentoManualHandler) Inserir(w http.ResponseWriter, r *http.Request
 }
 
 // ImportarCSV trata POST /api/v1/lancamentos-manuais/import (multipart, campo "arquivo").
-// Colunas: data;produto;dominio;id_regra;id_condicao;boleto;valor;moeda;indicador_reversao
+// Colunas: data;produto;dominio;id_regra;id_condicao;boleto;veiculo;valor;moeda;indicador_reversao
 // Spec: RF-033 (docs/especificacao.md §5b, §11.1).
 func (h *LancamentoManualHandler) ImportarCSV(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
@@ -121,6 +121,7 @@ func parseLancamentosManuaisCSV(r io.Reader) ([]model.LancamentoManualInput, err
 			Produto:           col(linha, "produto"),
 			Dominio:           col(linha, "dominio"),
 			Boleto:            col(linha, "boleto"),
+			Veiculo:           col(linha, "veiculo"),
 			Moeda:             col(linha, "moeda"),
 			IDRegra:           idRegra,
 			IDCondicao:        idCond,

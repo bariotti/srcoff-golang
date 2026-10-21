@@ -21,7 +21,7 @@ func main() {
 	// 1. Selecionar backend de armazenamento via STORAGE_BACKEND (sqlserver | file | sqlite)
 	backend := os.Getenv("STORAGE_BACKEND")
 	if backend == "" {
-		backend = "sqlite"
+		backend = "sqlserver"
 	}
 
 	var (
@@ -83,6 +83,11 @@ func main() {
 		rawSQLDB = db.Connect()
 		defer rawSQLDB.Close()
 		log.Printf("Backend: SQL Server")
+		// Auto-corrige o schema (colunas/tabelas adicionadas após a base), evitando erros
+		// "Invalid column" quando uma migration não foi aplicada manualmente.
+		if err := repository.GarantirSchema(context.Background(), rawSQLDB); err != nil {
+			log.Printf("[schema] aviso ao garantir schema SQL Server: %v", err)
+		}
 		posicaoRepo = repository.NewPosicaoCarteiraRepo(rawSQLDB)
 		regraRepo = repository.NewRegraContabilRepo(rawSQLDB)
 		movimentoRepo = repository.NewMovimentoContabilRepo(rawSQLDB)
@@ -102,15 +107,26 @@ func main() {
 	movimentoSvc := service.NewMovimentoContabilService(posicaoRepo, regraRepo, movimentoRepo, eval).
 		ComInconsistenciaRepo(inconsistenciaRepo).
 		ComExecucaoRepo(execucaoRepo).
-		ComPadraoRepo(padraoArquivoRepo).
-		ComSaldoRepo(saldoRepo)
+		ComPadraoRepo(padraoArquivoRepo)
 
-	// Projeção de saldo (RN-170): se a tabela estiver vazia (base recém-criada/migrada),
-	// reconstrói a partir do movimento vigente existente. Operação única.
-	if vazio, err := movimentoSvc.SaldoVazio(context.Background()); err == nil && vazio {
-		if err := movimentoSvc.ReconstruirSaldos(context.Background()); err != nil {
-			log.Printf("[saldo] falha ao reconstruir projeção de saldo na inicialização: %v", err)
+	// Saldo em conta (RN-170) é opcional e, por ora, DESABILITADO por padrão.
+	// Para reativar, defina SALDO_CONTA_ENABLED=true (ou 1). Quando desligado, o serviço
+	// não mantém nem lê a projeção de saldo: a baixa do incremental_reverte usa o fallback
+	// (varredura do movimento vigente, resultado idêntico) e o menu Saldos fica oculto.
+	saldoAtivo := strings.EqualFold(strings.TrimSpace(os.Getenv("SALDO_CONTA_ENABLED")), "true") ||
+		strings.TrimSpace(os.Getenv("SALDO_CONTA_ENABLED")) == "1"
+	if saldoAtivo {
+		movimentoSvc = movimentoSvc.ComSaldoRepo(saldoRepo)
+		// Projeção de saldo (RN-170): se a tabela estiver vazia (base recém-criada/migrada),
+		// reconstrói a partir do movimento vigente existente. Operação única.
+		if vazio, err := movimentoSvc.SaldoVazio(context.Background()); err == nil && vazio {
+			if err := movimentoSvc.ReconstruirSaldos(context.Background()); err != nil {
+				log.Printf("[saldo] falha ao reconstruir projeção de saldo na inicialização: %v", err)
+			}
 		}
+		log.Printf("[saldo] funcionalidade de saldo em conta HABILITADA")
+	} else {
+		log.Printf("[saldo] funcionalidade de saldo em conta DESABILITADA (defina SALDO_CONTA_ENABLED=true para reativar)")
 	}
 	inconsistenciaSvc := service.NewInconsistenciaService(inconsistenciaRepo)
 	execucaoSvc := service.NewExecucaoService(execucaoRepo, padraoArquivoRepo).

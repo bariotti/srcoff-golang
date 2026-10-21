@@ -156,8 +156,10 @@ conta_debito, conta_credito, produto, dominio,
 indicador_reversao (false=lançamento, true=estorno),
 descricao_regra_contabil, descricao_condicao_contabil, id_regra_contabil,
 origem (automatico | manual; vazio = automatico)   ← RN-033.3
+veiculo (veículo da operação, copiado da posição)  ← RN-180
 ```
 - **RN-030.1 (Origem).** Todo lançamento tem `origem`: **`automatico`** (gerado pelo motor) ou **`manual`** (inserido pelo usuário — RF-033). Vazio é tratado como `automatico`. É apenas marcação/exibição; não altera nenhuma lógica de geração. (ADR-012)
+- **RN-180 (Veículo da operação — RF-034).** Todo lançamento carrega `veiculo`, **copiado da posição** na geração. A coluna da posição que contém o veículo é definida no padrão de arquivo (`coluna_veiculo`), normalizada em snake_case para casar com os campos da posição. O estorno **herda** o veículo da linha de origem; a baixa do `incremental_reverte` herda o veículo da origem do saldo. É **metadado descritivo**: **não** entra na chave canônica de net/saldo/"sem cancelados" (como a moeda), logo **não altera nenhum resultado contábil**. No lançamento manual o veículo é informado pelo usuário. Reflete em consulta (coluna + filtro exato), extração CSV e lançamento manual. (ADR-013)
 
 ### 4.5 PadraoArquivo — RF-040
 ```
@@ -166,9 +168,11 @@ delimitador (";"/","/auto), separador_decimal, separador_milhar,
 formato_data (rótulo, ex. "DD/MM/AAAA"; obrigatório no cadastro novo),
 coluna_data   (coluna que define a data-base; obrigatória no cadastro novo),
 coluna_boleto (coluna do boleto, importada como texto; obrigatória no cadastro novo),
+coluna_veiculo (coluna do veículo da operação, importada como texto; obrigatória — RF-034/RN-180),
 obrigatorio_mov_d1 *bool (nil=true)   ← RN-053
 ```
 - **RN-040.1** `ExigeMovimentoD1()` = `obrigatorio_mov_d1 == nil || *obrigatorio_mov_d1` (default **true**).
+- **RN-040.2 (Coluna do veículo — RF-034).** `coluna_veiculo` é **obrigatória** no cadastro do padrão. Na importação a coluna precisa existir no arquivo (senão critica) e é **persistida como texto** (preserva zeros à esquerda/precisão), como o boleto. Na geração do contábil, o valor dessa coluna é copiado para `movimento_contabil.veiculo` (RN-180).
 
 ### 4.6 MovimentoExecucao — RF-060
 ```
@@ -184,7 +188,7 @@ criado_em
 ```
 id, data_lote_contabil, codigo_identificador_boleto, produto, dominio,
 id_regra_contabil, descricao_regra_contabil,
-tipo (PRE_CONDICAO | CONDICAO | CAMPO_VALOR), expressao, campos_faltantes, detalhe, criado_em
+tipo (PRE_CONDICAO | CONDICAO | CAMPO_VALOR | CAMPO_MOEDA), expressao, campos_faltantes, detalhe, criado_em
 ```
 
 ### 4.8 Notificacao — RF-070
@@ -232,6 +236,7 @@ Para cada posição e cada regra ativa:
    - **RN-110.3** Campo ausente em `condicao` → **inconsistência `CONDICAO`**, sem lançamento.
    - Condição `false` → ignora.
    - **RN-110.4** Campo ausente em `campo_valor` → **inconsistência `CAMPO_VALOR`**, sem lançamento.
+   - **RN-110.5 (Validação do campo_moeda).** O `campo_moeda` da condição também é validado antes de gerar o lançamento: (1) se referenciar campo **ausente** na posição → **inconsistência `CAMPO_MOEDA`**, sem lançamento; (2) se o campo existir mas resultar **em branco** → **inconsistência `CAMPO_MOEDA`**, sem lançamento. Evita lançamentos com moeda vazia.
    - Caso contrário gera **um lançamento** com: `valor = EvaluateValue(campo_valor)`, `moeda = CampoString(campo_moeda)`, `boleto = CampoString(campo_boleto|padrão)`, contas da condição, produto/domínio da posição, `indicador_reversao=false`.
 
 ### 5.3 Tipo de lançamento — RN-024 / ADR-001
@@ -562,7 +567,8 @@ Base: `/api/v1`. Rotas registradas em `cmd/api/main.go`. Convenções gerais:
 ### 11.5b Saldo de contas
 
 #### `GET /saldos` — RF-065
-- **Query** (todos opcionais, filtram): `produto`, `dominio`, `boleto`, `id_regra`, `conta_debito`, `conta_credito` (par da **condição**), `conta` (nº que casa em **débito OU crédito**, sem informar D/C), `com_zero=1` (inclui saldo 0; default oculta).
+- **Query** (todos opcionais, filtram): `produto`, `dominio`, `boleto`, `id_regra`, `conta_debito`, `conta_credito` (par da **condição**), `conta` (nº que casa em **débito OU crédito**, sem informar D/C), `com_zero=1` (inclui saldo 0; default oculta), `pagina` (default 1), `tamanho` (default 50).
+- **200**: `SaldoPagina` `{ total, pagina, tamanho, saldos[] }`. A tela consulta **apenas sob comando** do usuário (não carrega automático).
 - **RN-065.1 (Filtro de condição).** A condição é identificada pelo seu **par de contas** (débito/crédito) dentro da regra (não há `id_condicao` persistido). A UI oferece Regra → Condição (combos dependentes) e Conta por número.
 - **200**: `[SaldoConta...]` (§4.10) ordenado por produto/domínio/boleto. Projeção derivada do movimento (RN-170).
 

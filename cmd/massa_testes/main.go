@@ -227,7 +227,7 @@ func main() {
 	}
 
 	// 5) Relatório boleto -> lançamentos/estornos vigentes (com cancelados, para enxergar estornos)
-	pag, err := movRepo.ConsultarPaginadoFiltrado(ctx, d("2000-01-01"), d("2999-12-31"), "", 0, "vigente", 1, 999999)
+	pag, err := movRepo.ConsultarPaginadoFiltrado(ctx, model.FiltroMovimento{DataInicio: d("2000-01-01"), DataFim: d("2999-12-31"), VersaoModo: "vigente", Pagina: 1, Tamanho: 999999})
 	if err != nil {
 		panic(err)
 	}

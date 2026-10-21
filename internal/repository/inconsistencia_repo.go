@@ -3,6 +3,8 @@ package repository
 import (
 	"context"
 	"database/sql"
+	"fmt"
+	"strings"
 	"time"
 
 	"srcoff/internal/model"
@@ -36,14 +38,26 @@ func (r *InconsistenciaRepo) SubstituirPorEscopo(ctx context.Context, data time.
 			return err
 		}
 	}
-	for _, i := range itens {
-		if _, err := tx.ExecContext(ctx,
-			`INSERT INTO inconsistencia_processamento
-			 (data_lote_contabil, codigo_identificador_boleto, produto, dominio, id_regra_contabil, descricao_regra_contabil, tipo, expressao, campos_faltantes, detalhe, criado_em)
-			 VALUES (@p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8,@p9,@p10,@p11)`,
-			dataStr, i.CodigoIdentificadorBoleto, i.Produto, i.Dominio, i.IDRegraContabil, i.DescricaoRegraContabil,
-			i.Tipo, i.Expressao, i.CamposFaltantes, i.Detalhe, time.Now(),
-		); err != nil {
+	// Insert em LOTE (multi-row VALUES) em vez de linha a linha — evita milhares de
+	// round-trips ao SQL Server quando há muitas inconsistências (ex.: campo ausente numa
+	// regra aplicada a dezenas de milhares de posições).
+	const maxLinhas = 500 // SQL Server aceita até 1000 linhas por INSERT ... VALUES
+	for ini := 0; ini < len(itens); ini += maxLinhas {
+		fim := ini + maxLinhas
+		if fim > len(itens) {
+			fim = len(itens)
+		}
+		var sb strings.Builder
+		sb.WriteString("INSERT INTO inconsistencia_processamento (data_lote_contabil, codigo_identificador_boleto, produto, dominio, id_regra_contabil, descricao_regra_contabil, tipo, expressao, campos_faltantes, detalhe, criado_em) VALUES ")
+		for j, i := range itens[ini:fim] {
+			if j > 0 {
+				sb.WriteString(", ")
+			}
+			sb.WriteString(fmt.Sprintf("('%s','%s','%s','%s',%d,'%s','%s','%s','%s','%s',GETDATE())",
+				dataStr, esc(i.CodigoIdentificadorBoleto), esc(i.Produto), esc(i.Dominio), i.IDRegraContabil,
+				esc(i.DescricaoRegraContabil), esc(i.Tipo), esc(i.Expressao), esc(i.CamposFaltantes), esc(i.Detalhe)))
+		}
+		if _, err := tx.ExecContext(ctx, sb.String()); err != nil {
 			return err
 		}
 	}

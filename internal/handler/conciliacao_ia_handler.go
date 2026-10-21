@@ -15,7 +15,7 @@ import (
 )
 
 type conciliacaoIASvc interface {
-	ConsultarLancamentosFiltrado(ctx context.Context, dataInicio, dataFim time.Time, boleto string, versao int, versaoModo string, pagina, tamanho int) (*model.PaginaLancamentos, error)
+	ConsultarLancamentosFiltrado(ctx context.Context, dataInicio, dataFim time.Time, boleto, veiculo string, versao int, versaoModo string, pagina, tamanho int) (*model.PaginaLancamentos, error)
 	BulkInsertAjuste(ctx context.Context, lancamentos []model.LancamentoContabil) error
 }
 
@@ -79,7 +79,7 @@ func (h *ConciliacaoIAHandler) Analisar(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	movimentos, err := h.movSvc.movSvc.ConsultarLancamentosFiltrado(r.Context(), data, data, "", 0, "vigente", 1, 999999)
+	movimentos, err := h.movSvc.movSvc.ConsultarLancamentosFiltrado(r.Context(), data, data, "", "", 0, "vigente", 1, 999999)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"erro": "erro ao buscar movimentos: " + err.Error()})
 		return

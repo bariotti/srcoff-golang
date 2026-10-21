@@ -37,6 +37,7 @@ func (s *PadraoArquivoService) Criar(ctx context.Context, p model.PadraoArquivo)
 	p.FormatoData = strings.TrimSpace(p.FormatoData)
 	p.ColunaData = strings.TrimSpace(p.ColunaData)
 	p.ColunaBoleto = strings.TrimSpace(p.ColunaBoleto)
+	p.ColunaVeiculo = strings.TrimSpace(p.ColunaVeiculo)
 	if p.Padrao == "" {
 		return 0, fmt.Errorf("informe o padrão do arquivo (ex: posicao_ndf*.csv)")
 	}
@@ -54,6 +55,9 @@ func (s *PadraoArquivoService) Criar(ctx context.Context, p model.PadraoArquivo)
 	}
 	if p.ColunaBoleto == "" {
 		return 0, fmt.Errorf("informe o nome da coluna do número do boleto")
+	}
+	if p.ColunaVeiculo == "" {
+		return 0, fmt.Errorf("informe o nome da coluna do veículo da operação")
 	}
 	return s.repo.Criar(ctx, p)
 }

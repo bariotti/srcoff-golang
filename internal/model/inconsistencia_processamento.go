@@ -7,6 +7,7 @@ const (
 	InconsistenciaPreCondicao = "PRE_CONDICAO"
 	InconsistenciaCondicao    = "CONDICAO"
 	InconsistenciaCampoValor  = "CAMPO_VALOR"
+	InconsistenciaCampoMoeda  = "CAMPO_MOEDA"
 )
 
 // InconsistenciaProcessamento registra uma falha ocorrida ao processar uma posição

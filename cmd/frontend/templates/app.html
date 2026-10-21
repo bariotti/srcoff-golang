@@ -85,7 +85,8 @@
         <a class="nav-link" href="#" onclick="showPage('posicao')"><i class="bi bi-table me-2"></i>Posição</a>
         <a class="nav-link" href="#" onclick="showPage('regras')"><i class="bi bi-gear me-2"></i>Regras</a>
         <a class="nav-link" href="#" onclick="showPage('manual')"><i class="bi bi-pencil-square me-2"></i>Lançamento Manual</a>
-        <a class="nav-link" href="#" onclick="showPage('saldos')"><i class="bi bi-wallet2 me-2"></i>Saldos</a>
+        <!-- Saldo em conta DESABILITADO por ora (reativar: remover o style display:none e SALDO_CONTA_ENABLED=true na API) -->
+        <a class="nav-link" href="#" onclick="showPage('saldos')" style="display:none"><i class="bi bi-wallet2 me-2"></i>Saldos</a>
         <a class="nav-link" href="#" onclick="showPage('parametrizacoes')"><i class="bi bi-sliders me-2"></i>Parametrizações</a>
       </nav>
       <div class="mt-auto px-3 py-3" style="font-size:0.7rem;color:#6c757d;border-top:1px solid #343a40">
@@ -146,6 +147,26 @@
           </div>
         </div>
 
+        <!-- Inconsistências do Processamento (antes do Calendário) -->
+        <div class="card shadow-sm mt-4">
+          <div class="card-header bg-warning bg-opacity-25 text-dark"><i class="bi bi-exclamation-triangle me-2"></i>Inconsistências do Processamento</div>
+          <div class="card-body">
+            <p class="text-muted small">Consulte as inconsistências registradas em um processamento passado, informando a data do movimento.</p>
+            <div class="row g-2 align-items-end">
+              <div class="col-auto">
+                <label class="form-label form-label-sm">Data do movimento</label>
+                <input type="date" id="op-inc-data" class="form-control form-control-sm">
+              </div>
+              <div class="col-auto">
+                <button class="btn btn-outline-primary btn-sm" onclick="consultarInconsistencias()"><i class="bi bi-search me-1"></i>Consultar</button>
+                <button class="btn btn-success btn-sm ms-1" onclick="exportarInconsistencias()"><i class="bi bi-file-earmark-excel me-1"></i>CSV</button>
+              </div>
+            </div>
+            <!-- Resultado das inconsistências -->
+            <div id="op-inconsistencias" class="mt-3"></div>
+          </div>
+        </div>
+
         <!-- Calendário de Execução do Contábil -->
         <div class="card shadow-sm mt-4">
           <div class="card-header"><i class="bi bi-calendar3 me-2"></i>Calendário de Execução do Contábil<span class="subtitulo">visão agregada de todos os Produtos/Domínios</span></div>
@@ -170,26 +191,6 @@
               </div>
             </div>
             <div id="op-cal-resultado" class="mt-3"></div>
-          </div>
-        </div>
-
-        <!-- Inconsistências do Processamento (abaixo de Gerar Movimento Contábil) -->
-        <div class="card shadow-sm mt-4">
-          <div class="card-header bg-warning bg-opacity-25 text-dark"><i class="bi bi-exclamation-triangle me-2"></i>Inconsistências do Processamento</div>
-          <div class="card-body">
-            <p class="text-muted small">Consulte as inconsistências registradas em um processamento passado, informando a data do movimento.</p>
-            <div class="row g-2 align-items-end">
-              <div class="col-auto">
-                <label class="form-label form-label-sm">Data do movimento</label>
-                <input type="date" id="op-inc-data" class="form-control form-control-sm">
-              </div>
-              <div class="col-auto">
-                <button class="btn btn-outline-primary btn-sm" onclick="consultarInconsistencias()"><i class="bi bi-search me-1"></i>Consultar</button>
-                <button class="btn btn-success btn-sm ms-1" onclick="exportarInconsistencias()"><i class="bi bi-file-earmark-excel me-1"></i>CSV</button>
-              </div>
-            </div>
-            <!-- Resultado das inconsistências -->
-            <div id="op-inconsistencias" class="mt-3"></div>
           </div>
         </div>
       </div>
@@ -221,6 +222,10 @@
               <div class="col-md-2">
                 <label class="form-label form-label-sm">Boleto</label>
                 <input type="text" id="c-boleto" class="form-control form-control-sm" placeholder="parcial">
+              </div>
+              <div class="col-md-2">
+                <label class="form-label form-label-sm">Veículo</label>
+                <input type="text" id="c-veiculo" class="form-control form-control-sm" placeholder="exato">
               </div>
               <div class="col-md-2">
                 <label class="form-label form-label-sm">Versão</label>
@@ -473,6 +478,7 @@
               <div class="col-md-3"><label class="form-label mb-1">Regra *</label><select id="lm-regra" class="form-select form-select-sm" onchange="lmPreencherCondicoes()"></select></div>
               <div class="col-md-3"><label class="form-label mb-1">Condição *</label><select id="lm-condicao" class="form-select form-select-sm"></select></div>
               <div class="col-md-2"><label class="form-label mb-1">Boleto *</label><input id="lm-boleto" class="form-control form-control-sm" placeholder="BOL-1"></div>
+              <div class="col-md-2"><label class="form-label mb-1">Veículo</label><input id="lm-veiculo" class="form-control form-control-sm" placeholder="VH-1"></div>
               <div class="col-md-2"><label class="form-label mb-1">Valor *</label><input id="lm-valor" type="number" step="any" class="form-control form-control-sm"></div>
               <div class="col-md-2"><label class="form-label mb-1">Moeda</label><input id="lm-moeda" class="form-control form-control-sm" placeholder="USD"></div>
               <div class="col-md-2"><div class="form-check mt-4"><input class="form-check-input" type="checkbox" id="lm-estorno"><label class="form-check-label" for="lm-estorno">Estorno</label></div></div>
@@ -486,8 +492,8 @@
         <div id="lm-pane-csv" style="display:none">
           <div class="card"><div class="card-body">
             <p>Envie um CSV (delimitador <code>;</code>) com o cabeçalho:</p>
-            <pre class="bg-light p-2 rounded small"><code>data;produto;dominio;id_regra;id_condicao;boleto;valor;moeda;indicador_reversao
-2026-09-28;NDF;Posição;2;2;BOL-2;1000;USD;Não</code></pre>
+            <pre class="bg-light p-2 rounded small"><code>data;produto;dominio;id_regra;id_condicao;boleto;veiculo;valor;moeda;indicador_reversao
+2026-09-28;NDF;Posição;2;2;BOL-2;VH-2;1000;USD;Não</code></pre>
             <ul class="small text-muted">
               <li><code>data</code> no formato <code>AAAA-MM-DD</code> (dia útil). <code>id_regra</code>/<code>id_condicao</code> são os ids numéricos (veja na tela Regras).</li>
               <li><code>indicador_reversao</code>: <code>Sim</code>/<code>Não</code> (vazio = lançamento normal). As contas vêm da condição.</li>
@@ -592,6 +598,9 @@
                   <div class="col-12"><label class="form-label form-label-sm mb-0">Coluna do Número do Boleto <span class="text-danger">*</span></label>
                     <input type="text" id="param-padrao-coluna-boleto" class="form-control form-control-sm" placeholder="nome da coluna do arquivo (ex: codigo_identificador_boleto)">
                     <small class="text-muted">Importada sempre como texto (preserva zeros à esquerda e identificadores longos).</small></div>
+                  <div class="col-12"><label class="form-label form-label-sm mb-0">Coluna do Veículo da Operação <span class="text-danger">*</span></label>
+                    <input type="text" id="param-padrao-coluna-veiculo" class="form-control form-control-sm" placeholder="nome da coluna do arquivo (ex: veiculo_operacao)">
+                    <small class="text-muted">Copiada para o movimento contábil na geração. Importada sempre como texto.</small></div>
                   <div class="col-12"><label class="form-label form-label-sm mb-0">Formato de Data <span class="text-danger">*</span></label>
                     <select id="param-padrao-formato" class="form-select form-select-sm">
                       <option value="">Selecione…</option>
@@ -833,7 +842,10 @@ function showPage(name) {
     preencherSelectOpcoes('s-produto', 'produto', { incluirVazio: true });
     preencherSelectOpcoes('s-dominio', 'dominio', { incluirVazio: true });
     sCarregarRegras();
-    carregarSaldos();
+    // Não consulta automaticamente: aguarda o usuário clicar em "Filtrar" (item 1).
+    if (!sConsultou) {
+      document.getElementById('s-lista').innerHTML = '<div class="p-3 text-muted"><i class="bi bi-info-circle me-1"></i>Defina os filtros e clique em <strong>Filtrar</strong> para consultar os saldos.</div>';
+    }
   }
   if (name === 'manual') {
     preencherSelectOpcoes('lm-produto', 'produto', { incluirVazio: true });
@@ -892,11 +904,12 @@ async function renderPadroes() {
     const d1 = (p.obrigatorio_mov_d1 !== false) ? 'exige mov. D-1' : 'sem obrig. D-1';
     const col = p.coluna_data ? `col.data '${p.coluna_data}'` : 'col.data auto';
     const bol = p.coluna_boleto ? `boleto '${p.coluna_boleto}'` : 'boleto —';
+    const vei = p.coluna_veiculo ? `veículo '${p.coluna_veiculo}'` : 'veículo —';
     const fmt = p.formato_data ? `data ${p.formato_data}` : 'data auto';
     const d = p.delimitador ? `delim '${p.delimitador}'` : 'delim auto';
     const dec = p.separador_decimal ? `dec '${p.separador_decimal}'` : 'dec auto';
     const mil = p.separador_milhar ? `milhar '${p.separador_milhar}'` : 'sem milhar';
-    return `${d1} · ${col} · ${bol} · ${fmt} · ${d} · ${dec} · ${mil}`;
+    return `${d1} · ${col} · ${bol} · ${vei} · ${fmt} · ${d} · ${dec} · ${mil}`;
   };
   ul.innerHTML = lista.map(p => `<li class="list-group-item d-flex justify-content-between align-items-center py-1">
     <span><code>${p.padrao}</code> <i class="bi bi-arrow-right mx-1"></i> <span class="badge bg-secondary">${p.produto}</span> <span class="badge bg-info text-dark">${p.dominio || '—'}</span>
@@ -912,14 +925,17 @@ async function adicionarPadrao() {
   const formato = document.getElementById('param-padrao-formato').value;
   const colunaData = document.getElementById('param-padrao-coluna-data').value.trim();
   const colunaBoleto = document.getElementById('param-padrao-coluna-boleto').value.trim();
+  const colunaVeiculo = document.getElementById('param-padrao-coluna-veiculo').value.trim();
   if (!padrao || !produto || !dominio) { toast('Informe o padrão, o produto e o domínio', 'warning'); return; }
   if (!colunaData) { toast('Informe a coluna da data base da posição', 'warning'); return; }
   if (!colunaBoleto) { toast('Informe a coluna do número do boleto', 'warning'); return; }
+  if (!colunaVeiculo) { toast('Informe a coluna do veículo da operação', 'warning'); return; }
   if (!formato) { toast('Selecione o Formato de Data do arquivo', 'warning'); return; }
   const payload = {
     padrao, produto, dominio,
     coluna_data: colunaData,
     coluna_boleto: colunaBoleto,
+    coluna_veiculo: colunaVeiculo,
     formato_data: formato,
     obrigatorio_mov_d1: document.getElementById('param-padrao-obrig-d1').checked,
     delimitador: document.getElementById('param-padrao-delim').value,
@@ -931,6 +947,7 @@ async function adicionarPadrao() {
     document.getElementById('param-padrao-novo').value = '';
     document.getElementById('param-padrao-coluna-data').value = '';
     document.getElementById('param-padrao-coluna-boleto').value = '';
+    document.getElementById('param-padrao-coluna-veiculo').value = '';
     document.getElementById('param-padrao-formato').value = '';
     document.getElementById('param-padrao-obrig-d1').checked = true;
     document.getElementById('param-padrao-delim').value = '';
@@ -1111,9 +1128,8 @@ async function consultarInconsistencias() {
     <td>${i.detalhe || ''}</td>
   </tr>`).join('');
   el.innerHTML = `<div class="card shadow-sm border-warning">
-    <div class="card-header bg-warning bg-opacity-25 d-flex justify-content-between align-items-center">
+    <div class="card-header bg-warning bg-opacity-25">
       <span><i class="bi bi-exclamation-triangle me-2"></i>${lista.length} inconsistência(s) — ${data}</span>
-      <button class="btn btn-success btn-sm" onclick="exportarInconsistencias()"><i class="bi bi-file-earmark-excel me-1"></i>Exportar CSV</button>
     </div>
     <div class="card-body p-0"><div class="table-responsive">
       <table class="table table-sm table-hover mb-0">
@@ -1232,6 +1248,7 @@ function buildConsultaParams(pagina) {
   const di = document.getElementById('c-data-inicio').value;
   const df = document.getElementById('c-data-fim').value;
   const boleto = document.getElementById('c-boleto').value;
+  const veiculo = document.getElementById('c-veiculo').value;
   const produto = document.getElementById('c-produto').value;
   const dominio = document.getElementById('c-dominio').value;
   const modo = document.getElementById('c-versao-modo').value;
@@ -1241,6 +1258,7 @@ function buildConsultaParams(pagina) {
   if (di) p += `&data_inicio=${di}`;
   if (df) p += `&data_fim=${df}`;
   if (boleto) p += `&boleto=${encodeURIComponent(boleto)}`;
+  if (veiculo) p += `&veiculo=${encodeURIComponent(veiculo)}`;
   if (produto) p += `&produto=${encodeURIComponent(produto)}`;
   if (dominio) p += `&dominio=${encodeURIComponent(dominio)}`;
   if (modo === 'especifica' && versao) p += `&versao=${versao}`;
@@ -1273,6 +1291,7 @@ async function consultarMovimento(pagina) {
     <td>${l.dominio || '—'}</td>
     <td>${l.codigo_versao_conteudo}</td>
     <td>${l.codigo_identificador_boleto}</td>
+    <td>${l.veiculo || '—'}</td>
     <td>${l.conta_debito}</td>
     <td>${l.conta_credito}</td>
     <td class="text-end">${Number(l.valor_lancamento_contabil).toFixed(2)}</td>
@@ -1295,7 +1314,7 @@ async function consultarMovimento(pagina) {
 
   el.innerHTML = `<div class="card shadow-sm"><div class="card-body p-0">
     <div class="table-responsive"><table class="table table-sm table-hover table-striped mb-0">
-      <thead class="table-dark"><tr><th>Data</th><th>Produto</th><th>Domínio</th><th>Versão</th><th>Boleto</th><th>Débito</th><th>Crédito</th><th>Valor</th><th>Moeda</th><th>Reversão</th><th>Origem</th><th>Regra</th></tr></thead>
+      <thead class="table-dark"><tr><th>Data</th><th>Produto</th><th>Domínio</th><th>Versão</th><th>Boleto</th><th>Veículo</th><th>Débito</th><th>Crédito</th><th>Valor</th><th>Moeda</th><th>Reversão</th><th>Origem</th><th>Regra</th></tr></thead>
       <tbody>${rows}</tbody>
     </table></div>
     <div class="px-3 py-2">${pag}</div>
@@ -1658,6 +1677,7 @@ function lmAdd() {
     id_regra: idRegra,
     id_condicao: idCond,
     boleto: document.getElementById('lm-boleto').value.trim(),
+    veiculo: document.getElementById('lm-veiculo').value.trim(),
     valor: parseFloat(document.getElementById('lm-valor').value),
     moeda: document.getElementById('lm-moeda').value.trim(),
     indicador_reversao: document.getElementById('lm-estorno').checked,
@@ -1668,6 +1688,7 @@ function lmAdd() {
   }
   lmPendentes.push(item);
   document.getElementById('lm-boleto').value = '';
+  document.getElementById('lm-veiculo').value = '';
   document.getElementById('lm-valor').value = '';
   lmRender();
 }
@@ -1678,14 +1699,14 @@ function lmRender() {
   const el = document.getElementById('lm-lista');
   if (!lmPendentes.length) { el.innerHTML = '<div class="p-3 text-muted">Nenhum lançamento na lista.</div>'; return; }
   const rows = lmPendentes.map((it, i) => `<tr>
-    <td>${esc(it.data)}</td><td>${esc(it.produto)}/${esc(it.dominio)}</td><td>${esc(it.boleto)}</td>
+    <td>${esc(it.data)}</td><td>${esc(it.produto)}/${esc(it.dominio)}</td><td>${esc(it.boleto)}</td><td>${esc(it.veiculo || '—')}</td>
     <td class="text-muted">${esc(it._regra)}</td><td>${esc(it._contas)}</td>
     <td class="text-end">${Number(it.valor).toLocaleString('pt-BR',{minimumFractionDigits:2})}</td>
     <td>${esc(it.moeda)}</td><td>${it.indicador_reversao ? '<span class="badge bg-secondary">Estorno</span>' : ''}</td>
     <td><button class="btn btn-sm btn-outline-danger" onclick="lmRemove(${i})"><i class="bi bi-x"></i></button></td>
   </tr>`).join('');
   el.innerHTML = `<div class="table-responsive"><table class="table table-sm table-hover mb-0">
-    <thead class="table-dark"><tr><th>Data</th><th>Prod/Dom</th><th>Boleto</th><th>Regra</th><th>Contas</th><th class="text-end">Valor</th><th>Moeda</th><th></th><th></th></tr></thead>
+    <thead class="table-dark"><tr><th>Data</th><th>Prod/Dom</th><th>Boleto</th><th>Veículo</th><th>Regra</th><th>Contas</th><th class="text-end">Valor</th><th>Moeda</th><th></th><th></th></tr></thead>
     <tbody>${rows}</tbody></table></div>`;
 }
 
@@ -1745,10 +1766,17 @@ function sLimparFiltros() {
   document.getElementById('s-regra').value = '';
   document.getElementById('s-com-zero').checked = false;
   sPreencherCondicoes();
-  carregarSaldos();
+  // Apenas limpa; não consulta automaticamente (item 1).
+  sConsultou = false;
+  document.getElementById('s-lista').innerHTML = '<div class="p-3 text-muted"><i class="bi bi-info-circle me-1"></i>Defina os filtros e clique em <strong>Filtrar</strong> para consultar os saldos.</div>';
 }
 
-async function carregarSaldos() {
+let sConsultou = false;        // só consulta após comando do usuário (item 1)
+const S_TAMANHO_PAGINA = 50;
+
+async function carregarSaldos(pagina) {
+  pagina = pagina || 1;
+  sConsultou = true;
   const p = new URLSearchParams();
   const prod = document.getElementById('s-produto').value.trim();
   const dom = document.getElementById('s-dominio').value.trim();
@@ -1767,13 +1795,16 @@ async function carregarSaldos() {
     if (c) p.set('conta_credito', c);
   }
   if (document.getElementById('s-com-zero').checked) p.set('com_zero', '1');
+  p.set('pagina', pagina);
+  p.set('tamanho', S_TAMANHO_PAGINA);
   const r = await api('GET', '/v1/saldos?' + p.toString());
-  const lista = Array.isArray(r) ? r : [];
-  renderizarSaldos(lista);
+  if (r && r.erro) { document.getElementById('s-lista').innerHTML = `<div class="alert alert-danger">${r.erro}</div>`; return; }
+  renderizarSaldos(r || { total: 0, pagina: 1, tamanho: S_TAMANHO_PAGINA, saldos: [] });
 }
 
-function renderizarSaldos(saldos) {
+function renderizarSaldos(r) {
   const el = document.getElementById('s-lista');
+  const saldos = (r && Array.isArray(r.saldos)) ? r.saldos : [];
   if (!saldos.length) { el.innerHTML = '<div class="p-3 text-muted">Nenhum saldo encontrado.</div>'; return; }
   const fmt = (v) => Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -1786,10 +1817,22 @@ function renderizarSaldos(saldos) {
     <td>${esc(s.moeda_lancamento)}</td>
     <td class="text-end ${Number(s.saldo) < 0 ? 'text-danger' : ''}">${fmt(s.saldo)}</td>
   </tr>`).join('');
+  const total = r.total || 0, tam = r.tamanho || S_TAMANHO_PAGINA, pag = r.pagina || 1;
+  const totalPages = Math.max(1, Math.ceil(total / tam));
+  let nav = '';
+  if (totalPages > 1) {
+    nav = `<nav class="mt-2"><ul class="pagination pagination-sm mb-0">
+      ${pag > 1 ? `<li class="page-item"><a class="page-link" href="#" onclick="carregarSaldos(${pag - 1});return false">«</a></li>` : ''}
+      <li class="page-item disabled"><a class="page-link">${pag} / ${totalPages} (${total} registros)</a></li>
+      ${pag < totalPages ? `<li class="page-item"><a class="page-link" href="#" onclick="carregarSaldos(${pag + 1});return false">»</a></li>` : ''}
+    </ul></nav>`;
+  } else {
+    nav = `<small class="text-muted">${total} registro(s)</small>`;
+  }
   el.innerHTML = `<div class="table-responsive"><table class="table table-sm table-hover mb-0">
     <thead class="table-dark"><tr><th>Produto</th><th>Domínio</th><th>Boleto</th><th>Regra</th><th>Contas (D/C)</th><th>Moeda</th><th class="text-end">Saldo</th></tr></thead>
     <tbody>${rows}</tbody>
-  </table></div>`;
+  </table></div>${nav}`;
 }
 
 // Exporta todas as regras e condições (ativas) para um único CSV.

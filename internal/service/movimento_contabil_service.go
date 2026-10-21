@@ -28,8 +28,8 @@ type movimentoContabilRepo interface {
 	ObterVersaoAtual(ctx context.Context, data time.Time) (int, error)
 	BuscarPorDataEIndicador(ctx context.Context, data time.Time, indicadorReversao bool) ([]model.LancamentoContabil, error)
 	ConsultarPaginado(ctx context.Context, data time.Time, pagina, tamanho int) (*model.PaginaLancamentos, error)
-	ConsultarPaginadoFiltrado(ctx context.Context, dataInicio, dataFim time.Time, boleto string, versao int, versaoModo string, pagina, tamanho int) (*model.PaginaLancamentos, error)
-	ConsultarPaginadoFiltradoSemCancelados(ctx context.Context, dataInicio, dataFim time.Time, boleto string, versao int, versaoModo string, pagina, tamanho int) (*model.PaginaLancamentos, error)
+	ConsultarPaginadoFiltrado(ctx context.Context, f model.FiltroMovimento) (*model.PaginaLancamentos, error)
+	ConsultarPaginadoFiltradoSemCancelados(ctx context.Context, f model.FiltroMovimento) (*model.PaginaLancamentos, error)
 	ExcluirPorDataEVersao(ctx context.Context, data time.Time, versao int) error
 }
 
@@ -73,6 +73,7 @@ type saldoContaWriter interface {
 	AplicarDeltas(ctx context.Context, deltas []model.SaldoConta) error
 	SubstituirCombos(ctx context.Context, combos []model.ProdutoDominio, saldos []model.SaldoConta) error
 	Listar(ctx context.Context, filtro model.SaldoFiltro) ([]model.SaldoConta, error)
+	ListarPaginado(ctx context.Context, filtro model.SaldoFiltro, pagina, tamanho int) (*model.SaldoPagina, error)
 	EstaVazio(ctx context.Context) (bool, error)
 }
 
@@ -185,6 +186,20 @@ func (s *MovimentoContabilService) GerarMovimento(ctx context.Context, data time
 //	RN-120 incremental · RN-130/131 estorno · RN-140 obrigatoriedade D-1 ·
 //	RN-150 versionamento por combo · RN-160 persistência/execução.
 func (s *MovimentoContabilService) GerarMovimentoEscopo(ctx context.Context, data time.Time, produtoFiltro, dominioFiltro string) ([]model.ProdutoDominio, error) {
+	// Log de início/fim/duração do processamento (Produto, Domínio e Data).
+	escProd, escDom := produtoFiltro, dominioFiltro
+	if escProd == "" {
+		escProd = "todos"
+	}
+	if escDom == "" {
+		escDom = "todos"
+	}
+	inicio := time.Now()
+	log.Printf("[contabil] INICIO data=%s produto=%s dominio=%s", data.Format("2006-01-02"), escProd, escDom)
+	defer func() {
+		log.Printf("[contabil] FIM    data=%s produto=%s dominio=%s duracao=%s", data.Format("2006-01-02"), escProd, escDom, time.Since(inicio).Round(time.Millisecond))
+	}()
+
 	// 0. O contábil só pode ser processado em dias úteis.
 	if !EhDiaUtil(data) {
 		return nil, fmt.Errorf("data %s não é dia útil (%s); o contábil só pode ser processado em dias úteis", data.Format("2006-01-02"), DescricaoDiasNaoUteis)
@@ -232,6 +247,30 @@ func (s *MovimentoContabilService) GerarMovimentoEscopo(ctx context.Context, dat
 		v := s.exigeMovimentoD1(ctx, produto, dominio)
 		exigeD1Memo[k] = v
 		return v
+	}
+
+	// Coluna do veículo da operação por combinação (produto, domínio): resolvida do padrão de
+	// arquivo e normalizada (snake_case) para casar com as chaves da posição. Memoizada.
+	// Vazia = padrão sem veículo (legado) → veículo do lançamento fica em branco. Spec: RF-034/RN-180.
+	veiculoColMemo := map[string]string{}
+	veiculoColunaDe := func(produto, dominio string) string {
+		k := produto + "\x00" + dominio
+		if v, ok := veiculoColMemo[k]; ok {
+			return v
+		}
+		col := ""
+		if s.padraoRepo != nil {
+			if padroes, err := s.padraoRepo.Listar(ctx); err == nil {
+				for _, p := range padroes {
+					if strings.TrimSpace(p.Produto) == produto && strings.TrimSpace(p.Dominio) == dominio {
+						col = evaluator.NormalizarNome(p.ColunaVeiculo)
+						break
+					}
+				}
+			}
+		}
+		veiculoColMemo[k] = col
+		return col
 	}
 
 	// 2b. Base do cálculo INCREMENTAL (Spec: RN-120, docs/especificacao.md §5.4).
@@ -287,6 +326,7 @@ func (s *MovimentoContabilService) GerarMovimentoEscopo(ctx context.Context, dat
 		env := evaluator.PosicaoToEnv(posicao)
 		produto := evaluator.CampoString(env, "produto")
 		dominio := evaluator.CampoString(env, "dominio")
+		veiculo := evaluator.CampoString(env, veiculoColunaDe(produto, dominio))
 		combosSet[produto+"\x00"+dominio] = model.ProdutoDominio{Produto: produto, Dominio: dominio}
 		for _, regra := range regras {
 			// Só aplica a regra se Produto E Domínio da posição coincidirem com a regra.
@@ -341,7 +381,21 @@ func (s *MovimentoContabilService) GerarMovimentoEscopo(ctx context.Context, dat
 					evaluator.LogEvalError(data, boleto, condicao.CampoValor, err)
 					continue
 				}
+				// campo_moeda referenciando campo ausente na posição → inconsistência, sem lançamento
+				// (RN-110.5, item 1 — ex.: regra com moeda_mtm que não existe na posição).
+				if faltantes := camposFaltantes(env, condicao.CampoMoeda); len(faltantes) > 0 {
+					inconsistencias = append(inconsistencias, novaInconsistencia(
+						data, boleto, produto, dominio, regra, model.InconsistenciaCampoMoeda, condicao.CampoMoeda, faltantes))
+					continue
+				}
 				moeda := evaluator.CampoString(env, condicao.CampoMoeda)
+				// campo_moeda existente mas em branco → inconsistência, sem lançamento (RN-110.5, item 2).
+				if strings.TrimSpace(moeda) == "" {
+					inc := novaInconsistencia(data, boleto, produto, dominio, regra, model.InconsistenciaCampoMoeda, condicao.CampoMoeda, nil)
+					inc.Detalhe = fmt.Sprintf("A moeda da regra %q resultou em branco (campo %q vazio/ausente na posição). Lançamento não gerado.", regra.Descricao, condicao.CampoMoeda)
+					inconsistencias = append(inconsistencias, inc)
+					continue
+				}
 				boletoLanc := evaluator.CampoString(env, campoBoletoOuPadrao(condicao.CampoBoleto))
 				// Incremental (Não Reverte e Reverte): o valor lançado é
 				// | |valor_D0| - |valor_D-N| | para a mesma (produto, domínio, boleto, regra, contas).
@@ -363,6 +417,7 @@ func (s *MovimentoContabilService) GerarMovimentoEscopo(ctx context.Context, dat
 					DescricaoRegraContabil:    regra.Descricao,
 					DescricaoCondicaoContabil: condicao.Condicao,
 					IDRegraContabil:           regra.ID,
+					Veiculo:                   veiculo,
 				})
 			}
 		}
@@ -497,6 +552,7 @@ func (s *MovimentoContabilService) GerarMovimentoEscopo(ctx context.Context, dat
 					DescricaoRegraContabil:    l1.DescricaoRegraContabil,
 					DescricaoCondicaoContabil: l1.DescricaoCondicaoContabil,
 					IDRegraContabil:           l1.IDRegraContabil,
+					Veiculo:                   l1.Veiculo,
 				})
 			}
 		}
@@ -544,6 +600,7 @@ func (s *MovimentoContabilService) GerarMovimentoEscopo(ctx context.Context, dat
 			idRegra                         int64
 			contaDeb, contaCred             string
 			descRegra, descCond             string
+			veiculo                         string
 		}
 		saldo := map[string]float64{}
 		meta := map[string]metaSaldo{}
@@ -578,11 +635,11 @@ func (s *MovimentoContabilService) GerarMovimentoEscopo(ctx context.Context, dat
 			for _, sc := range saldos {
 				k := chaveIncremental(sc.Produto, sc.Dominio, sc.CodigoIdentificadorBoleto, sc.IDRegraContabil, sc.ContaDebito, sc.ContaCredito)
 				saldo[k] = sc.Saldo - prevNet[k]
-				meta[k] = metaSaldo{sc.Produto, sc.Dominio, sc.CodigoIdentificadorBoleto, sc.MoedaLancamento, sc.IDRegraContabil, sc.ContaDebito, sc.ContaCredito, sc.DescricaoRegra, sc.DescricaoCondicao}
+				meta[k] = metaSaldo{sc.Produto, sc.Dominio, sc.CodigoIdentificadorBoleto, sc.MoedaLancamento, sc.IDRegraContabil, sc.ContaDebito, sc.ContaCredito, sc.DescricaoRegra, sc.DescricaoCondicao, ""}
 			}
 		} else {
 			// Fallback (sem saldo materializado): varre o movimento vigente até D-1 e soma.
-			hist, err := s.movimentoRepo.ConsultarPaginadoFiltrado(ctx, time.Date(1900, 1, 1, 0, 0, 0, 0, time.UTC), DiaUtilAnterior(data), "", 0, "vigente", 1, 999999)
+			hist, err := s.movimentoRepo.ConsultarPaginadoFiltrado(ctx, model.FiltroMovimento{DataInicio: time.Date(1900, 1, 1, 0, 0, 0, 0, time.UTC), DataFim: DiaUtilAnterior(data), VersaoModo: "vigente", Pagina: 1, Tamanho: 999999})
 			if err != nil {
 				return nil, fmt.Errorf("erro ao ler movimento para baixa incremental_reverte: %w", err)
 			}
@@ -597,7 +654,7 @@ func (s *MovimentoContabilService) GerarMovimentoEscopo(ctx context.Context, dat
 					k := chaveIncremental(l.Produto, l.Dominio, l.CodigoIdentificadorBoleto, l.IDRegraContabil, l.ContaDebito, l.ContaCredito)
 					saldo[k] += l.ValorLancamentoContabil
 					if _, ok := meta[k]; !ok {
-						meta[k] = metaSaldo{l.Produto, l.Dominio, l.CodigoIdentificadorBoleto, l.MoedaLancamentoContabil, l.IDRegraContabil, l.ContaDebito, l.ContaCredito, l.DescricaoRegraContabil, l.DescricaoCondicaoContabil}
+						meta[k] = metaSaldo{l.Produto, l.Dominio, l.CodigoIdentificadorBoleto, l.MoedaLancamentoContabil, l.IDRegraContabil, l.ContaDebito, l.ContaCredito, l.DescricaoRegraContabil, l.DescricaoCondicaoContabil, l.Veiculo}
 					}
 				}
 			}
@@ -641,6 +698,7 @@ func (s *MovimentoContabilService) GerarMovimentoEscopo(ctx context.Context, dat
 				DescricaoRegraContabil:    m.descRegra,
 				DescricaoCondicaoContabil: m.descCond,
 				IDRegraContabil:           m.idRegra,
+				Veiculo:                   m.veiculo,
 			})
 			// Garante o combo no versionamento/execução mesmo sem lançamentos de D0 (RN-121.5).
 			ck := m.produto + "\x00" + m.dominio
@@ -659,12 +717,17 @@ func (s *MovimentoContabilService) GerarMovimentoEscopo(ctx context.Context, dat
 	// restrito aos combos que serão reescritos nesta geração.
 	prevNetMaint := map[string]float64{}
 	prevMetaMaint := map[string]model.SaldoConta{}
+	// Linhas vigentes ANTES desta geração (ambos indicadores). Reusadas no passo 7 para a
+	// contagem visível em memória — evita reler o dia do banco e preserva a contagem de combos
+	// que não geraram linhas novas (cuja versão anterior permanece vigente).
+	var vigenteAntes []model.LancamentoContabil
 	for _, ind := range []bool{false, true} {
 		vigentes, err := s.movimentoRepo.BuscarPorDataEIndicador(ctx, data, ind)
 		if err != nil {
 			return nil, fmt.Errorf("erro ao obter versão vigente: %w", err)
 		}
 		for _, l := range vigentes {
+			vigenteAntes = append(vigenteAntes, l)
 			k := l.Produto + "\x00" + l.Dominio
 			if l.CodigoVersaoConteudo > maxVersaoCombo[k] {
 				maxVersaoCombo[k] = l.CodigoVersaoConteudo
@@ -752,19 +815,58 @@ func (s *MovimentoContabilService) GerarMovimentoEscopo(ctx context.Context, dat
 	// pares lançamento+estorno de saldo zero). Assim o "Processados × Pendentes" bate
 	// com a quantidade da consulta para o mesmo Produto/Domínio/Data/Versão.
 	if s.execucaoRepo != nil {
+		// Contagem VISÍVEL (sem os pares lançamento+estorno de saldo zero) calculada EM MEMÓRIA,
+		// em vez de reler o dia inteiro do banco com subquery correlacionada por linha (que era o
+		// principal gargalo). O conjunto vigente final por combo é: as linhas recém-geradas quando o
+		// combo foi reescrito; senão, as linhas vigentes anteriores (combo sem geração nova mantém o
+		// estado anterior). A anulação de pares usa a MESMA chave canônica do backend (boleto + regra
+		// + par de contas na orientação do lançamento normal), então o resultado é idêntico ao
+		// ConsultarPaginadoFiltradoSemCancelados.
+		type grpVis struct {
+			boleto    string
+			regra     int64
+			deb, cred string
+		}
+		grupoDe := func(l model.LancamentoContabil) grpVis {
+			deb, cred := l.ContaDebito, l.ContaCredito
+			if l.IndicadorReversao {
+				deb, cred = l.ContaCredito, l.ContaDebito
+			}
+			return grpVis{l.CodigoIdentificadorBoleto, l.IDRegraContabil, deb, cred}
+		}
+		combosComNovos := map[string]bool{}
+		for _, l := range todos {
+			combosComNovos[l.Produto+"\x00"+l.Dominio] = true
+		}
+		// Conjunto vigente final: linhas novas + vigentes anteriores dos combos NÃO reescritos.
+		finais := make([]model.LancamentoContabil, 0, len(todos)+len(vigenteAntes))
+		finais = append(finais, todos...)
+		for _, l := range vigenteAntes {
+			if combosComNovos[l.Produto+"\x00"+l.Dominio] {
+				continue // combo reescrito → a versão nova substitui a anterior
+			}
+			finais = append(finais, l)
+		}
+		netGrupo := map[grpVis]float64{}
+		for _, l := range finais {
+			if l.IndicadorReversao {
+				netGrupo[grupoDe(l)] -= l.ValorLancamentoContabil
+			} else {
+				netGrupo[grupoDe(l)] += l.ValorLancamentoContabil
+			}
+		}
 		qtdLancVis := map[string]int{}
 		qtdEstVis := map[string]int{}
-		if visiveis, err := s.movimentoRepo.ConsultarPaginadoFiltradoSemCancelados(ctx, data, data, "", 0, "vigente", 1, 999999); err == nil {
-			for _, l := range visiveis.Lancamentos {
-				k := l.Produto + "\x00" + l.Dominio
-				if l.IndicadorReversao {
-					qtdEstVis[k]++
-				} else {
-					qtdLancVis[k]++
-				}
+		for _, l := range finais {
+			if netGrupo[grupoDe(l)] == 0 {
+				continue // par lançamento+estorno que se anula → não visível
 			}
-		} else {
-			log.Printf("[movimento] falha ao contar lançamentos visíveis para execução: %v", err)
+			k := l.Produto + "\x00" + l.Dominio
+			if l.IndicadorReversao {
+				qtdEstVis[k]++
+			} else {
+				qtdLancVis[k]++
+			}
 		}
 		for _, c := range combosSet {
 			k := c.Produto + "\x00" + c.Dominio
@@ -798,8 +900,8 @@ func (s *MovimentoContabilService) ConsultarLancamentos(ctx context.Context, dat
 
 // ConsultarLancamentosFiltrado retorna lançamentos paginados por período, boleto e versão.
 // Elimina lançamentos cujo saldo líquido (normal - reversão) é zero — usado pela página de consulta do frontend.
-func (s *MovimentoContabilService) ConsultarLancamentosFiltrado(ctx context.Context, dataInicio, dataFim time.Time, boleto string, versao int, versaoModo string, pagina, tamanho int) (*model.PaginaLancamentos, error) {
-	return s.movimentoRepo.ConsultarPaginadoFiltradoSemCancelados(ctx, dataInicio, dataFim, boleto, versao, versaoModo, pagina, tamanho)
+func (s *MovimentoContabilService) ConsultarLancamentosFiltrado(ctx context.Context, dataInicio, dataFim time.Time, boleto, veiculo string, versao int, versaoModo string, pagina, tamanho int) (*model.PaginaLancamentos, error) {
+	return s.movimentoRepo.ConsultarPaginadoFiltradoSemCancelados(ctx, model.FiltroMovimento{DataInicio: dataInicio, DataFim: dataFim, Boleto: boleto, Veiculo: veiculo, Versao: versao, VersaoModo: versaoModo, Pagina: pagina, Tamanho: tamanho})
 }
 
 // ConsultarLancamentosFiltradoEscopo funciona como ConsultarLancamentosFiltrado, mas
@@ -807,12 +909,12 @@ func (s *MovimentoContabilService) ConsultarLancamentosFiltrado(ctx context.Cont
 // vazios, delega diretamente ao repositório (paginação eficiente). Quando há filtro de
 // escopo, busca todos os lançamentos que atendem aos demais critérios, filtra por
 // produto/domínio e pagina o resultado — mantendo a contagem total correta.
-func (s *MovimentoContabilService) ConsultarLancamentosFiltradoEscopo(ctx context.Context, dataInicio, dataFim time.Time, boleto, produto, dominio string, versao int, versaoModo string, pagina, tamanho int) (*model.PaginaLancamentos, error) {
+func (s *MovimentoContabilService) ConsultarLancamentosFiltradoEscopo(ctx context.Context, dataInicio, dataFim time.Time, boleto, veiculo, produto, dominio string, versao int, versaoModo string, pagina, tamanho int) (*model.PaginaLancamentos, error) {
 	if produto == "" && dominio == "" {
-		return s.movimentoRepo.ConsultarPaginadoFiltradoSemCancelados(ctx, dataInicio, dataFim, boleto, versao, versaoModo, pagina, tamanho)
+		return s.movimentoRepo.ConsultarPaginadoFiltradoSemCancelados(ctx, model.FiltroMovimento{DataInicio: dataInicio, DataFim: dataFim, Boleto: boleto, Veiculo: veiculo, Versao: versao, VersaoModo: versaoModo, Pagina: pagina, Tamanho: tamanho})
 	}
 
-	completo, err := s.movimentoRepo.ConsultarPaginadoFiltradoSemCancelados(ctx, dataInicio, dataFim, boleto, versao, versaoModo, 1, 999999)
+	completo, err := s.movimentoRepo.ConsultarPaginadoFiltradoSemCancelados(ctx, model.FiltroMovimento{DataInicio: dataInicio, DataFim: dataFim, Boleto: boleto, Veiculo: veiculo, Versao: versao, VersaoModo: versaoModo, Pagina: 1, Tamanho: 999999})
 	if err != nil {
 		return nil, err
 	}
@@ -887,7 +989,7 @@ func (s *MovimentoContabilService) ExcluirMovimento(ctx context.Context, data ti
 // (fonte da verdade). Se filtroCombos != nil, restringe aos combos informados. Base da
 // reconstrução (RN-170.1) e da recomputação pós-exclusão.
 func (s *MovimentoContabilService) calcularSaldos(ctx context.Context, filtroCombos map[string]bool) ([]model.SaldoConta, error) {
-	pag, err := s.movimentoRepo.ConsultarPaginadoFiltrado(ctx, time.Date(1900, 1, 1, 0, 0, 0, 0, time.UTC), time.Date(2999, 12, 31, 0, 0, 0, 0, time.UTC), "", 0, "vigente", 1, 999999)
+	pag, err := s.movimentoRepo.ConsultarPaginadoFiltrado(ctx, model.FiltroMovimento{DataInicio: time.Date(1900, 1, 1, 0, 0, 0, 0, time.UTC), DataFim: time.Date(2999, 12, 31, 0, 0, 0, 0, time.UTC), VersaoModo: "vigente", Pagina: 1, Tamanho: 999999})
 	if err != nil {
 		return nil, err
 	}
@@ -941,6 +1043,14 @@ func (s *MovimentoContabilService) ListarSaldos(ctx context.Context, filtro mode
 		return []model.SaldoConta{}, nil
 	}
 	return s.saldoRepo.Listar(ctx, filtro)
+}
+
+// ListarSaldosPaginado expõe a projeção de saldo paginada para o menu Saldos (RF-065).
+func (s *MovimentoContabilService) ListarSaldosPaginado(ctx context.Context, filtro model.SaldoFiltro, pagina, tamanho int) (*model.SaldoPagina, error) {
+	if s.saldoRepo == nil {
+		return &model.SaldoPagina{Pagina: pagina, Tamanho: tamanho, Saldos: []model.SaldoConta{}}, nil
+	}
+	return s.saldoRepo.ListarPaginado(ctx, filtro, pagina, tamanho)
 }
 
 // SaldoVazio informa se a projeção de saldo ainda não foi populada.
@@ -1049,6 +1159,7 @@ func novaInconsistencia(data time.Time, boleto, produto, dominio string, regra m
 		model.InconsistenciaPreCondicao: "pré-condição",
 		model.InconsistenciaCondicao:    "condição",
 		model.InconsistenciaCampoValor:  "campo valor",
+		model.InconsistenciaCampoMoeda:  "campo moeda",
 	}
 	detalhe := fmt.Sprintf("A %s da regra %q referencia campo(s) inexistente(s) na posição: %s. Lançamento não gerado.",
 		rotulos[tipo], regra.Descricao, campos)
@@ -1246,13 +1357,20 @@ func (s *MovimentoContabilService) InserirLancamentosManuais(ctx context.Context
 		if cond == nil {
 			return 0, fmt.Errorf("linha %d: condição %d não pertence à regra %d (ou inativa)", linha, it.IDCondicao, it.IDRegra)
 		}
+		// Estorno manual: inverte débito/crédito da condição (mesma convenção do estorno
+		// automático — passo 4), para que a lógica de net/saldo/"sem cancelados" desinverta
+		// via canonChaveLanc e o estorno case/anule o lançamento normal da mesma condição.
+		contaDeb, contaCred := cond.ContaDebito, cond.ContaCredito
+		if it.IndicadorReversao {
+			contaDeb, contaCred = cond.ContaCredito, cond.ContaDebito
+		}
 		lancs = append(lancs, model.LancamentoContabil{
 			DataLoteContabil:          data,
 			CodigoIdentificadorBoleto: strings.TrimSpace(it.Boleto),
 			ValorLancamentoContabil:   it.Valor,
 			MoedaLancamentoContabil:   strings.TrimSpace(it.Moeda),
-			ContaDebito:               cond.ContaDebito,
-			ContaCredito:              cond.ContaCredito,
+			ContaDebito:               contaDeb,
+			ContaCredito:              contaCred,
 			Produto:                   strings.TrimSpace(it.Produto),
 			Dominio:                   strings.TrimSpace(it.Dominio),
 			IndicadorReversao:         it.IndicadorReversao,
@@ -1260,6 +1378,7 @@ func (s *MovimentoContabilService) InserirLancamentosManuais(ctx context.Context
 			DescricaoCondicaoContabil: cond.Condicao,
 			IDRegraContabil:           reg.ID,
 			Origem:                    model.OrigemManual,
+			Veiculo:                   strings.TrimSpace(it.Veiculo),
 		})
 	}
 

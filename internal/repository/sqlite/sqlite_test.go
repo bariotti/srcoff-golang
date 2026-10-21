@@ -137,7 +137,7 @@ func TestMovimentoBulkEConsulta(t *testing.T) {
 		t.Fatalf("data do lançamento não bate: %v", pg.Lancamentos[0].DataLoteContabil)
 	}
 	// Sem cancelados: par A (saldo zero) some, resta só B.
-	sc, _ := s.mov.ConsultarPaginadoFiltradoSemCancelados(ctx, d, d, "", 0, "vigente", 1, 100)
+	sc, _ := s.mov.ConsultarPaginadoFiltradoSemCancelados(ctx, model.FiltroMovimento{DataInicio: d, DataFim: d, VersaoModo: "vigente", Pagina: 1, Tamanho: 100})
 	if sc.Total != 1 || sc.Lancamentos[0].CodigoIdentificadorBoleto != "B" {
 		t.Fatalf("sem cancelados esperado apenas B, obteve total=%d %+v", sc.Total, sc.Lancamentos)
 	}

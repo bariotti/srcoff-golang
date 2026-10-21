@@ -31,10 +31,11 @@ var layoutsFormatoData = map[string]string{
 // configDoPadrao converte os separadores textuais e o formato de data do padrão em parseConfig.
 func configDoPadrao(p model.PadraoArquivo) parseConfig {
 	cfg := parseConfig{
-		sepDecimal:   p.SeparadorDecimal,
-		sepMilhar:    p.SeparadorMilhar,
-		formatoData:  layoutsFormatoData[p.FormatoData], // rótulo desconhecido/vazio → "" (automático)
-		colunaBoleto: normalizarNome(p.ColunaBoleto),    // mantida como texto na importação
+		sepDecimal:    p.SeparadorDecimal,
+		sepMilhar:     p.SeparadorMilhar,
+		formatoData:   layoutsFormatoData[p.FormatoData], // rótulo desconhecido/vazio → "" (automático)
+		colunaBoleto:  normalizarNome(p.ColunaBoleto),    // mantida como texto na importação
+		colunaVeiculo: normalizarNome(p.ColunaVeiculo),   // mantida como texto na importação
 	}
 	switch p.Delimitador {
 	case ";":
@@ -48,7 +49,7 @@ func configDoPadrao(p model.PadraoArquivo) parseConfig {
 // importarConteudoParaProduto resolve a coluna de data (via campo_data da regra do
 // produto ou detecção), preenche data, produto e domínio em cada registro e importa
 // o lote. Cada combinação recebe uma cópia dos registros para não compartilhar mutações.
-func importarConteudoParaProduto(ctx context.Context, svc posicaoCarteiraSvc, registros []map[string]interface{}, colunas []string, produto, dominio, colunaDataPadrao string) ([]service.LoteImportado, error) {
+func importarConteudoParaProduto(ctx context.Context, svc posicaoCarteiraSvc, registros []map[string]interface{}, colunas []string, produto, dominio, colunaDataPadrao, colunaVeiculoPadrao string) ([]service.LoteImportado, error) {
 	// Prioridade: coluna de data informada no padrão de arquivo; senão (legado/upload
 	// individual), tenta detectar automaticamente.
 	colunaData := ""
@@ -63,6 +64,14 @@ func importarConteudoParaProduto(ctx context.Context, svc posicaoCarteiraSvc, re
 	}
 	if !colunaExiste(colunas, colunaData) {
 		return nil, fmt.Errorf("coluna de data base %q (do padrão de arquivo) não existe no arquivo", colunaData)
+	}
+	// Veículo da operação (RF-034/RN-180): obrigatório quando o padrão o define. A coluna
+	// precisa existir no arquivo; o valor é copiado para o movimento na geração do contábil.
+	if colunaVeiculoPadrao != "" {
+		colunaVeiculo := normalizarNome(colunaVeiculoPadrao)
+		if !colunaExiste(colunas, colunaVeiculo) {
+			return nil, fmt.Errorf("coluna do veículo %q (do padrão de arquivo) não existe no arquivo", colunaVeiculo)
+		}
 	}
 
 	clones := make([]map[string]interface{}, len(registros))
@@ -135,7 +144,7 @@ func importarArquivoPorPadrao(ctx context.Context, svc posicaoCarteiraSvc, padra
 			continue
 		}
 		visto[chave] = true
-		lotes, err := importarConteudoParaProduto(ctx, svc, registros, colunas, pd.Produto, pd.Dominio, pd.ColunaData)
+		lotes, err := importarConteudoParaProduto(ctx, svc, registros, colunas, pd.Produto, pd.Dominio, pd.ColunaData, pd.ColunaVeiculo)
 		if err != nil {
 			res.Produtos = append(res.Produtos, ResultadoImportacaoProduto{Produto: pd.Produto, Dominio: pd.Dominio, Erro: err.Error()})
 			continue

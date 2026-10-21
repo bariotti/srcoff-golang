@@ -50,11 +50,11 @@ func (f *fakeMovimentoRepoEstorno) ObterVersaoAtual(ctx context.Context, data ti
 	return f.versaoAtual, nil
 }
 
-func (f *fakeMovimentoRepoEstorno) ConsultarPaginadoFiltrado(ctx context.Context, dataInicio, dataFim time.Time, boleto string, versao int, versaoModo string, pagina, tamanho int) (*model.PaginaLancamentos, error) {
+func (f *fakeMovimentoRepoEstorno) ConsultarPaginadoFiltrado(ctx context.Context, filtro model.FiltroMovimento) (*model.PaginaLancamentos, error) {
 	return &model.PaginaLancamentos{}, nil
 }
 
-func (f *fakeMovimentoRepoEstorno) ConsultarPaginadoFiltradoSemCancelados(ctx context.Context, dataInicio, dataFim time.Time, boleto string, versao int, versaoModo string, pagina, tamanho int) (*model.PaginaLancamentos, error) {
+func (f *fakeMovimentoRepoEstorno) ConsultarPaginadoFiltradoSemCancelados(ctx context.Context, filtro model.FiltroMovimento) (*model.PaginaLancamentos, error) {
 	return &model.PaginaLancamentos{}, nil
 }
 
