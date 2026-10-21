@@ -49,6 +49,13 @@ type PadraoArquivoRepository interface {
 	Excluir(ctx context.Context, id int64) error
 }
 
+// VeiculoDeParaRepository persiste o De/Para de nome do veículo → código (RF-035).
+type VeiculoDeParaRepository interface {
+	Listar(ctx context.Context) ([]model.VeiculoDePara, error)
+	Criar(ctx context.Context, v model.VeiculoDePara) (int64, error)
+	Excluir(ctx context.Context, id int64) error
+}
+
 // ConfiguracaoRepository persiste configurações chave→valor (ex: pastas monitoradas).
 type ConfiguracaoRepository interface {
 	Obter(ctx context.Context, chave string) (string, error)

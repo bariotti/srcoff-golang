@@ -42,6 +42,12 @@ var ddlGarantido = []string{
 	`IF COL_LENGTH('padrao_arquivo','coluna_data') IS NULL BEGIN ALTER TABLE padrao_arquivo ADD coluna_data VARCHAR(100) NULL END`,
 	`IF COL_LENGTH('padrao_arquivo','coluna_boleto') IS NULL BEGIN ALTER TABLE padrao_arquivo ADD coluna_boleto VARCHAR(100) NULL END`,
 	`IF COL_LENGTH('padrao_arquivo','coluna_veiculo') IS NULL BEGIN ALTER TABLE padrao_arquivo ADD coluna_veiculo VARCHAR(100) NULL END`,
+	// veiculo_de_para (De/Para nome do veículo → código; usado só na extração CSV — RF-035)
+	`IF OBJECT_ID('veiculo_de_para','U') IS NULL BEGIN
+	   CREATE TABLE veiculo_de_para (
+	     id BIGINT IDENTITY(1,1) PRIMARY KEY,
+	     veiculo VARCHAR(255) NOT NULL, codigo VARCHAR(100) NOT NULL);
+	 END`,
 	`IF COL_LENGTH('padrao_arquivo','obrigatorio_mov_d1') IS NULL BEGIN ALTER TABLE padrao_arquivo ADD obrigatorio_mov_d1 BIT NULL END`,
 	// saldo_conta (projeção materializada — RN-170). Tamanhos pequenos p/ a PK caber em 900 bytes.
 	`IF OBJECT_ID('saldo_conta','U') IS NULL BEGIN

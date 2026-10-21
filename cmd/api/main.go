@@ -35,6 +35,7 @@ func main() {
 		execucaoRepo       repository.ExecucaoRepository
 		notificacaoRepo    repository.NotificacaoRepository
 		saldoRepo          repository.SaldoContaRepository
+		veiculoDeParaRepo  repository.VeiculoDeParaRepository
 	)
 
 	var rawSQLDB *sql.DB
@@ -56,6 +57,7 @@ func main() {
 		execucaoRepo = filerepo.NewExecucaoRepo(dir)
 		notificacaoRepo = filerepo.NewNotificacaoRepo(dir)
 		saldoRepo = filerepo.NewSaldoContaRepo(dir)
+		veiculoDeParaRepo = filerepo.NewVeiculoDeParaRepo(dir)
 
 	case "sqlite":
 		path := os.Getenv("SQLITE_PATH")
@@ -78,6 +80,7 @@ func main() {
 		execucaoRepo = sqliterepo.NewExecucaoRepo(sdb)
 		notificacaoRepo = sqliterepo.NewNotificacaoRepo(sdb)
 		saldoRepo = sqliterepo.NewSaldoContaRepo(sdb)
+		veiculoDeParaRepo = sqliterepo.NewVeiculoDeParaRepo(sdb)
 
 	default: // sqlserver
 		rawSQLDB = db.Connect()
@@ -98,6 +101,7 @@ func main() {
 		execucaoRepo = repository.NewExecucaoRepo(rawSQLDB)
 		notificacaoRepo = repository.NewNotificacaoRepo(rawSQLDB)
 		saldoRepo = repository.NewSaldoContaRepo(rawSQLDB)
+		veiculoDeParaRepo = repository.NewVeiculoDeParaRepo(rawSQLDB)
 	}
 
 	// 2. Instanciar avaliador de expressões
@@ -137,6 +141,7 @@ func main() {
 	posicaoSvc := service.NewPosicaoCarteiraService(posicaoRepo)
 	parametrizacaoSvc := service.NewParametrizacaoService(parametrizacaoRepo)
 	padraoArquivoSvc := service.NewPadraoArquivoService(padraoArquivoRepo)
+	veiculoDeParaSvc := service.NewVeiculoDeParaService(veiculoDeParaRepo)
 	configuracaoSvc := service.NewConfiguracaoService(configuracaoRepo)
 
 	// 4. Instanciar handlers
@@ -147,11 +152,12 @@ func main() {
 	posicaoHandler := handler.NewPosicaoCarteiraHandler(posicaoSvc, padraoArquivoSvc)
 	parametrizacaoHandler := handler.NewParametrizacaoHandler(parametrizacaoSvc)
 	padraoArquivoHandler := handler.NewPadraoArquivoHandler(padraoArquivoSvc)
+	veiculoDeParaHandler := handler.NewVeiculoDeParaHandler(veiculoDeParaSvc)
 	configuracaoHandler := handler.NewConfiguracaoHandler(configuracaoSvc)
 	inconsistenciaHandler := handler.NewInconsistenciaHandler(inconsistenciaSvc)
 	execucaoHandler := handler.NewExecucaoHandler(execucaoSvc)
 	notificacaoHandler := handler.NewNotificacaoHandler(notificacaoSvc)
-	exportHandler := handler.NewExportHandler(movimentoSvc)
+	exportHandler := handler.NewExportHandler(movimentoSvc).ComVeiculoDePara(veiculoDeParaSvc)
 	nlQueryHandler := handler.NewNLQueryHandler(rawSQLDB)
 
 	// Watcher de pasta monitorada (varredura periódica em segundo plano).
@@ -238,6 +244,7 @@ func main() {
 	})
 	http.HandleFunc("/api/v1/parametrizacoes/opcoes", parametrizacaoHandler.Opcoes)
 	http.HandleFunc("/api/v1/parametrizacoes/padroes", padraoArquivoHandler.Padroes)
+	http.HandleFunc("/api/v1/parametrizacoes/veiculo-depara", veiculoDeParaHandler.VeiculoDePara)
 	http.HandleFunc("/api/v1/configuracoes", configuracaoHandler.Configuracoes)
 	http.HandleFunc("/api/v1/inconsistencias", inconsistenciaHandler.Listar)
 	http.HandleFunc("/api/v1/inconsistencias/export", inconsistenciaHandler.Export)

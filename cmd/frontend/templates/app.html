@@ -640,6 +640,24 @@
             </div>
           </div>
 
+          <!-- De/Para de Veículo -->
+          <div class="col-md-6">
+            <div class="card shadow-sm">
+              <div class="card-header"><i class="bi bi-arrow-left-right me-2"></i>De/Para de Veículo<span class="subtitulo">nome → código (só na extração CSV)</span></div>
+              <div class="card-body">
+                <p class="text-muted small mb-3">Ao <strong>extrair o CSV</strong> do movimento contábil, o nome do veículo é confrontado com este De/Para: havendo mapeamento, o CSV recebe o <strong>código</strong>; caso contrário, o <strong>nome</strong>. A comparação ignora maiúsculas/minúsculas. Não afeta nenhuma outra funcionalidade (nem o TXT).</p>
+                <div class="row g-2 mb-2">
+                  <div class="col-6"><label class="form-label form-label-sm mb-0">Nome do Veículo <span class="text-danger">*</span></label>
+                    <input type="text" id="param-vdp-veiculo" class="form-control form-control-sm" placeholder="ex: NASSAU"></div>
+                  <div class="col-6"><label class="form-label form-label-sm mb-0">Código <span class="text-danger">*</span></label>
+                    <input type="text" id="param-vdp-codigo" class="form-control form-control-sm" placeholder="ex: 001"></div>
+                  <div class="col-12"><button class="btn btn-primary btn-sm w-100" onclick="adicionarVeiculoDePara()"><i class="bi bi-plus"></i> Adicionar De/Para</button></div>
+                </div>
+                <ul class="list-group list-group-flush" id="param-vdp-lista"></ul>
+              </div>
+            </div>
+          </div>
+
           <!-- Pastas de importação -->
           <div class="col-md-6">
             <div class="card shadow-sm">
@@ -891,6 +909,7 @@ async function renderParametrizacoes() {
   preencherSelectOpcoes('param-padrao-produto', 'produto');
   preencherSelectOpcoes('param-padrao-dominio', 'dominio');
   renderPadroes();
+  renderVeiculoDePara();
   carregarPastas();
 }
 
@@ -961,6 +980,41 @@ async function excluirPadrao(id) {
   if (!confirm('Remover este padrão?')) return;
   const r = await api('DELETE', '/v1/parametrizacoes/padroes?id=' + id);
   if (r?.mensagem) renderPadroes();
+  else if (r?.erro) toast(r.erro, 'danger');
+}
+
+// ── DE/PARA DE VEÍCULO (RF-035) ────────────────────────────
+async function renderVeiculoDePara() {
+  const r = await api('GET', '/v1/parametrizacoes/veiculo-depara');
+  const ul = document.getElementById('param-vdp-lista');
+  if (!ul) return;
+  const lista = Array.isArray(r) ? r : [];
+  if (!lista.length) { ul.innerHTML = '<li class="list-group-item text-muted">Nenhum De/Para cadastrado.</li>'; return; }
+  ul.innerHTML = lista.map(v => `<li class="list-group-item d-flex justify-content-between align-items-center py-1">
+    <span><span class="badge bg-secondary">${esc(v.veiculo)}</span> <i class="bi bi-arrow-right mx-1"></i> <code>${esc(v.codigo)}</code></span>
+    <button class="btn btn-sm btn-outline-danger py-0 px-1" onclick="excluirVeiculoDePara(${v.id})"><i class="bi bi-trash"></i></button>
+  </li>`).join('');
+}
+
+async function adicionarVeiculoDePara() {
+  const veiculo = document.getElementById('param-vdp-veiculo').value.trim();
+  const codigo = document.getElementById('param-vdp-codigo').value.trim();
+  if (!veiculo) { toast('Informe o nome do veículo', 'warning'); return; }
+  if (!codigo) { toast('Informe o código do veículo', 'warning'); return; }
+  const r = await api('POST', '/v1/parametrizacoes/veiculo-depara', { veiculo, codigo });
+  if (r?.id) {
+    document.getElementById('param-vdp-veiculo').value = '';
+    document.getElementById('param-vdp-codigo').value = '';
+    renderVeiculoDePara();
+  } else if (r?.erro) {
+    toast(r.erro, 'danger');
+  }
+}
+
+async function excluirVeiculoDePara(id) {
+  if (!confirm('Remover este De/Para?')) return;
+  const r = await api('DELETE', '/v1/parametrizacoes/veiculo-depara?id=' + id);
+  if (r?.mensagem) renderVeiculoDePara();
   else if (r?.erro) toast(r.erro, 'danger');
 }
 

@@ -18,12 +18,25 @@ type exportMovimentoSvc interface {
 	ConsultarLancamentosFiltradoEscopo(ctx context.Context, dataInicio, dataFim time.Time, boleto, veiculo, produto, dominio string, versao int, versaoModo string, pagina, tamanho int) (*model.PaginaLancamentos, error)
 }
 
+// veiculoDeParaLookup fornece o De/Para nome→código, aplicado SOMENTE na extração CSV (RF-035).
+type veiculoDeParaLookup interface {
+	MapaVeiculoCodigo(ctx context.Context) map[string]string
+}
+
 type ExportHandler struct {
-	svc exportMovimentoSvc
+	svc           exportMovimentoSvc
+	deParaVeiculo veiculoDeParaLookup
 }
 
 func NewExportHandler(svc exportMovimentoSvc) *ExportHandler {
 	return &ExportHandler{svc: svc}
+}
+
+// ComVeiculoDePara injeta o De/Para de veículo (opcional). Quando ausente, o CSV extrai o
+// nome do veículo normalmente. Spec: RF-035/RN-181.
+func (h *ExportHandler) ComVeiculoDePara(l veiculoDeParaLookup) *ExportHandler {
+	h.deParaVeiculo = l
+	return h
 }
 
 // ExportMovimentoCSV trata GET /api/v1/movimento-contabil/export
@@ -71,6 +84,21 @@ func (h *ExportHandler) ExportMovimentoCSV(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
+	// De/Para de veículo → código (RF-035): aplicado SOMENTE nesta extração CSV. Quando há
+	// mapeamento para o nome (case-insensitive), o CSV recebe o código; senão, o nome.
+	var mapaVeic map[string]string
+	if h.deParaVeiculo != nil {
+		mapaVeic = h.deParaVeiculo.MapaVeiculoCodigo(r.Context())
+	}
+	veiculoSaida := func(nome string) string {
+		if mapaVeic != nil {
+			if cod, ok := mapaVeic[strings.ToLower(strings.TrimSpace(nome))]; ok {
+				return cod
+			}
+		}
+		return nome
+	}
+
 	var buf bytes.Buffer
 	// BOM UTF-8 para Excel reconhecer acentos
 	buf.Write([]byte{0xEF, 0xBB, 0xBF})
@@ -102,7 +130,7 @@ func (h *ExportHandler) ExportMovimentoCSV(w http.ResponseWriter, r *http.Reques
 			l.DataLoteContabil.Format("2006-01-02"),
 			strconv.Itoa(l.CodigoVersaoConteudo),
 			l.CodigoIdentificadorBoleto,
-			l.Veiculo,
+			veiculoSaida(l.Veiculo),
 			l.ContaDebito,
 			l.ContaCredito,
 			fmt.Sprintf("%.6f", l.ValorLancamentoContabil),

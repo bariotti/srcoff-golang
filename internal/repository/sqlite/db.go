@@ -189,6 +189,11 @@ CREATE TABLE IF NOT EXISTS padrao_arquivo (
   coluna_veiculo TEXT,
   obrigatorio_mov_d1 INTEGER
 );
+CREATE TABLE IF NOT EXISTS veiculo_de_para (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  veiculo TEXT NOT NULL,
+  codigo TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS configuracao (
   chave TEXT PRIMARY KEY,
   valor TEXT
