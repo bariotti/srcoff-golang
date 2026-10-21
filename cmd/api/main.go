@@ -21,7 +21,7 @@ func main() {
 	// 1. Selecionar backend de armazenamento via STORAGE_BACKEND (sqlserver | file | sqlite)
 	backend := os.Getenv("STORAGE_BACKEND")
 	if backend == "" {
-		backend = "sqlserver"
+		backend = "sqlite"
 	}
 
 	var (
