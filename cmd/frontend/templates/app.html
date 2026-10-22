@@ -6,6 +6,10 @@
   <title>SRCOff — Roteirização Contábil Offshore</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+  <script>
+    // Aplica o tema salvo (dark "Matrix") o mais cedo possível, evitando flash de tela clara.
+    try { if (localStorage.getItem('srcoff_tema') === 'dark') document.documentElement.setAttribute('data-bs-theme', 'dark'); } catch (e) {}
+  </script>
   <style>
     body { background: #f8f9fa; }
     .sidebar { height: 100vh; position: sticky; top: 0; overflow-y: auto; background: #212529; }
@@ -51,6 +55,59 @@
     .cal-legenda { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 12px; font-size: 0.8rem; color: #495057; }
     .cal-legenda span { display: inline-flex; align-items: center; gap: 6px; }
     .cal-dot { width: 14px; height: 14px; border-radius: 4px; display: inline-block; border: 1px solid #e9ecef; }
+
+    /* ===== Dark Mode — tema "Matrix" (terminal Linux raiz) ===== */
+    [data-bs-theme="dark"] {
+      --srcoff-accent: #00ff41;
+      --bs-body-font-family: ui-monospace, "SFMono-Regular", "JetBrains Mono", "Cascadia Code", Menlo, Consolas, monospace;
+    }
+    [data-bs-theme="dark"] body { background: #070b07; color: #c9f5d2; }
+    [data-bs-theme="dark"] .sidebar { background: #050805; border-right: 1px solid rgba(0,255,65,.18); }
+    [data-bs-theme="dark"] .sidebar .nav-link { color: #63c77e; }
+    [data-bs-theme="dark"] .sidebar .nav-link:hover,
+    [data-bs-theme="dark"] .sidebar .nav-link.active { background: rgba(0,255,65,.14); color: #00ff41; }
+    [data-bs-theme="dark"] .sidebar-brand { color: #00ff41; text-shadow: 0 0 8px rgba(0,255,65,.55); }
+    [data-bs-theme="dark"] .card { background: #0b120b; border-color: rgba(0,255,65,.18); }
+    [data-bs-theme="dark"] .card-header:not([class*="bg-"]) {
+      background: #0e160e; color: #00ff41; border-left-color: #00ff41;
+    }
+    [data-bs-theme="dark"] .card-header:not([class*="bg-"]) i.bi { color: #00ff41; }
+    [data-bs-theme="dark"] .card-header .subtitulo { color: #63c77e; }
+    [data-bs-theme="dark"] a { color: #35d667; }
+    [data-bs-theme="dark"] a:hover { color: #00ff41; }
+    [data-bs-theme="dark"] .table { --bs-table-bg: transparent; --bs-table-color: #c9f5d2; color: #c9f5d2; }
+    [data-bs-theme="dark"] .table > thead.table-dark th,
+    [data-bs-theme="dark"] .table > thead th { background: #0e160e !important; color: #00ff41 !important; border-color: rgba(0,255,65,.25); }
+    [data-bs-theme="dark"] .table-striped > tbody > tr:nth-of-type(odd) > * { --bs-table-bg-type: rgba(0,255,65,.04); }
+    [data-bs-theme="dark"] .table-hover > tbody > tr:hover > * { --bs-table-bg-state: rgba(0,255,65,.10); }
+    [data-bs-theme="dark"] .table, [data-bs-theme="dark"] .table > :not(caption) > * > * { border-color: rgba(0,255,65,.15); }
+    /* Botões primários em verde "terminal" */
+    [data-bs-theme="dark"] .btn-primary {
+      --bs-btn-bg: #00c853; --bs-btn-border-color: #00c853; --bs-btn-color: #04210a;
+      --bs-btn-hover-bg: #00e676; --bs-btn-hover-border-color: #00e676; --bs-btn-hover-color: #04210a;
+      --bs-btn-active-bg: #00e676; --bs-btn-active-border-color: #00e676;
+    }
+    [data-bs-theme="dark"] .text-muted { color: #5f9c70 !important; }
+    [data-bs-theme="dark"] .page > h4 { text-shadow: 0 0 6px rgba(0,255,65,.25); }
+    [data-bs-theme="dark"] .form-control:focus, [data-bs-theme="dark"] .form-select:focus {
+      border-color: #00ff41; box-shadow: 0 0 0 .2rem rgba(0,255,65,.25);
+    }
+    [data-bs-theme="dark"] code { color: #00ff41; }
+    /* Calendário no escuro */
+    [data-bs-theme="dark"] .cal-cell { border-color: rgba(0,255,65,.18); }
+    [data-bs-theme="dark"] .cal-head { color: #63c77e; }
+    [data-bs-theme="dark"] .cal-fut { background: #0b120b; color: #4f7a5b; border-style: dashed; }
+    [data-bs-theme="dark"] .cal-nao-util { background: #12160f; color: #4f7a5b; }
+    [data-bs-theme="dark"] .cal-cell.cal-hoje { box-shadow: 0 0 0 2px #00ff41 inset; }
+    /* Botão de alternância do tema */
+    #darkToggle { position: fixed; top: 14px; right: 76px; z-index: 1050; }
+    [data-bs-theme="dark"] #darkToggle,
+    [data-bs-theme="dark"] #notifToggle { background: #0e160e; border-color: #00ff41; color: #00ff41; }
+    /* Controles de colunas do grid de consulta */
+    #c-colunas-panel { position: absolute; z-index: 1060; min-width: 230px; max-height: 340px; overflow:auto; right: 0; }
+    #c-colunas-panel .col-item { cursor: default; }
+    th.mov-th { cursor: grab; user-select: none; }
+    th.mov-th.drag-over { outline: 2px dashed var(--srcoff-accent); outline-offset: -2px; }
   </style>
 </head>
 <body>
@@ -60,9 +117,14 @@
 <div class="toast-container" id="toastContainer"></div>
 <datalist id="r-campos-datalist"></datalist>
 
+<!-- Alternância de tema (Dark Mode "Matrix") -->
+<button id="darkToggle" class="btn btn-light border" onclick="toggleTema()" title="Alternar tema (Dark Mode)">
+  <i class="bi bi-moon-stars fs-5"></i>
+</button>
+
 <!-- Sino de notificações -->
 <div style="position:fixed; top:14px; right:20px; z-index:1050">
-  <button class="btn btn-light border position-relative" onclick="toggleNotificacoes()" title="Notificações">
+  <button id="notifToggle" class="btn btn-light border position-relative" onclick="toggleNotificacoes()" title="Notificações">
     <i class="bi bi-bell fs-5"></i>
     <span id="notif-badge" class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger" style="display:none">0</span>
   </button>
@@ -247,10 +309,12 @@
                   <option value="100" selected>100</option>
                 </select>
               </div>
-              <div class="col-auto">
+              <div class="col-auto position-relative">
                 <button class="btn btn-primary btn-sm" onclick="consultarMovimento(1)"><i class="bi bi-search me-1"></i>Consultar</button>
                 <button class="btn btn-success btn-sm ms-1" onclick="exportarCSV()"><i class="bi bi-file-earmark-excel me-1"></i>Excel</button>
                 <button class="btn btn-purple btn-sm ms-1" style="background:#6f42c1;color:white" onclick="showExportTxt()"><i class="bi bi-file-earmark-text me-1"></i>TXT</button>
+                <button class="btn btn-outline-secondary btn-sm ms-1" onclick="toggleColunasPanel()" title="Mostrar/ocultar e reordenar colunas"><i class="bi bi-layout-three-columns me-1"></i>Colunas</button>
+                <div id="c-colunas-panel" class="card shadow-sm p-2" style="display:none"></div>
               </div>
             </div>
           </div>
@@ -1100,6 +1164,22 @@ function spin(show) {
   document.getElementById('spinner').classList.toggle('show', show);
 }
 
+// ── Tema (Dark Mode "Matrix") ──────────────────────────────
+function aplicarTema(dark) {
+  document.documentElement.setAttribute('data-bs-theme', dark ? 'dark' : 'light');
+  const btn = document.getElementById('darkToggle');
+  if (btn) {
+    btn.querySelector('i').className = dark ? 'bi bi-sun-fill fs-5' : 'bi bi-moon-stars fs-5';
+    btn.title = dark ? 'Tema claro' : 'Dark Mode (Matrix)';
+  }
+  try { localStorage.setItem('srcoff_tema', dark ? 'dark' : 'light'); } catch (e) {}
+}
+function toggleTema() {
+  aplicarTema(document.documentElement.getAttribute('data-bs-theme') !== 'dark');
+}
+// Sincroniza o ícone/estado com o tema já aplicado no <head>.
+aplicarTema(document.documentElement.getAttribute('data-bs-theme') === 'dark');
+
 // ── API helpers ────────────────────────────────────────────
 async function api(method, path, body) {
   spin(true);
@@ -1319,6 +1399,152 @@ function buildConsultaParams(pagina) {
   return p;
 }
 
+// ── Colunas do grid (mover / ocultar / reaparecer) ─────────
+const MOV_COLS = [
+  { key: 'data',     label: 'Data',     cell: l => (l.data_lote_contabil || '').substring(0, 10) },
+  { key: 'produto',  label: 'Produto',  cell: l => l.produto || '—' },
+  { key: 'dominio',  label: 'Domínio',  cell: l => l.dominio || '—' },
+  { key: 'versao',   label: 'Versão',   cell: l => l.codigo_versao_conteudo },
+  { key: 'boleto',   label: 'Boleto',   cell: l => l.codigo_identificador_boleto },
+  { key: 'veiculo',  label: 'Veículo',  cell: l => l.veiculo || '—' },
+  { key: 'debito',   label: 'Débito',   cell: l => l.conta_debito },
+  { key: 'credito',  label: 'Crédito',  cell: l => l.conta_credito },
+  { key: 'valor',    label: 'Valor',    cls: 'text-end', cell: l => Number(l.valor_lancamento_contabil).toFixed(2) },
+  { key: 'moeda',    label: 'Moeda',    cell: l => l.moeda_lancamento_contabil },
+  { key: 'reversao', label: 'Reversão', cell: l => l.indicador_reversao ? '<span class="badge bg-warning text-dark">Sim</span>' : '<span class="badge bg-secondary">Não</span>' },
+  { key: 'origem',   label: 'Origem',   cell: l => (l.origem === 'manual') ? '<span class="badge bg-dark">Manual</span>' : '<span class="badge bg-light text-dark border">Auto</span>' },
+  { key: 'regra',    label: 'Regra',    cell: l => l.descricao_regra_contabil },
+];
+const MOV_COLS_MAP = Object.fromEntries(MOV_COLS.map(c => [c.key, c]));
+let movUltimo = null; // último resultado consultado (para re-render sem nova consulta)
+
+function carregarColunasMov() {
+  const padrao = MOV_COLS.map(c => c.key);
+  let ordem = padrao.slice(), ocultas = [];
+  try {
+    const raw = JSON.parse(localStorage.getItem('srcoff_mov_cols') || '{}');
+    if (Array.isArray(raw.ordem)) ordem = raw.ordem.filter(k => MOV_COLS_MAP[k]);
+    if (Array.isArray(raw.ocultas)) ocultas = raw.ocultas.filter(k => MOV_COLS_MAP[k]);
+  } catch (e) {}
+  for (const k of padrao) if (!ordem.includes(k)) ordem.push(k); // colunas novas vão para o fim
+  return { ordem, ocultas };
+}
+function salvarColunasMov() { try { localStorage.setItem('srcoff_mov_cols', JSON.stringify(movColunas)); } catch (e) {} }
+let movColunas = carregarColunasMov();
+
+function renderGridMovimento() {
+  const el = document.getElementById('c-resultado');
+  if (!movUltimo) return;
+  const visiveis = movColunas.ordem.filter(k => !movColunas.ocultas.includes(k));
+  if (!visiveis.length) {
+    el.innerHTML = '<div class="alert alert-warning">Nenhuma coluna selecionada. Use o botão <strong>Colunas</strong> para exibir.</div>';
+    return;
+  }
+  const thead = visiveis.map(k => `<th class="mov-th" draggable="true" data-col="${k}"><i class="bi bi-grip-vertical text-muted me-1"></i>${esc(MOV_COLS_MAP[k].label)}</th>`).join('');
+  const rows = movUltimo.lancamentos.map(l => '<tr>' + visiveis.map(k => {
+    const c = MOV_COLS_MAP[k];
+    const v = c.cell(l);
+    return `<td class="${c.cls || ''}">${v == null ? '' : v}</td>`;
+  }).join('') + '</tr>').join('');
+
+  const tamanho = parseInt(document.getElementById('c-tamanho').value);
+  const totalPages = Math.ceil(movUltimo.total / tamanho);
+  const pagina = movUltimo.pagina;
+  let pag;
+  if (totalPages > 1) {
+    pag = `<nav><ul class="pagination pagination-sm mt-2">
+      ${pagina > 1 ? `<li class="page-item"><a class="page-link" href="#" onclick="consultarMovimento(${pagina - 1})">«</a></li>` : ''}
+      <li class="page-item disabled"><a class="page-link">${pagina} / ${totalPages} (${movUltimo.total} registros)</a></li>
+      ${pagina < totalPages ? `<li class="page-item"><a class="page-link" href="#" onclick="consultarMovimento(${pagina + 1})">»</a></li>` : ''}
+    </ul></nav>`;
+  } else {
+    pag = `<small class="text-muted">${movUltimo.total} registro(s)</small>`;
+  }
+  el.innerHTML = `<div class="card shadow-sm"><div class="card-body p-0">
+    <div class="table-responsive"><table class="table table-sm table-hover table-striped mb-0">
+      <thead class="table-dark"><tr>${thead}</tr></thead>
+      <tbody>${rows}</tbody>
+    </table></div>
+    <div class="px-3 py-2">${pag}</div>
+  </div></div>`;
+  ligarDragColunas();
+}
+
+function ligarDragColunas() {
+  let origem = null;
+  document.querySelectorAll('#c-resultado th.mov-th').forEach(th => {
+    th.addEventListener('dragstart', e => { origem = th.dataset.col; e.dataTransfer.effectAllowed = 'move'; });
+    th.addEventListener('dragover', e => { e.preventDefault(); th.classList.add('drag-over'); });
+    th.addEventListener('dragleave', () => th.classList.remove('drag-over'));
+    th.addEventListener('drop', e => {
+      e.preventDefault(); th.classList.remove('drag-over');
+      const destino = th.dataset.col;
+      if (origem && destino && origem !== destino) moverColunaMov(origem, destino);
+    });
+  });
+}
+function moverColunaMov(origem, destino) {
+  const ord = movColunas.ordem.slice();
+  const i = ord.indexOf(origem), j = ord.indexOf(destino);
+  if (i < 0 || j < 0) return;
+  ord.splice(i, 1);
+  const jd = ord.indexOf(destino);
+  ord.splice(i < j ? jd + 1 : jd, 0, origem);
+  movColunas.ordem = ord;
+  salvarColunasMov();
+  renderGridMovimento();
+  if (document.getElementById('c-colunas-panel').style.display !== 'none') renderColunasPanel();
+}
+
+function toggleColunasPanel() {
+  const p = document.getElementById('c-colunas-panel');
+  const mostrar = p.style.display === 'none' || !p.style.display;
+  p.style.display = mostrar ? 'block' : 'none';
+  if (mostrar) renderColunasPanel();
+}
+function renderColunasPanel() {
+  const p = document.getElementById('c-colunas-panel');
+  const itens = movColunas.ordem.map((k, idx) => {
+    const vis = !movColunas.ocultas.includes(k);
+    return `<div class="col-item d-flex align-items-center justify-content-between py-1">
+      <div class="form-check mb-0">
+        <input class="form-check-input" type="checkbox" id="colchk-${k}" ${vis ? 'checked' : ''} onchange="toggleColunaMov('${k}')">
+        <label class="form-check-label small" for="colchk-${k}">${esc(MOV_COLS_MAP[k].label)}</label>
+      </div>
+      <span class="btn-group btn-group-sm ms-2">
+        <button class="btn btn-outline-secondary py-0 px-1" ${idx === 0 ? 'disabled' : ''} onclick="moverColunaPasso('${k}',-1)" title="Subir"><i class="bi bi-arrow-up"></i></button>
+        <button class="btn btn-outline-secondary py-0 px-1" ${idx === movColunas.ordem.length - 1 ? 'disabled' : ''} onclick="moverColunaPasso('${k}',1)" title="Descer"><i class="bi bi-arrow-down"></i></button>
+      </span>
+    </div>`;
+  }).join('');
+  p.innerHTML = `<div class="d-flex justify-content-between align-items-center mb-1">
+      <strong class="small">Colunas do grid</strong>
+      <button class="btn btn-link btn-sm p-0 text-decoration-none" onclick="restaurarColunasMov()">Restaurar padrão</button>
+    </div>${itens}
+    <div class="small text-muted mt-1"><i class="bi bi-info-circle me-1"></i>Arraste o cabeçalho ou use as setas para mover.</div>`;
+}
+function toggleColunaMov(k) {
+  const i = movColunas.ocultas.indexOf(k);
+  if (i >= 0) movColunas.ocultas.splice(i, 1); else movColunas.ocultas.push(k);
+  salvarColunasMov();
+  renderGridMovimento();
+  renderColunasPanel();
+}
+function moverColunaPasso(k, dir) {
+  const ord = movColunas.ordem, i = ord.indexOf(k), j = i + dir;
+  if (i < 0 || j < 0 || j >= ord.length) return;
+  [ord[i], ord[j]] = [ord[j], ord[i]];
+  salvarColunasMov();
+  renderGridMovimento();
+  renderColunasPanel();
+}
+function restaurarColunasMov() {
+  movColunas = { ordem: MOV_COLS.map(c => c.key), ocultas: [] };
+  salvarColunasMov();
+  renderGridMovimento();
+  renderColunasPanel();
+}
+
 async function consultarMovimento(pagina) {
   // Versão específica exige Produto e Domínio para identificar a combinação versionada.
   if (document.getElementById('c-versao-modo').value === 'especifica') {
@@ -1334,45 +1560,11 @@ async function consultarMovimento(pagina) {
   const r = await api('GET', '/v1/movimento-contabil' + params);
   const el = document.getElementById('c-resultado');
   if (!r || r.erro) { el.innerHTML = `<div class="alert alert-danger">${r?.erro || 'Erro'}</div>`; return; }
-  if (!r.lancamentos || r.lancamentos.length === 0) { el.innerHTML = `<div class="alert alert-info">Nenhum lançamento encontrado.</div>`; return; }
+  if (!r.lancamentos || r.lancamentos.length === 0) { movUltimo = null; el.innerHTML = `<div class="alert alert-info">Nenhum lançamento encontrado.</div>`; return; }
 
-  const tamanho = parseInt(document.getElementById('c-tamanho').value);
-  const totalPages = Math.ceil(r.total / tamanho);
-
-  let rows = r.lancamentos.map(l => `<tr>
-    <td>${l.data_lote_contabil?.substring(0,10) || ''}</td>
-    <td>${l.produto || '—'}</td>
-    <td>${l.dominio || '—'}</td>
-    <td>${l.codigo_versao_conteudo}</td>
-    <td>${l.codigo_identificador_boleto}</td>
-    <td>${l.veiculo || '—'}</td>
-    <td>${l.conta_debito}</td>
-    <td>${l.conta_credito}</td>
-    <td class="text-end">${Number(l.valor_lancamento_contabil).toFixed(2)}</td>
-    <td>${l.moeda_lancamento_contabil}</td>
-    <td>${l.indicador_reversao ? '<span class="badge bg-warning text-dark">Sim</span>' : '<span class="badge bg-secondary">Não</span>'}</td>
-    <td>${(l.origem === 'manual') ? '<span class="badge bg-dark">Manual</span>' : '<span class="badge bg-light text-dark border">Auto</span>'}</td>
-    <td>${l.descricao_regra_contabil}</td>
-  </tr>`).join('');
-
-  let pag = '';
-  if (totalPages > 1) {
-    pag = `<nav><ul class="pagination pagination-sm mt-2">
-      ${pagina > 1 ? `<li class="page-item"><a class="page-link" href="#" onclick="consultarMovimento(${pagina-1})">«</a></li>` : ''}
-      <li class="page-item disabled"><a class="page-link">${pagina} / ${totalPages} (${r.total} registros)</a></li>
-      ${pagina < totalPages ? `<li class="page-item"><a class="page-link" href="#" onclick="consultarMovimento(${pagina+1})">»</a></li>` : ''}
-    </ul></nav>`;
-  } else {
-    pag = `<small class="text-muted">${r.total} registro(s)</small>`;
-  }
-
-  el.innerHTML = `<div class="card shadow-sm"><div class="card-body p-0">
-    <div class="table-responsive"><table class="table table-sm table-hover table-striped mb-0">
-      <thead class="table-dark"><tr><th>Data</th><th>Produto</th><th>Domínio</th><th>Versão</th><th>Boleto</th><th>Veículo</th><th>Débito</th><th>Crédito</th><th>Valor</th><th>Moeda</th><th>Reversão</th><th>Origem</th><th>Regra</th></tr></thead>
-      <tbody>${rows}</tbody>
-    </table></div>
-    <div class="px-3 py-2">${pag}</div>
-  </div></div>`;
+  // Guarda o resultado e renderiza conforme as colunas escolhidas (ordem/ocultas).
+  movUltimo = { lancamentos: r.lancamentos, total: r.total, pagina: pagina };
+  renderGridMovimento();
 }
 
 function exportarCSV() {
