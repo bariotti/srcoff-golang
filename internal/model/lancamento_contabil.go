@@ -25,6 +25,10 @@ type LancamentoContabil struct {
 	IDRegraContabil           int64     `json:"id_regra_contabil"`
 	Origem                    string    `json:"origem"`  // automatico | manual (vazio = automatico)
 	Veiculo                   string    `json:"veiculo"` // veículo da operação, copiado da posição (RF-034/RN-180)
+	// Valor do lançamento na moeda base do veículo (RF-036/RN-182): vem da posição ou é
+	// convertido na geração pela cotação da data base.
+	ValorMoedaBaseVeiculo float64 `json:"valor_moeda_base_veiculo"`
+	MoedaBaseVeiculo      string  `json:"moeda_base_veiculo"`
 }
 
 // FiltroMovimento parametriza a consulta paginada de lançamentos contábeis
@@ -35,6 +39,8 @@ type FiltroMovimento struct {
 	DataFim    time.Time
 	Boleto     string
 	Veiculo    string
+	Produto    string // filtro exato por produto (vazio = todos)
+	Dominio    string // filtro exato por domínio (vazio = todos)
 	Versao     int
 	VersaoModo string // "vigente" | "todas" | "especifica"
 	Pagina     int

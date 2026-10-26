@@ -10,6 +10,9 @@ const (
 	ConfigPastaMonitorada      = "pasta_monitorada"
 	ConfigPastaProcessados     = "pasta_processados"
 	ConfigIntervaloScanMinutos = "intervalo_scan_minutos"
+	// Importação automática de cotações (reusa o mesmo intervalo de varredura).
+	ConfigPastaCotacaoMonitorada  = "pasta_cotacao_monitorada"
+	ConfigPastaCotacaoProcessados = "pasta_cotacao_processados"
 )
 
 type configuracaoRepo interface {

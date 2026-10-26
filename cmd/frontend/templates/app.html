@@ -56,53 +56,27 @@
     .cal-legenda span { display: inline-flex; align-items: center; gap: 6px; }
     .cal-dot { width: 14px; height: 14px; border-radius: 4px; display: inline-block; border: 1px solid #e9ecef; }
 
-    /* ===== Dark Mode — tema "Matrix" (terminal Linux raiz) ===== */
-    [data-bs-theme="dark"] {
-      --srcoff-accent: #00ff41;
-      --bs-body-font-family: ui-monospace, "SFMono-Regular", "JetBrains Mono", "Cascadia Code", Menlo, Consolas, monospace;
-    }
-    [data-bs-theme="dark"] body { background: #070b07; color: #c9f5d2; }
-    [data-bs-theme="dark"] .sidebar { background: #050805; border-right: 1px solid rgba(0,255,65,.18); }
-    [data-bs-theme="dark"] .sidebar .nav-link { color: #63c77e; }
+    /* ===== Dark Mode — tema escuro sóbrio (slate neutro) ===== */
+    [data-bs-theme="dark"] { --srcoff-accent: #4d9fff; }
+    [data-bs-theme="dark"] body { background: #1a1d21; }
+    [data-bs-theme="dark"] .sidebar { background: #16181c; border-right: 1px solid rgba(255,255,255,.07); }
+    [data-bs-theme="dark"] .sidebar .nav-link { color: #adb5bd; }
     [data-bs-theme="dark"] .sidebar .nav-link:hover,
-    [data-bs-theme="dark"] .sidebar .nav-link.active { background: rgba(0,255,65,.14); color: #00ff41; }
-    [data-bs-theme="dark"] .sidebar-brand { color: #00ff41; text-shadow: 0 0 8px rgba(0,255,65,.55); }
-    [data-bs-theme="dark"] .card { background: #0b120b; border-color: rgba(0,255,65,.18); }
+    [data-bs-theme="dark"] .sidebar .nav-link.active { background: #0d6efd; color: #fff; }
+    [data-bs-theme="dark"] .sidebar-brand { color: #f1f3f5; }
     [data-bs-theme="dark"] .card-header:not([class*="bg-"]) {
-      background: #0e160e; color: #00ff41; border-left-color: #00ff41;
+      background: #262b31; color: #e9ecef;
     }
-    [data-bs-theme="dark"] .card-header:not([class*="bg-"]) i.bi { color: #00ff41; }
-    [data-bs-theme="dark"] .card-header .subtitulo { color: #63c77e; }
-    [data-bs-theme="dark"] a { color: #35d667; }
-    [data-bs-theme="dark"] a:hover { color: #00ff41; }
-    [data-bs-theme="dark"] .table { --bs-table-bg: transparent; --bs-table-color: #c9f5d2; color: #c9f5d2; }
-    [data-bs-theme="dark"] .table > thead.table-dark th,
-    [data-bs-theme="dark"] .table > thead th { background: #0e160e !important; color: #00ff41 !important; border-color: rgba(0,255,65,.25); }
-    [data-bs-theme="dark"] .table-striped > tbody > tr:nth-of-type(odd) > * { --bs-table-bg-type: rgba(0,255,65,.04); }
-    [data-bs-theme="dark"] .table-hover > tbody > tr:hover > * { --bs-table-bg-state: rgba(0,255,65,.10); }
-    [data-bs-theme="dark"] .table, [data-bs-theme="dark"] .table > :not(caption) > * > * { border-color: rgba(0,255,65,.15); }
-    /* Botões primários em verde "terminal" */
-    [data-bs-theme="dark"] .btn-primary {
-      --bs-btn-bg: #00c853; --bs-btn-border-color: #00c853; --bs-btn-color: #04210a;
-      --bs-btn-hover-bg: #00e676; --bs-btn-hover-border-color: #00e676; --bs-btn-hover-color: #04210a;
-      --bs-btn-active-bg: #00e676; --bs-btn-active-border-color: #00e676;
-    }
-    [data-bs-theme="dark"] .text-muted { color: #5f9c70 !important; }
-    [data-bs-theme="dark"] .page > h4 { text-shadow: 0 0 6px rgba(0,255,65,.25); }
-    [data-bs-theme="dark"] .form-control:focus, [data-bs-theme="dark"] .form-select:focus {
-      border-color: #00ff41; box-shadow: 0 0 0 .2rem rgba(0,255,65,.25);
-    }
-    [data-bs-theme="dark"] code { color: #00ff41; }
+    [data-bs-theme="dark"] .card-header .subtitulo { color: #9aa0a6; }
     /* Calendário no escuro */
-    [data-bs-theme="dark"] .cal-cell { border-color: rgba(0,255,65,.18); }
-    [data-bs-theme="dark"] .cal-head { color: #63c77e; }
-    [data-bs-theme="dark"] .cal-fut { background: #0b120b; color: #4f7a5b; border-style: dashed; }
-    [data-bs-theme="dark"] .cal-nao-util { background: #12160f; color: #4f7a5b; }
-    [data-bs-theme="dark"] .cal-cell.cal-hoje { box-shadow: 0 0 0 2px #00ff41 inset; }
+    [data-bs-theme="dark"] .cal-cell { border-color: rgba(255,255,255,.12); }
+    [data-bs-theme="dark"] .cal-head { color: #9aa0a6; }
+    [data-bs-theme="dark"] .cal-fut { background: transparent; color: #6c757d; border-style: dashed; }
+    [data-bs-theme="dark"] .cal-nao-util { background: #2a2e33; color: #6c757d; }
     /* Botão de alternância do tema */
     #darkToggle { position: fixed; top: 14px; right: 76px; z-index: 1050; }
     [data-bs-theme="dark"] #darkToggle,
-    [data-bs-theme="dark"] #notifToggle { background: #0e160e; border-color: #00ff41; color: #00ff41; }
+    [data-bs-theme="dark"] #notifToggle { background: #262b31; border-color: rgba(255,255,255,.15); color: #e9ecef; }
     /* Controles de colunas do grid de consulta */
     #c-colunas-panel { position: absolute; z-index: 1060; min-width: 230px; max-height: 340px; overflow:auto; right: 0; }
     #c-colunas-panel .col-item { cursor: default; }
@@ -147,9 +121,10 @@
         <a class="nav-link" href="#" onclick="showPage('posicao')"><i class="bi bi-table me-2"></i>Posição</a>
         <a class="nav-link" href="#" onclick="showPage('regras')"><i class="bi bi-gear me-2"></i>Regras</a>
         <a class="nav-link" href="#" onclick="showPage('manual')"><i class="bi bi-pencil-square me-2"></i>Lançamento Manual</a>
-        <!-- Saldo em conta DESABILITADO por ora (reativar: remover o style display:none e SALDO_CONTA_ENABLED=true na API) -->
-        <a class="nav-link" href="#" onclick="showPage('saldos')" style="display:none"><i class="bi bi-wallet2 me-2"></i>Saldos</a>
+        <a class="nav-link" href="#" onclick="showPage('saldos')"><i class="bi bi-wallet2 me-2"></i>Saldos</a>
         <a class="nav-link" href="#" onclick="showPage('parametrizacoes')"><i class="bi bi-sliders me-2"></i>Parametrizações</a>
+        <a class="nav-link" href="#" onclick="showPage('cotacoes')"><i class="bi bi-currency-exchange me-2"></i>Cotações</a>
+        <a class="nav-link" href="#" onclick="showPage('sobre')"><i class="bi bi-info-circle me-2"></i>Sobre</a>
       </nav>
       <div class="mt-auto px-3 py-3" style="font-size:0.7rem;color:#6c757d;border-top:1px solid #343a40">
         © 2026 SRCOff<br>Todos os direitos reservados<br>@Bariotti
@@ -614,6 +589,237 @@
         <div id="s-lista"></div>
       </div>
 
+      <!-- ==================== SOBRE (passo a passo) ==================== -->
+      <div id="page-sobre" class="page">
+        <h4 class="mb-3"><i class="bi bi-info-circle me-2"></i>Sobre — Passo a passo do contábil</h4>
+
+        <div class="card shadow-sm mb-3">
+          <div class="card-header"><i class="bi bi-diagram-3 me-2"></i>O que o sistema faz</div>
+          <div class="card-body small mb-0">
+            O SRCOff realiza a <strong>roteirização contábil</strong> de carteiras offshore: lê a <strong>posição</strong> do dia e, para <strong>cada linha (boleto)</strong>, aplica as <strong>regras contábeis</strong> cadastradas e gera os <strong>lançamentos</strong> de débito/crédito — já com o valor na <strong>moeda base do veículo</strong> e os <strong>estornos</strong> quando a regra exige. Também registra as <strong>inconsistências</strong> e permite <strong>consultar</strong> e <strong>extrair</strong> o movimento. O passo a passo abaixo mostra como fazer isso do zero.
+          </div>
+        </div>
+
+        <div class="alert alert-primary d-flex align-items-start gap-2">
+          <i class="bi bi-emoji-smile fs-5"></i>
+          <div>Nunca usou o sistema? Sem problema. Siga os passos <strong>nesta ordem</strong>. Em cada passo mostramos <em>onde clicar</em> e <em>o que preencher</em>, usando sempre o mesmo arquivo de exemplo abaixo.</div>
+        </div>
+
+        <!-- Glossário rápido -->
+        <div class="card shadow-sm mb-3">
+          <div class="card-header"><i class="bi bi-book me-2"></i>Antes de começar — 7 palavras que você vai ver</div>
+          <div class="card-body">
+            <div class="row g-2 small">
+              <div class="col-md-6"><strong>Produto</strong>: o tipo de operação (ex.: <code>NDF</code>).</div>
+              <div class="col-md-6"><strong>Domínio</strong>: uma subdivisão do produto (ex.: <code>Posição</code>).</div>
+              <div class="col-md-6"><strong>Posição</strong>: o “extrato” do dia — o arquivo <code>.csv</code> que você importa.</div>
+              <div class="col-md-6"><strong>Boleto</strong>: o identificador de cada operação na posição.</div>
+              <div class="col-md-6"><strong>Veículo</strong>: a entidade/fundo da operação (ex.: <code>NASSAU</code>).</div>
+              <div class="col-md-6"><strong>Regra / Condição</strong>: a instrução contábil — “quando acontecer X, debita a conta A e credita a conta B com o valor Y”.</div>
+              <div class="col-md-12"><strong>Lançamento contábil</strong>: o resultado — o débito/crédito que o sistema gera. ⚠️ O contábil só processa em <strong>dia útil</strong>.</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Arquivo de exemplo -->
+        <div class="card shadow-sm mb-3 border-primary">
+          <div class="card-header"><i class="bi bi-filetype-csv me-2"></i>Nosso arquivo de exemplo (vamos usar ele o tempo todo)</div>
+          <div class="card-body">
+            <p class="mb-2 small">Arquivo <code>posicao_ndf_20261013.csv</code> — uma operação (boleto <code>70001</code>) do produto NDF, veículo NASSAU, valendo 1.500 USD em 13/10/2026:</p>
+            <pre class="bg-body-secondary border rounded p-2 small mb-0"><code>data_posicao_carteira;produto;dominio;codigo_identificador_boleto;veiculo_operacao;valor_mtm;moeda
+2026-10-13;NDF;Posição;70001;NASSAU;1500;USD</code></pre>
+            <div class="small text-muted mt-2"><i class="bi bi-lightbulb me-1"></i>Os nomes das colunas são “normalizados”: viram minúsculas, sem acento, e espaços viram <code>_</code>. Por isso usamos nomes já nesse formato.</div>
+          </div>
+        </div>
+
+        <!-- Passos -->
+        <div class="accordion" id="sobreSteps">
+
+          <div class="accordion-item">
+            <h2 class="accordion-header"><button class="accordion-button" type="button" data-bs-toggle="collapse" data-bs-target="#st1"><span class="badge bg-primary me-2">1</span> Cadastrar o Produto e o Domínio</button></h2>
+            <div id="st1" class="accordion-collapse collapse show" data-bs-parent="#sobreSteps"><div class="accordion-body">
+              <p><strong>Onde:</strong> menu <span class="badge bg-secondary">Parametrizações</span>.</p>
+              <ul class="small">
+                <li>No cartão <strong>Produtos</strong>, digite <code>NDF</code> e clique em <em>Adicionar</em>.</li>
+                <li>No cartão <strong>Domínios</strong>, digite <code>Posição</code> e clique em <em>Adicionar</em>.</li>
+              </ul>
+              <div class="small text-muted"><i class="bi bi-info-circle me-1"></i>É isso que preenche as listas de Produto/Domínio no resto do sistema.</div>
+            </div></div>
+          </div>
+
+          <div class="accordion-item">
+            <h2 class="accordion-header"><button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#st2"><span class="badge bg-primary me-2">2</span> Cadastrar o Padrão de Arquivo (ensina o sistema a ler a posição)</button></h2>
+            <div id="st2" class="accordion-collapse collapse" data-bs-parent="#sobreSteps"><div class="accordion-body">
+              <p><strong>Onde:</strong> menu <span class="badge bg-secondary">Parametrizações</span> → cartão <strong>Padrões de Arquivo</strong>.</p>
+              <p class="small">Preencha assim (para o nosso exemplo):</p>
+              <ul class="small">
+                <li><strong>Padrão do nome</strong>: <code>posicao_ndf*.csv</code> (o <code>*</code> casa com a data no nome).</li>
+                <li><strong>Produto</strong>: NDF · <strong>Domínio</strong>: Posição.</li>
+                <li><strong>Coluna da Data Base</strong>: <code>data_posicao_carteira</code>.</li>
+                <li><strong>Coluna do Número do Boleto</strong>: <code>codigo_identificador_boleto</code>.</li>
+                <li><strong>Coluna do Veículo</strong>: <code>veiculo_operacao</code> (obrigatória).</li>
+                <li><strong>Formato de Data</strong>: <code>AAAA-MM-DD</code>. Separadores: deixe em <em>auto</em>.</li>
+              </ul>
+              <div class="small text-muted"><i class="bi bi-exclamation-triangle me-1"></i>O arquivo precisa ter essas colunas, senão a importação é recusada.</div>
+            </div></div>
+          </div>
+
+          <div class="accordion-item">
+            <h2 class="accordion-header"><button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#st3"><span class="badge bg-primary me-2">3</span> Cadastrar o De/Para do Veículo (com a moeda base)</button></h2>
+            <div id="st3" class="accordion-collapse collapse" data-bs-parent="#sobreSteps"><div class="accordion-body">
+              <p><strong>Onde:</strong> menu <span class="badge bg-secondary">Parametrizações</span> → cartão <strong>De/Para de Veículo</strong>.</p>
+              <ul class="small">
+                <li><strong>Nome do Veículo</strong>: <code>NASSAU</code> · <strong>Código</strong>: <code>001</code> · <strong>Moeda Base</strong>: <code>USD</code>.</li>
+              </ul>
+              <div class="small text-muted"><i class="bi bi-info-circle me-1"></i>Para quê: na extração em CSV o veículo sai como <strong>código</strong> (001); e a <strong>moeda base</strong> é usada para calcular o valor do lançamento na moeda do veículo.</div>
+            </div></div>
+          </div>
+
+          <div class="accordion-item">
+            <h2 class="accordion-header"><button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#st4"><span class="badge bg-primary me-2">4</span> Cadastrar Cotações (só se precisar converter moeda)</button></h2>
+            <div id="st4" class="accordion-collapse collapse" data-bs-parent="#sobreSteps"><div class="accordion-body">
+              <p><strong>Onde:</strong> menu <span class="badge bg-secondary">Cotações</span>.</p>
+              <p class="small">Você <strong>só</strong> precisa disto quando a moeda do lançamento for <strong>diferente</strong> da moeda base do veículo. No nosso exemplo as duas são <code>USD</code> → <strong>não precisa cadastrar cotação</strong>.</p>
+              <p class="small mb-0">Se precisasse (ex.: lançamento em BRL e veículo em USD): Data <code>2026-10-13</code>, Moeda 1 <code>USD</code>, Moeda 2 <code>BRL</code>, Direção <code>Dividir</code>, Taxa <code>5.25</code>.</p>
+            </div></div>
+          </div>
+
+          <div class="accordion-item">
+            <h2 class="accordion-header"><button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#st5"><span class="badge bg-primary me-2">5</span> Criar a Regra e a Condição (a “receita” contábil)</button></h2>
+            <div id="st5" class="accordion-collapse collapse" data-bs-parent="#sobreSteps"><div class="accordion-body">
+              <p><strong>Onde:</strong> menu <span class="badge bg-secondary">Regras</span>.</p>
+              <p class="small"><strong>5.1</strong> Clique em <em>Nova Regra</em>: Descrição <code>MtM NDF</code>, Produto <code>NDF</code>, Domínio <code>Posição</code>, Campo Produto <code>produto</code>. Salve.</p>
+              <p class="small mb-1"><strong>5.2</strong> Abra a regra criada e clique em <em>Nova Condição</em>:</p>
+              <ul class="small">
+                <li><strong>Condição</strong>: <code>valor_mtm > 0</code></li>
+                <li><strong>Conta Débito</strong>: <code>1001</code> · <strong>Conta Crédito</strong>: <code>2001</code></li>
+                <li><strong>Campo Valor</strong>: <code>valor_mtm</code> · <strong>Campo Moeda</strong>: <code>moeda</code> · <strong>Campo Boleto</strong>: <code>codigo_identificador_boleto</code></li>
+                <li><strong>Moeda base do veículo</strong>: marque <strong>“Converter na geração”</strong> e informe <strong>Coluna da Data de Conversão</strong>: <code>data_posicao_carteira</code>.</li>
+              </ul>
+              <div class="small text-muted"><i class="bi bi-translate me-1"></i>Em português: “se o valor de mercado for maior que zero, debita 1001 e credita 2001 com o <code>valor_mtm</code>, na moeda da posição; e também calcula o valor na moeda base do veículo”.</div>
+            </div></div>
+          </div>
+
+          <div class="accordion-item">
+            <h2 class="accordion-header"><button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#st6"><span class="badge bg-primary me-2">6</span> Importar a Posição</button></h2>
+            <div id="st6" class="accordion-collapse collapse" data-bs-parent="#sobreSteps"><div class="accordion-body">
+              <p><strong>Onde:</strong> menu <span class="badge bg-secondary">Posição</span>.</p>
+              <ul class="small">
+                <li>Selecione <strong>Produto</strong> NDF e <strong>Domínio</strong> Posição.</li>
+                <li>Escolha o arquivo <code>posicao_ndf_20261013.csv</code> e clique em <em>Importar</em>.</li>
+              </ul>
+              <div class="small text-muted"><i class="bi bi-check2-circle me-1"></i>O sistema reconhece o arquivo pelo padrão (passo 2) e grava a posição do dia 13/10/2026.</div>
+            </div></div>
+          </div>
+
+          <div class="accordion-item">
+            <h2 class="accordion-header"><button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#st7"><span class="badge bg-success me-2">7</span> Processar o Contábil</button></h2>
+            <div id="st7" class="accordion-collapse collapse" data-bs-parent="#sobreSteps"><div class="accordion-body">
+              <p><strong>Onde:</strong> menu <span class="badge bg-secondary">Operação</span> → cartão <strong>Gerar Movimento Contábil</strong>.</p>
+              <ul class="small">
+                <li>Informe a <strong>Data</strong>: <code>2026-10-13</code> (tem que ser dia útil).</li>
+                <li>Deixe Produto/Domínio em branco (processa tudo) ou selecione NDF/Posição.</li>
+                <li>Clique em <strong>Processar</strong>.</li>
+              </ul>
+              <p class="small mb-0"><strong>Resultado esperado:</strong> 1 lançamento — boleto <code>70001</code>, débito <code>1001</code>, crédito <code>2001</code>, valor <code>1500 USD</code>, veículo <code>NASSAU</code>, valor na moeda base <code>1500 USD</code>.</p>
+            </div></div>
+          </div>
+
+          <div class="accordion-item">
+            <h2 class="accordion-header"><button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#st8"><span class="badge bg-warning text-dark me-2">8</span> Conferir as Inconsistências</button></h2>
+            <div id="st8" class="accordion-collapse collapse" data-bs-parent="#sobreSteps"><div class="accordion-body">
+              <p><strong>Onde:</strong> mesma tela <span class="badge bg-secondary">Operação</span>, logo abaixo (cartão <strong>Inconsistências do Processamento</strong>), ou clique em <em>Consultar</em> informando a data.</p>
+              <p class="small mb-0">Se algum campo exigido pela regra não existir na posição (ou a moeda base não puder ser resolvida), o lançamento <strong>não</strong> é gerado e aparece aqui o motivo. O grid mostra <strong>10 por página</strong>. No nosso exemplo, não deve haver nenhuma.</p>
+            </div></div>
+          </div>
+
+          <div class="accordion-item">
+            <h2 class="accordion-header"><button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#st9"><span class="badge bg-primary me-2">9</span> Consultar o Movimento</button></h2>
+            <div id="st9" class="accordion-collapse collapse" data-bs-parent="#sobreSteps"><div class="accordion-body">
+              <p><strong>Onde:</strong> menu <span class="badge bg-secondary">Consulta</span>.</p>
+              <ul class="small">
+                <li>Informe o período (Data início/fim) — pode usar <code>2026-10-13</code> nos dois.</li>
+                <li>Clique em <strong>Consultar</strong>. Os lançamentos aparecem paginados.</li>
+                <li>Use o botão <strong>Colunas</strong> para mostrar/ocultar e reordenar colunas.</li>
+              </ul>
+            </div></div>
+          </div>
+
+          <div class="accordion-item">
+            <h2 class="accordion-header"><button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#st10"><span class="badge bg-success me-2">10</span> Extrair (Excel/CSV ou TXT)</button></h2>
+            <div id="st10" class="accordion-collapse collapse" data-bs-parent="#sobreSteps"><div class="accordion-body">
+              <p><strong>Onde:</strong> na tela <span class="badge bg-secondary">Consulta</span>, ao lado do botão Consultar.</p>
+              <ul class="small mb-0">
+                <li><strong>Excel</strong>: baixa um CSV com todos os lançamentos do filtro (aqui o veículo sai como <strong>código</strong> se houver De/Para).</li>
+                <li><strong>TXT</strong>: baixa o arquivo de layout fixo do contábil da data.</li>
+              </ul>
+            </div></div>
+          </div>
+        </div>
+
+        <!-- Dicas / erros comuns -->
+        <div class="card shadow-sm mt-3 border-warning">
+          <div class="card-header bg-warning bg-opacity-25"><i class="bi bi-exclamation-triangle me-2"></i>Dicas e erros comuns</div>
+          <div class="card-body small">
+            <ul class="mb-0">
+              <li>O contábil <strong>só processa em dia útil</strong> (sábado, domingo e feriados fixos não).</li>
+              <li>A <strong>Coluna do Veículo</strong> é obrigatória no padrão — o arquivo precisa ter essa coluna.</li>
+              <li><strong>Toda condição</strong> precisa configurar a moeda base (“Converter na geração” ou “Vem da posição”).</li>
+              <li>Se a moeda do lançamento for <strong>diferente</strong> da moeda base do veículo, é preciso ter a <strong>Cotação</strong> da data — senão vira inconsistência.</li>
+              <li>Nomes de coluna são normalizados (minúsculas, sem acento, espaço → <code>_</code>). Use os nomes já normalizados nas regras.</li>
+              <li>Reprocessou e o resultado não mudou? Cada processamento cria uma nova <strong>versão</strong>; a consulta mostra a <strong>vigente</strong> (a mais recente).</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <!-- ==================== COTAÇÕES ==================== -->
+      <div id="page-cotacoes" class="page">
+        <h4 class="mb-4"><i class="bi bi-currency-exchange me-2"></i>Cotações</h4>
+        <p class="text-muted">Taxa de conversão entre moedas por data, usada na geração para converter o valor do lançamento para a moeda base do veículo. <strong>Moeda 1</strong> = moeda do veículo; <strong>Moeda 2</strong> = moeda do lançamento. A <strong>direção</strong> define se o valor é multiplicado ou dividido pela taxa.</p>
+        <div class="row g-4">
+          <div class="col-md-5">
+            <div class="card shadow-sm">
+              <div class="card-header"><i class="bi bi-plus-circle me-2"></i>Nova Cotação<span class="subtitulo">todos os campos obrigatórios</span></div>
+              <div class="card-body">
+                <div class="row g-2 mb-2">
+                  <div class="col-12"><label class="form-label form-label-sm mb-0">Data <span class="text-danger">*</span></label>
+                    <input type="date" id="cot-data" class="form-control form-control-sm"></div>
+                  <div class="col-6"><label class="form-label form-label-sm mb-0">Moeda 1 (veículo) <span class="text-danger">*</span></label>
+                    <input type="text" id="cot-moeda1" class="form-control form-control-sm" placeholder="ex: USD"></div>
+                  <div class="col-6"><label class="form-label form-label-sm mb-0">Moeda 2 (lançamento) <span class="text-danger">*</span></label>
+                    <input type="text" id="cot-moeda2" class="form-control form-control-sm" placeholder="ex: BRL"></div>
+                  <div class="col-6"><label class="form-label form-label-sm mb-0">Direção <span class="text-danger">*</span></label>
+                    <select id="cot-direcao" class="form-select form-select-sm">
+                      <option value="multiplicar">Multiplicar (valor × taxa)</option>
+                      <option value="dividir">Dividir (valor ÷ taxa)</option>
+                    </select></div>
+                  <div class="col-6"><label class="form-label form-label-sm mb-0">Taxa <span class="text-danger">*</span></label>
+                    <input type="number" step="any" id="cot-taxa" class="form-control form-control-sm" placeholder="ex: 5.25"></div>
+                  <div class="col-12"><button class="btn btn-primary btn-sm w-100" onclick="adicionarCotacao()"><i class="bi bi-plus"></i> Adicionar cotação</button></div>
+                </div>
+                <hr>
+                <label class="form-label form-label-sm mb-1"><i class="bi bi-filetype-csv me-1"></i>Importar via CSV (delimitador <code>;</code>)</label>
+                <pre class="bg-light p-2 rounded small mb-2"><code>data;moeda1;moeda2;direcao;taxa
+2026-10-13;USD;BRL;multiplicar;5.25</code></pre>
+                <input type="file" accept=".csv" class="form-control form-control-sm" onchange="importarCotacoesCSV(this)">
+              </div>
+            </div>
+          </div>
+          <div class="col-md-7">
+            <div class="card shadow-sm">
+              <div class="card-header"><i class="bi bi-table me-2"></i>Cotações Cadastradas</div>
+              <div class="card-body p-0">
+                <div class="table-responsive"><table class="table table-sm table-striped mb-0">
+                  <thead class="table-dark"><tr><th>Data</th><th>Moeda 1</th><th>Moeda 2</th><th>Direção</th><th class="text-end">Taxa</th><th></th></tr></thead>
+                  <tbody id="cot-lista"></tbody>
+                </table></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <!-- ==================== PARAMETRIZAÇÕES ==================== -->
       <div id="page-parametrizacoes" class="page">
         <h4 class="mb-4"><i class="bi bi-sliders me-2"></i>Parametrizações</h4>
@@ -715,6 +921,8 @@
                     <input type="text" id="param-vdp-veiculo" class="form-control form-control-sm" placeholder="ex: NASSAU"></div>
                   <div class="col-6"><label class="form-label form-label-sm mb-0">Código <span class="text-danger">*</span></label>
                     <input type="text" id="param-vdp-codigo" class="form-control form-control-sm" placeholder="ex: 001"></div>
+                  <div class="col-6"><label class="form-label form-label-sm mb-0">Moeda Base <span class="text-danger">*</span></label>
+                    <input type="text" id="param-vdp-moeda" class="form-control form-control-sm" placeholder="ex: USD"></div>
                   <div class="col-12"><button class="btn btn-primary btn-sm w-100" onclick="adicionarVeiculoDePara()"><i class="bi bi-plus"></i> Adicionar De/Para</button></div>
                 </div>
                 <ul class="list-group list-group-flush" id="param-vdp-lista"></ul>
@@ -742,6 +950,27 @@
                   <small class="text-muted">Se vazio ou 0, o monitoramento automático fica desativado (o botão "Escanear agora" continua funcionando).</small>
                 </div>
                 <button class="btn btn-primary btn-sm" onclick="salvarPastas()"><i class="bi bi-save me-1"></i>Salvar</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Pastas de importação de cotações -->
+          <div class="col-md-6">
+            <div class="card shadow-sm">
+              <div class="card-header"><i class="bi bi-folder2-open me-2"></i>Pastas de Importação de Cotações (monitoramento)</div>
+              <div class="card-body">
+                <p class="text-muted small mb-3">A pasta monitorada é varrida periodicamente (mesmo intervalo acima); arquivos <code>.csv</code> de cotação são importados e movidos para a pasta de processados. Layout do CSV: <code>data;moeda1;moeda2;direcao;taxa</code>.</p>
+                <div class="mb-2">
+                  <label class="form-label form-label-sm">Pasta monitorada</label>
+                  <input type="text" id="cfg-cot-pasta-monitorada" class="form-control form-control-sm" placeholder="ex: C:\cotacoes\entrada">
+                </div>
+                <div class="mb-3">
+                  <label class="form-label form-label-sm">Pasta de processados</label>
+                  <input type="text" id="cfg-cot-pasta-processados" class="form-control form-control-sm" placeholder="ex: C:\cotacoes\processados">
+                </div>
+                <button class="btn btn-primary btn-sm" onclick="salvarPastasCotacao()"><i class="bi bi-save me-1"></i>Salvar</button>
+                <button class="btn btn-outline-primary btn-sm ms-1" onclick="escanearPastaCotacao()"><i class="bi bi-arrow-repeat me-1"></i>Escanear agora</button>
+                <div id="cfg-cot-resultado" class="mt-2"></div>
               </div>
             </div>
           </div>
@@ -870,24 +1099,39 @@ NOVA-1;Minha Regra;NDF;Posição;;;Sim;reverte;;valor_mtm &lt; 0;3333333333;4444
     <div class="modal-content">
       <div class="modal-header"><h5 class="modal-title" id="modalNovaCondicaoTitulo">Nova Condição</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
       <div class="modal-body">
-        <div class="row g-2">
+        <div class="row g-3">
           <div class="col-12">
-            <label class="form-label">Condição (expressão booleana)</label>
+            <label class="form-label mb-1">Condição (expressão booleana)</label>
             <input type="text" id="r-cond-expr" class="form-control" placeholder='ex: valor_mtm > 0 && descricao_veiculo == "NASSAU"'
               oninput="validarCondicao(this.value, 'condicao', 'r-cond-validacao')">
             <div id="r-cond-validacao" class="mt-1"></div>
           </div>
-          <div class="col-md-6"><label class="form-label">Conta Débito</label><input type="text" id="r-cond-debito" class="form-control"></div>
-          <div class="col-md-6"><label class="form-label">Conta Crédito</label><input type="text" id="r-cond-credito" class="form-control"></div>
-          <div class="col-md-6">
-            <label class="form-label">Campo Valor</label>
-            <input type="text" id="r-cond-valor" class="form-control" list="r-campos-datalist" placeholder="ex: principal_remanescente + valor_mtm"
+          <div class="col-md-6"><label class="form-label mb-1">Conta Débito</label><input type="text" id="r-cond-debito" class="form-control"></div>
+          <div class="col-md-6"><label class="form-label mb-1">Conta Crédito</label><input type="text" id="r-cond-credito" class="form-control"></div>
+          <div class="col-md-4">
+            <label class="form-label mb-1">Campo Valor</label>
+            <input type="text" id="r-cond-valor" class="form-control" list="r-campos-datalist" placeholder="ex: principal + valor_mtm"
               oninput="validarCondicao(this.value, 'valor', 'r-cond-valor-validacao')">
             <div id="r-cond-valor-validacao" class="mt-1"></div>
           </div>
-          <div class="col-md-6"><label class="form-label">Campo Moeda</label><input type="text" id="r-cond-moeda" class="form-control" list="r-campos-datalist" placeholder="ex: moeda_principal_remanescente"></div>
-          <div class="col-md-6"><label class="form-label">Campo Boleto <small class="text-muted">(identificador do lançamento)</small></label><input type="text" id="r-cond-boleto" class="form-control" list="r-campos-datalist" placeholder="ex: codigo_identificador_boleto"></div>
+          <div class="col-md-4"><label class="form-label mb-1">Campo Moeda</label><input type="text" id="r-cond-moeda" class="form-control" list="r-campos-datalist" placeholder="ex: moeda_principal"></div>
+          <div class="col-md-4"><label class="form-label mb-1">Campo Boleto <small class="text-muted">(id do lançamento)</small></label><input type="text" id="r-cond-boleto" class="form-control" list="r-campos-datalist" placeholder="ex: codigo_identificador_boleto"></div>
         </div>
+
+        <div class="border rounded p-3 mt-3">
+          <div class="d-flex flex-wrap align-items-center gap-3 mb-2">
+            <span class="fw-semibold"><i class="bi bi-coin me-1"></i>Moeda base do veículo <span class="text-danger">*</span></span>
+            <div class="form-check mb-0"><input class="form-check-input" type="radio" name="r-cond-base-origem" id="r-cond-base-nao" value="nao" checked onchange="atualizarCamposBaseCondicao()"><label class="form-check-label" for="r-cond-base-nao">Converter na geração</label></div>
+            <div class="form-check mb-0"><input class="form-check-input" type="radio" name="r-cond-base-origem" id="r-cond-base-sim" value="sim" onchange="atualizarCamposBaseCondicao()"><label class="form-check-label" for="r-cond-base-sim">Vem da posição</label></div>
+          </div>
+          <div class="row g-3">
+            <div class="col-md-4"><label class="form-label mb-1">Coluna do Valor na Moeda Base</label><input type="text" id="r-cond-valor-base" class="form-control" list="r-campos-datalist" placeholder="coluna da posição"></div>
+            <div class="col-md-4"><label class="form-label mb-1">Coluna da Moeda Base</label><input type="text" id="r-cond-moeda-base" class="form-control" list="r-campos-datalist" placeholder="coluna da posição"></div>
+            <div class="col-md-4"><label class="form-label mb-1">Coluna da Data de Conversão</label><input type="text" id="r-cond-data-conv" class="form-control" list="r-campos-datalist" placeholder="coluna da posição"></div>
+          </div>
+          <div class="small text-muted mt-2"><i class="bi bi-info-circle me-1"></i><strong>Converter na geração</strong>: preencha só a <em>Data de Conversão</em> (usa a cotação). <strong>Vem da posição</strong>: preencha o <em>Valor</em> e a <em>Moeda</em> base.</div>
+        </div>
+
         <p class="text-muted small mt-2 mb-0"><i class="bi bi-info-circle me-1"></i>Os campos sugeridos vêm da última posição importada para a data consultada na aba Posição.</p>
       </div>
       <div class="modal-footer">
@@ -937,6 +1181,7 @@ function showPage(name) {
   if (name === 'posicao') { preencherSelectOpcoes('p-consulta-produto', 'produto', { incluirVazio: true }); preencherSelectOpcoes('p-consulta-dominio', 'dominio', { incluirVazio: true }); }
   if (name === 'consulta') { preencherSelectOpcoes('c-produto', 'produto', { incluirVazio: true }); preencherSelectOpcoes('c-dominio', 'dominio', { incluirVazio: true }); }
   if (name === 'parametrizacoes') { renderParametrizacoes(); }
+  if (name === 'cotacoes') { renderCotacoes(); }
   if (name === 'operacao') {
     preencherSelectOpcoes('op-produto', 'produto', { incluirVazio: true });
     preencherSelectOpcoes('op-dominio', 'dominio', { incluirVazio: true });
@@ -1055,7 +1300,7 @@ async function renderVeiculoDePara() {
   const lista = Array.isArray(r) ? r : [];
   if (!lista.length) { ul.innerHTML = '<li class="list-group-item text-muted">Nenhum De/Para cadastrado.</li>'; return; }
   ul.innerHTML = lista.map(v => `<li class="list-group-item d-flex justify-content-between align-items-center py-1">
-    <span><span class="badge bg-secondary">${esc(v.veiculo)}</span> <i class="bi bi-arrow-right mx-1"></i> <code>${esc(v.codigo)}</code></span>
+    <span><span class="badge bg-secondary">${esc(v.veiculo)}</span> <i class="bi bi-arrow-right mx-1"></i> <code>${esc(v.codigo)}</code> <span class="badge bg-info text-dark ms-1">${esc(v.moeda_base || '—')}</span></span>
     <button class="btn btn-sm btn-outline-danger py-0 px-1" onclick="excluirVeiculoDePara(${v.id})"><i class="bi bi-trash"></i></button>
   </li>`).join('');
 }
@@ -1063,12 +1308,15 @@ async function renderVeiculoDePara() {
 async function adicionarVeiculoDePara() {
   const veiculo = document.getElementById('param-vdp-veiculo').value.trim();
   const codigo = document.getElementById('param-vdp-codigo').value.trim();
+  const moeda_base = document.getElementById('param-vdp-moeda').value.trim();
   if (!veiculo) { toast('Informe o nome do veículo', 'warning'); return; }
   if (!codigo) { toast('Informe o código do veículo', 'warning'); return; }
-  const r = await api('POST', '/v1/parametrizacoes/veiculo-depara', { veiculo, codigo });
+  if (!moeda_base) { toast('Informe a moeda base do veículo', 'warning'); return; }
+  const r = await api('POST', '/v1/parametrizacoes/veiculo-depara', { veiculo, codigo, moeda_base });
   if (r?.id) {
     document.getElementById('param-vdp-veiculo').value = '';
     document.getElementById('param-vdp-codigo').value = '';
+    document.getElementById('param-vdp-moeda').value = '';
     renderVeiculoDePara();
   } else if (r?.erro) {
     toast(r.erro, 'danger');
@@ -1082,6 +1330,63 @@ async function excluirVeiculoDePara(id) {
   else if (r?.erro) toast(r.erro, 'danger');
 }
 
+// ── COTAÇÕES (RF-037) ──────────────────────────────────────
+async function renderCotacoes() {
+  const r = await api('GET', '/v1/parametrizacoes/cotacoes');
+  const tb = document.getElementById('cot-lista');
+  if (!tb) return;
+  const lista = Array.isArray(r) ? r : [];
+  if (!lista.length) { tb.innerHTML = '<tr><td colspan="6" class="text-muted p-3">Nenhuma cotação cadastrada.</td></tr>'; return; }
+  tb.innerHTML = lista.map(c => `<tr>
+    <td>${esc(c.data)}</td><td>${esc(c.moeda1)}</td><td>${esc(c.moeda2)}</td>
+    <td>${c.direcao === 'dividir' ? 'Dividir ÷' : 'Multiplicar ×'}</td>
+    <td class="text-end">${Number(c.taxa).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 8 })}</td>
+    <td class="text-end"><button class="btn btn-sm btn-outline-danger py-0 px-1" onclick="excluirCotacao(${c.id})"><i class="bi bi-trash"></i></button></td>
+  </tr>`).join('');
+}
+
+async function adicionarCotacao() {
+  const data = document.getElementById('cot-data').value;
+  const moeda1 = document.getElementById('cot-moeda1').value.trim();
+  const moeda2 = document.getElementById('cot-moeda2').value.trim();
+  const direcao = document.getElementById('cot-direcao').value;
+  const taxa = parseFloat(document.getElementById('cot-taxa').value);
+  if (!data) { toast('Informe a data', 'warning'); return; }
+  if (!moeda1 || !moeda2) { toast('Informe as duas moedas', 'warning'); return; }
+  if (!taxa || taxa <= 0) { toast('Informe uma taxa maior que zero', 'warning'); return; }
+  const r = await api('POST', '/v1/parametrizacoes/cotacoes', { data, moeda1, moeda2, direcao, taxa });
+  if (r?.id) {
+    document.getElementById('cot-moeda1').value = '';
+    document.getElementById('cot-moeda2').value = '';
+    document.getElementById('cot-taxa').value = '';
+    renderCotacoes();
+  } else if (r?.erro) {
+    toast(r.erro, 'danger');
+  }
+}
+
+async function excluirCotacao(id) {
+  if (!confirm('Remover esta cotação?')) return;
+  const r = await api('DELETE', '/v1/parametrizacoes/cotacoes?id=' + id);
+  if (r?.mensagem) renderCotacoes();
+  else if (r?.erro) toast(r.erro, 'danger');
+}
+
+async function importarCotacoesCSV(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const fd = new FormData();
+  fd.append('arquivo', file);
+  spin(true);
+  try {
+    const resp = await fetch('/api/v1/parametrizacoes/cotacoes/import', { method: 'POST', body: fd });
+    const r = await resp.json();
+    if (r?.inseridos !== undefined) { toast(r.mensagem || 'Importado'); renderCotacoes(); }
+    else toast(r?.erro || 'Falha ao importar', 'danger');
+  } catch (e) { toast('Erro: ' + e.message, 'danger'); }
+  finally { spin(false); input.value = ''; }
+}
+
 // ── PASTAS DE IMPORTAÇÃO ───────────────────────────────────
 async function carregarPastas() {
   const r = await api('GET', '/v1/configuracoes');
@@ -1089,6 +1394,32 @@ async function carregarPastas() {
   document.getElementById('cfg-pasta-monitorada').value = r.pasta_monitorada || '';
   document.getElementById('cfg-pasta-processados').value = r.pasta_processados || '';
   document.getElementById('cfg-intervalo-scan').value = r.intervalo_scan_minutos || '';
+  const cm = document.getElementById('cfg-cot-pasta-monitorada');
+  const cp = document.getElementById('cfg-cot-pasta-processados');
+  if (cm) cm.value = r.pasta_cotacao_monitorada || '';
+  if (cp) cp.value = r.pasta_cotacao_processados || '';
+}
+
+async function salvarPastasCotacao() {
+  const monitorada = document.getElementById('cfg-cot-pasta-monitorada').value.trim();
+  const processados = document.getElementById('cfg-cot-pasta-processados').value.trim();
+  const r1 = await api('PUT', '/v1/configuracoes', { chave: 'pasta_cotacao_monitorada', valor: monitorada });
+  const r2 = await api('PUT', '/v1/configuracoes', { chave: 'pasta_cotacao_processados', valor: processados });
+  if (r1?.mensagem && r2?.mensagem) toast('Pastas de cotação salvas!');
+  else toast((r1?.erro || r2?.erro || 'Erro ao salvar'), 'danger');
+}
+
+async function escanearPastaCotacao() {
+  const el = document.getElementById('cfg-cot-resultado');
+  const r = await api('POST', '/v1/cotacoes/scan-pasta');
+  if (!r || r.erro) { el.innerHTML = `<div class="alert alert-danger py-1 small mb-0">${r?.erro || 'Erro'}</div>`; return; }
+  if (!r.executada) { el.innerHTML = `<div class="alert alert-warning py-1 small mb-0">${r.motivo || 'Varredura não executada'}</div>`; return; }
+  const arqs = (r.arquivos || []);
+  const ins = arqs.reduce((s, a) => s + (a.inseridas || 0), 0);
+  const erros = arqs.filter(a => a.erro).map(a => `${a.arquivo}: ${a.erro}`);
+  let html = `<div class="alert alert-success py-1 small mb-0"><i class="bi bi-check-circle me-1"></i>${r.movidos} arquivo(s) processado(s), ${ins} cotação(ões) importada(s).</div>`;
+  if (erros.length) html += `<div class="alert alert-warning py-1 small mt-1 mb-0">${erros.join('<br>')}</div>`;
+  el.innerHTML = html;
 }
 
 async function salvarPastas() {
@@ -1240,18 +1571,35 @@ function rotuloTipoInc(t) {
   return { PRE_CONDICAO: 'Pré-condição', CONDICAO: 'Condição', CAMPO_VALOR: 'Campo valor' }[t] || t;
 }
 
+let incUltimo = [];        // última lista de inconsistências consultada
+let incDataAtual = '';     // data da consulta atual
+const INC_POR_PAGINA = 10; // itens por página no grid de inconsistências
+
 async function consultarInconsistencias() {
   const data = document.getElementById('op-inc-data').value;
   if (!data) { toast('Informe a data do movimento', 'warning'); return; }
   const r = await api('GET', '/v1/inconsistencias?data=' + data);
   const el = document.getElementById('op-inconsistencias');
-  if (!r || r.erro) { el.innerHTML = `<div class="alert alert-danger">${r?.erro || 'Erro'}</div>`; return; }
-  const lista = Array.isArray(r) ? r : [];
-  if (lista.length === 0) {
+  if (!r || r.erro) { incUltimo = []; el.innerHTML = `<div class="alert alert-danger">${r?.erro || 'Erro'}</div>`; return; }
+  incUltimo = Array.isArray(r) ? r : [];
+  incDataAtual = data;
+  if (incUltimo.length === 0) {
     el.innerHTML = `<div class="alert alert-success"><i class="bi bi-check-circle me-2"></i>Nenhuma inconsistência registrada para ${data}.</div>`;
     return;
   }
-  const rows = lista.map(i => `<tr>
+  renderInconsistencias(1);
+}
+
+function renderInconsistencias(pagina) {
+  const el = document.getElementById('op-inconsistencias');
+  const total = incUltimo.length;
+  const totalPages = Math.ceil(total / INC_POR_PAGINA);
+  if (pagina < 1) pagina = 1;
+  if (pagina > totalPages) pagina = totalPages;
+  const ini = (pagina - 1) * INC_POR_PAGINA;
+  const itens = incUltimo.slice(ini, ini + INC_POR_PAGINA);
+
+  const rows = itens.map(i => `<tr>
     <td>${i.codigo_identificador_boleto || '—'}</td>
     <td>${i.produto || '—'}</td>
     <td><span class="badge bg-info text-dark">${i.dominio || '—'}</span></td>
@@ -1261,16 +1609,27 @@ async function consultarInconsistencias() {
     <td>${i.campos_faltantes || ''}</td>
     <td>${i.detalhe || ''}</td>
   </tr>`).join('');
+
+  let pag = `<small class="text-muted">${total} registro(s)</small>`;
+  if (totalPages > 1) {
+    pag = `<nav><ul class="pagination pagination-sm mb-0">
+      ${pagina > 1 ? `<li class="page-item"><a class="page-link" href="#" onclick="renderInconsistencias(${pagina - 1});return false">«</a></li>` : ''}
+      <li class="page-item disabled"><a class="page-link">${pagina} / ${totalPages} (${total} registros)</a></li>
+      ${pagina < totalPages ? `<li class="page-item"><a class="page-link" href="#" onclick="renderInconsistencias(${pagina + 1});return false">»</a></li>` : ''}
+    </ul></nav>`;
+  }
+
   el.innerHTML = `<div class="card shadow-sm border-warning">
     <div class="card-header bg-warning bg-opacity-25">
-      <span><i class="bi bi-exclamation-triangle me-2"></i>${lista.length} inconsistência(s) — ${data}</span>
+      <span><i class="bi bi-exclamation-triangle me-2"></i>${total} inconsistência(s) — ${incDataAtual}</span>
     </div>
     <div class="card-body p-0"><div class="table-responsive">
       <table class="table table-sm table-hover mb-0">
         <thead class="table-dark"><tr><th>Boleto</th><th>Produto</th><th>Domínio</th><th>Regra</th><th>Tipo</th><th>Expressão</th><th>Campos Faltantes</th><th>Detalhe</th></tr></thead>
         <tbody>${rows}</tbody>
       </table>
-    </div></div>
+    </div>
+    <div class="px-3 py-2">${pag}</div></div>
   </div>`;
 }
 
@@ -1411,6 +1770,8 @@ const MOV_COLS = [
   { key: 'credito',  label: 'Crédito',  cell: l => l.conta_credito },
   { key: 'valor',    label: 'Valor',    cls: 'text-end', cell: l => Number(l.valor_lancamento_contabil).toFixed(2) },
   { key: 'moeda',    label: 'Moeda',    cell: l => l.moeda_lancamento_contabil },
+  { key: 'valor_base', label: 'Valor M.Base', cls: 'text-end', cell: l => Number(l.valor_moeda_base_veiculo || 0).toFixed(2) },
+  { key: 'moeda_base', label: 'M.Base Veíc.', cell: l => l.moeda_base_veiculo || '—' },
   { key: 'reversao', label: 'Reversão', cell: l => l.indicador_reversao ? '<span class="badge bg-warning text-dark">Sim</span>' : '<span class="badge bg-secondary">Não</span>' },
   { key: 'origem',   label: 'Origem',   cell: l => (l.origem === 'manual') ? '<span class="badge bg-dark">Manual</span>' : '<span class="badge bg-light text-dark border">Auto</span>' },
   { key: 'regra',    label: 'Regra',    cell: l => l.descricao_regra_contabil },
@@ -2246,7 +2607,10 @@ function showNovaCondicaoModal() {
   condicaoEditId = null;
   document.getElementById('modalNovaCondicaoTitulo').textContent = 'Nova Condição';
   document.getElementById('r-cond-btn-salvar').textContent = 'Adicionar';
-  ['r-cond-expr','r-cond-debito','r-cond-credito','r-cond-valor','r-cond-moeda','r-cond-boleto'].forEach(id => document.getElementById(id).value = '');
+  ['r-cond-expr','r-cond-debito','r-cond-credito','r-cond-valor','r-cond-moeda','r-cond-boleto','r-cond-valor-base','r-cond-moeda-base','r-cond-data-conv'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('r-cond-base-nao').checked = true;
+  document.getElementById('r-cond-base-sim').checked = false;
+  atualizarCamposBaseCondicao();
   document.getElementById('r-cond-validacao').innerHTML = '';
   document.getElementById('r-cond-valor-validacao').innerHTML = '';
   bootstrap.Modal.getOrCreateInstance(document.getElementById('modalCondicoes')).hide();
@@ -2266,6 +2630,12 @@ function abrirEdicaoCondicao(id) {
   document.getElementById('r-cond-valor').value = c.campo_valor || '';
   document.getElementById('r-cond-moeda').value = c.campo_moeda || '';
   document.getElementById('r-cond-boleto').value = c.campo_boleto || '';
+  document.getElementById('r-cond-base-sim').checked = !!c.base_na_posicao;
+  document.getElementById('r-cond-base-nao').checked = !c.base_na_posicao;
+  document.getElementById('r-cond-valor-base').value = c.campo_valor_moeda_base || '';
+  document.getElementById('r-cond-moeda-base').value = c.campo_moeda_base || '';
+  document.getElementById('r-cond-data-conv').value = c.campo_data_conversao || '';
+  atualizarCamposBaseCondicao();
   document.getElementById('r-cond-validacao').innerHTML = '';
   document.getElementById('r-cond-valor-validacao').innerHTML = '';
   bootstrap.Modal.getOrCreateInstance(document.getElementById('modalCondicoes')).hide();
@@ -2355,8 +2725,24 @@ async function excluirRegra(id, nome) {
 }
 
 // Cria (POST) ou edita (PUT) a condição conforme condicaoEditId.
+function atualizarCamposBaseCondicao() {
+  const vemDaPosicao = document.getElementById('r-cond-base-sim').checked;
+  document.getElementById('r-cond-valor-base').disabled = !vemDaPosicao;
+  document.getElementById('r-cond-moeda-base').disabled = !vemDaPosicao;
+  document.getElementById('r-cond-data-conv').disabled = vemDaPosicao;
+}
+
 async function salvarCondicao() {
   if (!regraAtualId) return;
+  const baseNaPosicao = document.getElementById('r-cond-base-sim').checked;
+  const valorBase = document.getElementById('r-cond-valor-base').value.trim();
+  const moedaBase = document.getElementById('r-cond-moeda-base').value.trim();
+  const dataConv = document.getElementById('r-cond-data-conv').value.trim();
+  if (baseNaPosicao) {
+    if (!valorBase || !moedaBase) { toast('Informe as colunas do valor e da moeda base (base vem da posição)', 'warning'); return; }
+  } else {
+    if (!dataConv) { toast('Informe a coluna da data base para conversão', 'warning'); return; }
+  }
   const payload = {
     condicao: document.getElementById('r-cond-expr').value,
     conta_debito: document.getElementById('r-cond-debito').value,
@@ -2364,6 +2750,10 @@ async function salvarCondicao() {
     campo_valor: document.getElementById('r-cond-valor').value,
     campo_moeda: document.getElementById('r-cond-moeda').value,
     campo_boleto: document.getElementById('r-cond-boleto').value,
+    base_na_posicao: baseNaPosicao,
+    campo_valor_moeda_base: valorBase,
+    campo_moeda_base: moedaBase,
+    campo_data_conversao: dataConv,
   };
   let r;
   if (condicaoEditId) {

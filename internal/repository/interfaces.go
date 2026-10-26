@@ -56,6 +56,13 @@ type VeiculoDeParaRepository interface {
 	Excluir(ctx context.Context, id int64) error
 }
 
+// CotacaoRepository persiste as taxas de conversão entre moedas por data (RF-037).
+type CotacaoRepository interface {
+	Listar(ctx context.Context) ([]model.Cotacao, error)
+	Criar(ctx context.Context, c model.Cotacao) (int64, error)
+	Excluir(ctx context.Context, id int64) error
+}
+
 // ConfiguracaoRepository persiste configurações chave→valor (ex: pastas monitoradas).
 type ConfiguracaoRepository interface {
 	Obter(ctx context.Context, chave string) (string, error)

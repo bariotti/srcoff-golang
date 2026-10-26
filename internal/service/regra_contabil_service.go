@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"srcoff/internal/model"
 )
@@ -78,7 +79,33 @@ func (s *RegraContabilService) CriarCondicao(ctx context.Context, condicao model
 	if condicao.CampoMoeda == "" {
 		return 0, fmt.Errorf("campo obrigatório ausente: campo_moeda")
 	}
+	if err := validarConfigMoedaBase(&condicao); err != nil {
+		return 0, err
+	}
 	return s.repo.CriarCondicao(ctx, condicao)
+}
+
+// validarConfigMoedaBase valida e normaliza a configuração obrigatória da moeda base do
+// veículo na condição (RF-036/RN-182). Quando a base vem da posição, exige as colunas de
+// valor e moeda base (e ignora a data de conversão); caso contrário, exige a coluna da data
+// base de conversão (e ignora as outras duas).
+func validarConfigMoedaBase(c *model.CondicaoRegra) error {
+	c.CampoValorMoedaBase = strings.TrimSpace(c.CampoValorMoedaBase)
+	c.CampoMoedaBase = strings.TrimSpace(c.CampoMoedaBase)
+	c.CampoDataConversao = strings.TrimSpace(c.CampoDataConversao)
+	if c.BaseNaPosicao {
+		if c.CampoValorMoedaBase == "" || c.CampoMoedaBase == "" {
+			return fmt.Errorf("informe as colunas do valor e da moeda base do veículo (base vem da posição)")
+		}
+		c.CampoDataConversao = "" // não usado quando vem da posição
+	} else {
+		if c.CampoDataConversao == "" {
+			return fmt.Errorf("informe a coluna da data base para conversão da moeda base do veículo")
+		}
+		c.CampoValorMoedaBase = ""
+		c.CampoMoedaBase = ""
+	}
+	return nil
 }
 
 func (s *RegraContabilService) EditarCondicao(ctx context.Context, condicao model.CondicaoRegra) error {
@@ -99,6 +126,9 @@ func (s *RegraContabilService) EditarCondicao(ctx context.Context, condicao mode
 	}
 	if condicao.CampoMoeda == "" {
 		return fmt.Errorf("campo obrigatório ausente: campo_moeda")
+	}
+	if err := validarConfigMoedaBase(&condicao); err != nil {
+		return err
 	}
 	return s.repo.EditarCondicao(ctx, condicao)
 }

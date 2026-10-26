@@ -85,7 +85,7 @@ func (r *RegraContabilRepo) ExcluirRegra(ctx context.Context, id int64) error {
 
 func (r *RegraContabilRepo) ListarCondicoes(ctx context.Context, idRegra int64) ([]model.CondicaoRegra, error) {
 	rows, err := r.db.QueryContext(ctx,
-		fmt.Sprintf("SELECT id, id_regra, condicao, conta_debito, conta_credito, campo_valor, campo_moeda, ISNULL(campo_boleto, ''), ativo FROM condicao_regra WHERE id_regra = %d AND ativo = 1", idRegra),
+		fmt.Sprintf("SELECT id, id_regra, condicao, conta_debito, conta_credito, campo_valor, campo_moeda, ISNULL(campo_boleto, ''), ativo, ISNULL(base_na_posicao,0), ISNULL(campo_valor_moeda_base,''), ISNULL(campo_moeda_base,''), ISNULL(campo_data_conversao,'') FROM condicao_regra WHERE id_regra = %d AND ativo = 1", idRegra),
 	)
 	if err != nil {
 		return nil, err
@@ -95,7 +95,7 @@ func (r *RegraContabilRepo) ListarCondicoes(ctx context.Context, idRegra int64) 
 	var condicoes []model.CondicaoRegra
 	for rows.Next() {
 		var c model.CondicaoRegra
-		if err := rows.Scan(&c.ID, &c.IDRegra, &c.Condicao, &c.ContaDebito, &c.ContaCredito, &c.CampoValor, &c.CampoMoeda, &c.CampoBoleto, &c.Ativo); err != nil {
+		if err := rows.Scan(&c.ID, &c.IDRegra, &c.Condicao, &c.ContaDebito, &c.ContaCredito, &c.CampoValor, &c.CampoMoeda, &c.CampoBoleto, &c.Ativo, &c.BaseNaPosicao, &c.CampoValorMoedaBase, &c.CampoMoedaBase, &c.CampoDataConversao); err != nil {
 			return nil, err
 		}
 		condicoes = append(condicoes, c)
@@ -110,8 +110,9 @@ func (r *RegraContabilRepo) ListarCondicoes(ctx context.Context, idRegra int64) 
 func (r *RegraContabilRepo) CriarCondicao(ctx context.Context, condicao model.CondicaoRegra) (int64, error) {
 	var id int64
 	err := r.db.QueryRowContext(ctx,
-		fmt.Sprintf("INSERT INTO condicao_regra (id_regra, condicao, conta_debito, conta_credito, campo_valor, campo_moeda, campo_boleto, ativo) VALUES (%d, '%s', '%s', '%s', '%s', '%s', '%s', 1); SELECT SCOPE_IDENTITY()",
-			condicao.IDRegra, esc(condicao.Condicao), esc(condicao.ContaDebito), esc(condicao.ContaCredito), esc(condicao.CampoValor), esc(condicao.CampoMoeda), esc(condicao.CampoBoleto)),
+		fmt.Sprintf("INSERT INTO condicao_regra (id_regra, condicao, conta_debito, conta_credito, campo_valor, campo_moeda, campo_boleto, ativo, base_na_posicao, campo_valor_moeda_base, campo_moeda_base, campo_data_conversao) VALUES (%d, '%s', '%s', '%s', '%s', '%s', '%s', 1, %d, '%s', '%s', '%s'); SELECT SCOPE_IDENTITY()",
+			condicao.IDRegra, esc(condicao.Condicao), esc(condicao.ContaDebito), esc(condicao.ContaCredito), esc(condicao.CampoValor), esc(condicao.CampoMoeda), esc(condicao.CampoBoleto),
+			bitDe(condicao.BaseNaPosicao), esc(condicao.CampoValorMoedaBase), esc(condicao.CampoMoedaBase), esc(condicao.CampoDataConversao)),
 	).Scan(&id)
 	if err != nil {
 		return 0, err
@@ -122,10 +123,19 @@ func (r *RegraContabilRepo) CriarCondicao(ctx context.Context, condicao model.Co
 func (r *RegraContabilRepo) EditarCondicao(ctx context.Context, condicao model.CondicaoRegra) error {
 	// Ativo é preservado: editar atualiza os campos, não (des)ativa a condição.
 	_, err := r.db.ExecContext(ctx,
-		fmt.Sprintf("UPDATE condicao_regra SET condicao = '%s', conta_debito = '%s', conta_credito = '%s', campo_valor = '%s', campo_moeda = '%s', campo_boleto = '%s' WHERE id = %d",
-			esc(condicao.Condicao), esc(condicao.ContaDebito), esc(condicao.ContaCredito), esc(condicao.CampoValor), esc(condicao.CampoMoeda), esc(condicao.CampoBoleto), condicao.ID),
+		fmt.Sprintf("UPDATE condicao_regra SET condicao = '%s', conta_debito = '%s', conta_credito = '%s', campo_valor = '%s', campo_moeda = '%s', campo_boleto = '%s', base_na_posicao = %d, campo_valor_moeda_base = '%s', campo_moeda_base = '%s', campo_data_conversao = '%s' WHERE id = %d",
+			esc(condicao.Condicao), esc(condicao.ContaDebito), esc(condicao.ContaCredito), esc(condicao.CampoValor), esc(condicao.CampoMoeda), esc(condicao.CampoBoleto),
+			bitDe(condicao.BaseNaPosicao), esc(condicao.CampoValorMoedaBase), esc(condicao.CampoMoedaBase), esc(condicao.CampoDataConversao), condicao.ID),
 	)
 	return err
+}
+
+// bitDe converte bool em 0/1 para colunas BIT do SQL Server.
+func bitDe(b bool) int {
+	if b {
+		return 1
+	}
+	return 0
 }
 
 func (r *RegraContabilRepo) ExcluirCondicao(ctx context.Context, id int64) error {

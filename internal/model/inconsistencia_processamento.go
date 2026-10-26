@@ -8,6 +8,7 @@ const (
 	InconsistenciaCondicao    = "CONDICAO"
 	InconsistenciaCampoValor  = "CAMPO_VALOR"
 	InconsistenciaCampoMoeda  = "CAMPO_MOEDA"
+	InconsistenciaMoedaBase   = "MOEDA_BASE" // falha ao obter/converter o valor na moeda base do veículo (RF-036)
 )
 
 // InconsistenciaProcessamento registra uma falha ocorrida ao processar uma posição

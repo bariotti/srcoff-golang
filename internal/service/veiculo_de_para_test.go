@@ -15,24 +15,33 @@ func TestVeiculoDePara_RegrasCadastro(t *testing.T) {
 	dir := t.TempDir()
 	svc := NewVeiculoDeParaService(filerepo.NewVeiculoDeParaRepo(dir))
 
-	// Nome e código obrigatórios.
-	if _, err := svc.Criar(ctx, model.VeiculoDePara{Veiculo: "", Codigo: "001"}); err == nil {
+	// Nome, código e moeda base obrigatórios.
+	if _, err := svc.Criar(ctx, model.VeiculoDePara{Veiculo: "", Codigo: "001", MoedaBase: "USD"}); err == nil {
 		t.Fatal("esperava erro: nome obrigatório")
 	}
-	if _, err := svc.Criar(ctx, model.VeiculoDePara{Veiculo: "NASSAU", Codigo: ""}); err == nil {
+	if _, err := svc.Criar(ctx, model.VeiculoDePara{Veiculo: "NASSAU", Codigo: "", MoedaBase: "USD"}); err == nil {
 		t.Fatal("esperava erro: código obrigatório")
+	}
+	if _, err := svc.Criar(ctx, model.VeiculoDePara{Veiculo: "NASSAU", Codigo: "001", MoedaBase: ""}); err == nil {
+		t.Fatal("esperava erro: moeda base obrigatória")
 	}
 
 	// Primeiro cadastro OK.
-	if _, err := svc.Criar(ctx, model.VeiculoDePara{Veiculo: "NASSAU", Codigo: "001"}); err != nil {
+	if _, err := svc.Criar(ctx, model.VeiculoDePara{Veiculo: "NASSAU", Codigo: "001", MoedaBase: "USD"}); err != nil {
 		t.Fatalf("criar NASSAU: %v", err)
 	}
 	// Duplicado case-insensitive deve ser rejeitado (nassau / Nassau == NASSAU).
-	if _, err := svc.Criar(ctx, model.VeiculoDePara{Veiculo: "nassau", Codigo: "002"}); err == nil {
+	if _, err := svc.Criar(ctx, model.VeiculoDePara{Veiculo: "nassau", Codigo: "002", MoedaBase: "USD"}); err == nil {
 		t.Fatal("esperava erro: duplicado case-insensitive (nassau)")
 	}
-	if _, err := svc.Criar(ctx, model.VeiculoDePara{Veiculo: "  Nassau ", Codigo: "003"}); err == nil {
+	if _, err := svc.Criar(ctx, model.VeiculoDePara{Veiculo: "  Nassau ", Codigo: "003", MoedaBase: "USD"}); err == nil {
 		t.Fatal("esperava erro: duplicado com espaços/caixa (Nassau)")
+	}
+
+	// Mapa veículo → moeda base.
+	mb, _ := svc.MapaVeiculoMoedaBase(ctx)
+	if mb["nassau"] != "USD" {
+		t.Fatalf("mapa moeda base deveria ter nassau=USD, obteve %q", mb["nassau"])
 	}
 
 	// Mapa: chave normalizada (lower+trim) → código.

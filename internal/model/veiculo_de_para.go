@@ -6,7 +6,8 @@ package model
 // A comparação do nome é case-insensitive (NASSAU = nassau = Nassau) e ignora espaços
 // nas pontas. Não afeta nenhuma outra funcionalidade (nem o TXT). Spec: RF-035/RN-181.
 type VeiculoDePara struct {
-	ID      int64  `json:"id"`
-	Veiculo string `json:"veiculo"` // nome do veículo (único no cadastro)
-	Codigo  string `json:"codigo"`  // código correspondente
+	ID        int64  `json:"id"`
+	Veiculo   string `json:"veiculo"`    // nome do veículo (único no cadastro)
+	Codigo    string `json:"codigo"`     // código correspondente
+	MoedaBase string `json:"moeda_base"` // moeda base do veículo (obrigatória) — RF-036/RN-182
 }

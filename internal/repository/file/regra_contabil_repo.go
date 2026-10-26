@@ -147,6 +147,10 @@ func (r *RegraContabilRepo) EditarCondicao(_ context.Context, condicao model.Con
 			s.Condicoes[i].CampoValor = condicao.CampoValor
 			s.Condicoes[i].CampoMoeda = condicao.CampoMoeda
 			s.Condicoes[i].CampoBoleto = condicao.CampoBoleto
+			s.Condicoes[i].BaseNaPosicao = condicao.BaseNaPosicao
+			s.Condicoes[i].CampoValorMoedaBase = condicao.CampoValorMoedaBase
+			s.Condicoes[i].CampoMoedaBase = condicao.CampoMoedaBase
+			s.Condicoes[i].CampoDataConversao = condicao.CampoDataConversao
 			// Ativo é preservado: editar atualiza os campos, não (des)ativa a condição.
 			return r.save(s)
 		}

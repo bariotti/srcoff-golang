@@ -52,9 +52,16 @@ func migrarColunas(ctx context.Context, db *sql.DB) error {
 	alteracoes := []struct{ tabela, coluna, ddl string }{
 		{"movimento_contabil", "origem", "origem TEXT NOT NULL DEFAULT 'automatico'"},
 		{"movimento_contabil", "veiculo", "veiculo TEXT NOT NULL DEFAULT ''"},
+		{"movimento_contabil", "valor_moeda_base_veiculo", "valor_moeda_base_veiculo REAL NOT NULL DEFAULT 0"},
+		{"movimento_contabil", "moeda_base_veiculo", "moeda_base_veiculo TEXT NOT NULL DEFAULT ''"},
 		{"regra_contabil", "tipo_lancamento", "tipo_lancamento TEXT NOT NULL DEFAULT 'reverte'"},
 		{"movimento_execucao", "qtd_movimento", "qtd_movimento INTEGER NOT NULL DEFAULT 0"},
 		{"padrao_arquivo", "coluna_veiculo", "coluna_veiculo TEXT"},
+		{"veiculo_de_para", "moeda_base", "moeda_base TEXT"},
+		{"condicao_regra", "base_na_posicao", "base_na_posicao INTEGER NOT NULL DEFAULT 0"},
+		{"condicao_regra", "campo_valor_moeda_base", "campo_valor_moeda_base TEXT"},
+		{"condicao_regra", "campo_moeda_base", "campo_moeda_base TEXT"},
+		{"condicao_regra", "campo_data_conversao", "campo_data_conversao TEXT"},
 	}
 	for _, a := range alteracoes {
 		existe, err := colunaExiste(ctx, db, a.tabela, a.coluna)
@@ -126,7 +133,11 @@ CREATE TABLE IF NOT EXISTS condicao_regra (
   campo_valor TEXT NOT NULL,
   campo_moeda TEXT NOT NULL,
   campo_boleto TEXT,
-  ativo INTEGER NOT NULL DEFAULT 1
+  ativo INTEGER NOT NULL DEFAULT 1,
+  base_na_posicao INTEGER NOT NULL DEFAULT 0,
+  campo_valor_moeda_base TEXT,
+  campo_moeda_base TEXT,
+  campo_data_conversao TEXT
 );
 CREATE TABLE IF NOT EXISTS posicao_carteira (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -151,10 +162,16 @@ CREATE TABLE IF NOT EXISTS movimento_contabil (
   descricao_condicao_contabil TEXT,
   id_regra_contabil INTEGER,
   origem TEXT NOT NULL DEFAULT 'automatico',
-  veiculo TEXT NOT NULL DEFAULT ''
+  veiculo TEXT NOT NULL DEFAULT '',
+  valor_moeda_base_veiculo REAL NOT NULL DEFAULT 0,
+  moeda_base_veiculo TEXT NOT NULL DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS IX_movimento_data_versao ON movimento_contabil (data_lote_contabil, codigo_versao_conteudo);
 CREATE INDEX IF NOT EXISTS IX_movimento_data_reversao ON movimento_contabil (data_lote_contabil, indicador_reversao);
+-- Suportam as subqueries correlacionadas da consulta (vigente MAX de versão e saldo-zero),
+-- evitando varredura por linha em datas grandes (paridade com os índices do SQL Server).
+CREATE INDEX IF NOT EXISTS IX_mov_data_prod_dom_ver ON movimento_contabil (data_lote_contabil, produto, dominio, codigo_versao_conteudo);
+CREATE INDEX IF NOT EXISTS IX_mov_data_boleto_regra ON movimento_contabil (data_lote_contabil, codigo_identificador_boleto, id_regra_contabil);
 CREATE TABLE IF NOT EXISTS parametrizacao (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   categoria TEXT NOT NULL,
@@ -192,7 +209,16 @@ CREATE TABLE IF NOT EXISTS padrao_arquivo (
 CREATE TABLE IF NOT EXISTS veiculo_de_para (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   veiculo TEXT NOT NULL,
-  codigo TEXT NOT NULL
+  codigo TEXT NOT NULL,
+  moeda_base TEXT
+);
+CREATE TABLE IF NOT EXISTS cotacao (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  data TEXT NOT NULL,
+  moeda1 TEXT NOT NULL,
+  moeda2 TEXT NOT NULL,
+  direcao TEXT NOT NULL,
+  taxa REAL NOT NULL
 );
 CREATE TABLE IF NOT EXISTS configuracao (
   chave TEXT PRIMARY KEY,

@@ -82,4 +82,13 @@ type CondicaoRegra struct {
 	CampoMoeda   string `json:"campo_moeda"`
 	CampoBoleto  string `json:"campo_boleto"` // nome do campo da posição usado como identificador do boleto no lançamento
 	Ativo        bool   `json:"ativo"`
+	// Moeda base do veículo (RF-036/RN-182). BaseNaPosicao define a origem dos dois dados:
+	//   - true  → valor e moeda base vêm da posição (CampoValorMoedaBase + CampoMoedaBase);
+	//             CampoDataConversao é ignorado.
+	//   - false → serão CONVERTIDOS na geração usando a data de CampoDataConversao;
+	//             CampoValorMoedaBase/CampoMoedaBase são ignorados.
+	BaseNaPosicao       bool   `json:"base_na_posicao"`
+	CampoValorMoedaBase string `json:"campo_valor_moeda_base"`
+	CampoMoedaBase      string `json:"campo_moeda_base"`
+	CampoDataConversao  string `json:"campo_data_conversao"`
 }

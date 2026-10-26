@@ -36,6 +36,7 @@ func main() {
 		notificacaoRepo    repository.NotificacaoRepository
 		saldoRepo          repository.SaldoContaRepository
 		veiculoDeParaRepo  repository.VeiculoDeParaRepository
+		cotacaoRepo        repository.CotacaoRepository
 	)
 
 	var rawSQLDB *sql.DB
@@ -58,6 +59,7 @@ func main() {
 		notificacaoRepo = filerepo.NewNotificacaoRepo(dir)
 		saldoRepo = filerepo.NewSaldoContaRepo(dir)
 		veiculoDeParaRepo = filerepo.NewVeiculoDeParaRepo(dir)
+		cotacaoRepo = filerepo.NewCotacaoRepo(dir)
 
 	case "sqlite":
 		path := os.Getenv("SQLITE_PATH")
@@ -81,6 +83,7 @@ func main() {
 		notificacaoRepo = sqliterepo.NewNotificacaoRepo(sdb)
 		saldoRepo = sqliterepo.NewSaldoContaRepo(sdb)
 		veiculoDeParaRepo = sqliterepo.NewVeiculoDeParaRepo(sdb)
+		cotacaoRepo = sqliterepo.NewCotacaoRepo(sdb)
 
 	default: // sqlserver
 		rawSQLDB = db.Connect()
@@ -102,6 +105,7 @@ func main() {
 		notificacaoRepo = repository.NewNotificacaoRepo(rawSQLDB)
 		saldoRepo = repository.NewSaldoContaRepo(rawSQLDB)
 		veiculoDeParaRepo = repository.NewVeiculoDeParaRepo(rawSQLDB)
+		cotacaoRepo = repository.NewCotacaoRepo(rawSQLDB)
 	}
 
 	// 2. Instanciar avaliador de expressões
@@ -113,12 +117,11 @@ func main() {
 		ComExecucaoRepo(execucaoRepo).
 		ComPadraoRepo(padraoArquivoRepo)
 
-	// Saldo em conta (RN-170) é opcional e, por ora, DESABILITADO por padrão.
-	// Para reativar, defina SALDO_CONTA_ENABLED=true (ou 1). Quando desligado, o serviço
-	// não mantém nem lê a projeção de saldo: a baixa do incremental_reverte usa o fallback
-	// (varredura do movimento vigente, resultado idêntico) e o menu Saldos fica oculto.
-	saldoAtivo := strings.EqualFold(strings.TrimSpace(os.Getenv("SALDO_CONTA_ENABLED")), "true") ||
-		strings.TrimSpace(os.Getenv("SALDO_CONTA_ENABLED")) == "1"
+	// Saldo em conta (RN-170) ATIVO por padrão. Para desligar, defina SALDO_CONTA_ENABLED=false
+	// (ou 0). Quando desligado, o serviço não mantém nem lê a projeção de saldo: a baixa do
+	// incremental_reverte usa o fallback (varredura do movimento vigente, resultado idêntico).
+	saldoFlag := strings.ToLower(strings.TrimSpace(os.Getenv("SALDO_CONTA_ENABLED")))
+	saldoAtivo := saldoFlag != "false" && saldoFlag != "0" && saldoFlag != "nao" && saldoFlag != "não"
 	if saldoAtivo {
 		movimentoSvc = movimentoSvc.ComSaldoRepo(saldoRepo)
 		// Projeção de saldo (RN-170): se a tabela estiver vazia (base recém-criada/migrada),
@@ -130,7 +133,7 @@ func main() {
 		}
 		log.Printf("[saldo] funcionalidade de saldo em conta HABILITADA")
 	} else {
-		log.Printf("[saldo] funcionalidade de saldo em conta DESABILITADA (defina SALDO_CONTA_ENABLED=true para reativar)")
+		log.Printf("[saldo] funcionalidade de saldo em conta DESABILITADA (SALDO_CONTA_ENABLED=%q)", saldoFlag)
 	}
 	inconsistenciaSvc := service.NewInconsistenciaService(inconsistenciaRepo)
 	execucaoSvc := service.NewExecucaoService(execucaoRepo, padraoArquivoRepo).
@@ -142,6 +145,9 @@ func main() {
 	parametrizacaoSvc := service.NewParametrizacaoService(parametrizacaoRepo)
 	padraoArquivoSvc := service.NewPadraoArquivoService(padraoArquivoRepo)
 	veiculoDeParaSvc := service.NewVeiculoDeParaService(veiculoDeParaRepo)
+	cotacaoSvc := service.NewCotacaoService(cotacaoRepo)
+	// Conversão para a moeda base do veículo na geração (RF-036/RF-037).
+	movimentoSvc = movimentoSvc.ComMoedaBaseRepo(veiculoDeParaSvc).ComCotacaoRepo(cotacaoSvc)
 	configuracaoSvc := service.NewConfiguracaoService(configuracaoRepo)
 
 	// 4. Instanciar handlers
@@ -153,6 +159,7 @@ func main() {
 	parametrizacaoHandler := handler.NewParametrizacaoHandler(parametrizacaoSvc)
 	padraoArquivoHandler := handler.NewPadraoArquivoHandler(padraoArquivoSvc)
 	veiculoDeParaHandler := handler.NewVeiculoDeParaHandler(veiculoDeParaSvc)
+	cotacaoHandler := handler.NewCotacaoHandler(cotacaoSvc)
 	configuracaoHandler := handler.NewConfiguracaoHandler(configuracaoSvc)
 	inconsistenciaHandler := handler.NewInconsistenciaHandler(inconsistenciaSvc)
 	execucaoHandler := handler.NewExecucaoHandler(execucaoSvc)
@@ -165,6 +172,10 @@ func main() {
 	// A importação automática dispara o contábil automaticamente e gera notificações.
 	pastaWatcher := handler.NewPastaWatcher(posicaoSvc, padraoArquivoSvc, configuracaoSvc, movimentoSvc, notificacaoSvc)
 	pastaWatcher.Start(context.Background())
+
+	// Importação automática de cotações (mesma mecânica, reusa o intervalo de varredura).
+	cotacaoWatcher := handler.NewCotacaoWatcher(cotacaoSvc, configuracaoSvc)
+	cotacaoWatcher.Start(context.Background())
 
 	// 5. Registrar rotas
 	http.HandleFunc("/api/v1/movimento-contabil", func(w http.ResponseWriter, r *http.Request) {
@@ -245,6 +256,15 @@ func main() {
 	http.HandleFunc("/api/v1/parametrizacoes/opcoes", parametrizacaoHandler.Opcoes)
 	http.HandleFunc("/api/v1/parametrizacoes/padroes", padraoArquivoHandler.Padroes)
 	http.HandleFunc("/api/v1/parametrizacoes/veiculo-depara", veiculoDeParaHandler.VeiculoDePara)
+	http.HandleFunc("/api/v1/parametrizacoes/cotacoes", cotacaoHandler.Cotacoes)
+	http.HandleFunc("/api/v1/parametrizacoes/cotacoes/import", cotacaoHandler.ImportarCSV)
+	http.HandleFunc("/api/v1/cotacoes/scan-pasta", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			cotacaoWatcher.Status(w, r)
+		} else {
+			cotacaoWatcher.ScanAgora(w, r)
+		}
+	})
 	http.HandleFunc("/api/v1/configuracoes", configuracaoHandler.Configuracoes)
 	http.HandleFunc("/api/v1/inconsistencias", inconsistenciaHandler.Listar)
 	http.HandleFunc("/api/v1/inconsistencias/export", inconsistenciaHandler.Export)

@@ -168,7 +168,7 @@ func (r *MovimentoContabilRepo) ConsultarPaginadoFiltradoSemCancelados(ctx conte
 	}
 
 	// Aplicar filtros normais (período, boleto, veículo, versaoModo) sem paginar ainda.
-	result := paginarFiltrado(all, model.FiltroMovimento{DataInicio: f.DataInicio, DataFim: f.DataFim, Boleto: f.Boleto, Veiculo: f.Veiculo, Versao: f.Versao, VersaoModo: f.VersaoModo, Pagina: 1, Tamanho: 999999})
+	result := paginarFiltrado(all, model.FiltroMovimento{DataInicio: f.DataInicio, DataFim: f.DataFim, Boleto: f.Boleto, Veiculo: f.Veiculo, Produto: f.Produto, Dominio: f.Dominio, Versao: f.Versao, VersaoModo: f.VersaoModo, Pagina: 1, Tamanho: 999999})
 
 	// Remover lançamentos com saldo zero
 	var filtered []model.LancamentoContabil
@@ -245,6 +245,12 @@ func paginarFiltrado(all []model.LancamentoContabil, f model.FiltroMovimento) *m
 			continue
 		}
 		if f.Veiculo != "" && l.Veiculo != f.Veiculo {
+			continue
+		}
+		if f.Produto != "" && l.Produto != f.Produto {
+			continue
+		}
+		if f.Dominio != "" && l.Dominio != f.Dominio {
 			continue
 		}
 		switch f.VersaoModo {

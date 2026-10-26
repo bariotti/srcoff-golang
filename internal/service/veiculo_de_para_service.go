@@ -31,11 +31,15 @@ func (s *VeiculoDeParaService) Listar(ctx context.Context) ([]model.VeiculoDePar
 func (s *VeiculoDeParaService) Criar(ctx context.Context, v model.VeiculoDePara) (int64, error) {
 	v.Veiculo = strings.TrimSpace(v.Veiculo)
 	v.Codigo = strings.TrimSpace(v.Codigo)
+	v.MoedaBase = strings.TrimSpace(v.MoedaBase)
 	if v.Veiculo == "" {
 		return 0, fmt.Errorf("informe o nome do veículo")
 	}
 	if v.Codigo == "" {
 		return 0, fmt.Errorf("informe o código do veículo")
+	}
+	if v.MoedaBase == "" {
+		return 0, fmt.Errorf("informe a moeda base do veículo")
 	}
 	existentes, err := s.repo.Listar(ctx)
 	if err != nil {
@@ -69,4 +73,18 @@ func (s *VeiculoDeParaService) MapaVeiculoCodigo(ctx context.Context) map[string
 		m[chaveVeiculo(i.Veiculo)] = i.Codigo
 	}
 	return m
+}
+
+// MapaVeiculoMoedaBase devolve o mapa chave-normalizada(nome) → moeda base, para a geração
+// (conversão do valor na moeda base do veículo). Spec: RF-036/RN-182.
+func (s *VeiculoDeParaService) MapaVeiculoMoedaBase(ctx context.Context) (map[string]string, error) {
+	m := map[string]string{}
+	itens, err := s.repo.Listar(ctx)
+	if err != nil {
+		return nil, err
+	}
+	for _, i := range itens {
+		m[chaveVeiculo(i.Veiculo)] = i.MoedaBase
+	}
+	return m, nil
 }

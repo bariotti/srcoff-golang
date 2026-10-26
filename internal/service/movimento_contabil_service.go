@@ -54,6 +54,16 @@ type padraoFlagLookup interface {
 	Listar(ctx context.Context) ([]model.PadraoArquivo, error)
 }
 
+// moedaBaseLookup resolve a moeda base de cada veículo (De/Para) — RF-036/RN-182.
+type moedaBaseLookup interface {
+	MapaVeiculoMoedaBase(ctx context.Context) (map[string]string, error)
+}
+
+// cotacaoLookup fornece as cotações indexadas por (data, moeda1, moeda2) — RF-037/RN-183.
+type cotacaoLookup interface {
+	MapaCotacoes(ctx context.Context) (map[string]model.Cotacao, error)
+}
+
 // MovimentoContabilService implementa a lógica de geração e consulta de movimentos contábeis.
 type MovimentoContabilService struct {
 	posicaoRepo        posicaoCarteiraRepo
@@ -64,6 +74,8 @@ type MovimentoContabilService struct {
 	execucaoRepo       execucaoRepoWriter
 	padraoRepo         padraoFlagLookup
 	saldoRepo          saldoContaWriter
+	moedaBaseRepo      moedaBaseLookup
+	cotacaoRepo        cotacaoLookup
 }
 
 // saldoContaWriter mantém e consulta a projeção materializada de saldo (RN-170).
@@ -110,6 +122,18 @@ func (s *MovimentoContabilService) ComExecucaoRepo(r execucaoRepoWriter) *Movime
 // se a validação de obrigatoriedade do movimento de D-1 se aplica a cada combinação.
 func (s *MovimentoContabilService) ComPadraoRepo(r padraoFlagLookup) *MovimentoContabilService {
 	s.padraoRepo = r
+	return s
+}
+
+// ComMoedaBaseRepo injeta o lookup da moeda base do veículo (De/Para) — RF-036/RN-182.
+func (s *MovimentoContabilService) ComMoedaBaseRepo(r moedaBaseLookup) *MovimentoContabilService {
+	s.moedaBaseRepo = r
+	return s
+}
+
+// ComCotacaoRepo injeta o lookup de cotações (conversão de moeda) — RF-037/RN-183.
+func (s *MovimentoContabilService) ComCotacaoRepo(r cotacaoLookup) *MovimentoContabilService {
+	s.cotacaoRepo = r
 	return s
 }
 
@@ -273,6 +297,45 @@ func (s *MovimentoContabilService) GerarMovimentoEscopo(ctx context.Context, dat
 		return col
 	}
 
+	// Layout de data do padrão por combinação (produto, domínio), para interpretar colunas de
+	// data da posição (ex.: a data base de conversão) no mesmo formato cadastrado no padrão.
+	formatoDataMemo := map[string]string{}
+	formatoDataDe := func(produto, dominio string) string {
+		k := produto + "\x00" + dominio
+		if v, ok := formatoDataMemo[k]; ok {
+			return v
+		}
+		lay := ""
+		if s.padraoRepo != nil {
+			if padroes, err := s.padraoRepo.Listar(ctx); err == nil {
+				for _, p := range padroes {
+					if strings.TrimSpace(p.Produto) == produto && strings.TrimSpace(p.Dominio) == dominio {
+						lay = evaluator.LayoutData(p.FormatoData)
+						break
+					}
+				}
+			}
+		}
+		formatoDataMemo[k] = lay
+		return lay
+	}
+
+	// Moeda base do veículo (De/Para — RF-036) e cotações (RF-037), carregadas uma vez.
+	// Ausência das dependências = recursos não injetados; condições sem configuração de
+	// moeda base simplesmente não convertem (campos ficam em branco).
+	moedaBasePorVeiculo := map[string]string{}
+	if s.moedaBaseRepo != nil {
+		if m, err := s.moedaBaseRepo.MapaVeiculoMoedaBase(ctx); err == nil {
+			moedaBasePorVeiculo = m
+		}
+	}
+	cotacoes := map[string]model.Cotacao{}
+	if s.cotacaoRepo != nil {
+		if m, err := s.cotacaoRepo.MapaCotacoes(ctx); err == nil {
+			cotacoes = m
+		}
+	}
+
 	// 2b. Base do cálculo INCREMENTAL (Spec: RN-120, docs/especificacao.md §5.4).
 	// Para regras incrementais, o valor lançado em D0 é
 	// | |valor_D0| - |valor_D-N| | por (produto, domínio, boleto, regra, contas), onde D-N é a
@@ -404,6 +467,13 @@ func (s *MovimentoContabilService) GerarMovimentoEscopo(ctx context.Context, dat
 					k := chaveIncremental(produto, dominio, boletoLanc, regra.ID, condicao.ContaDebito, condicao.ContaCredito)
 					valor = math.Abs(math.Abs(valor) - math.Abs(baseIncremental[k]))
 				}
+				// Valor na moeda base do veículo (RF-036/RN-182): da posição ou convertido.
+				valorBase, moedaBase, incMB := s.resolverMoedaBaseVeiculo(
+					data, boletoLanc, produto, dominio, regra, condicao, env, veiculo, valor, moeda, moedaBasePorVeiculo, cotacoes, formatoDataDe(produto, dominio))
+				if incMB != nil {
+					inconsistencias = append(inconsistencias, *incMB)
+					continue
+				}
 				lancamentos = append(lancamentos, model.LancamentoContabil{
 					DataLoteContabil:          data,
 					CodigoIdentificadorBoleto: boletoLanc,
@@ -418,6 +488,8 @@ func (s *MovimentoContabilService) GerarMovimentoEscopo(ctx context.Context, dat
 					DescricaoCondicaoContabil: condicao.Condicao,
 					IDRegraContabil:           regra.ID,
 					Veiculo:                   veiculo,
+					ValorMoedaBaseVeiculo:     valorBase,
+					MoedaBaseVeiculo:          moedaBase,
 				})
 			}
 		}
@@ -553,6 +625,8 @@ func (s *MovimentoContabilService) GerarMovimentoEscopo(ctx context.Context, dat
 					DescricaoCondicaoContabil: l1.DescricaoCondicaoContabil,
 					IDRegraContabil:           l1.IDRegraContabil,
 					Veiculo:                   l1.Veiculo,
+					ValorMoedaBaseVeiculo:     l1.ValorMoedaBaseVeiculo,
+					MoedaBaseVeiculo:          l1.MoedaBaseVeiculo,
 				})
 			}
 		}
@@ -910,42 +984,13 @@ func (s *MovimentoContabilService) ConsultarLancamentosFiltrado(ctx context.Cont
 // escopo, busca todos os lançamentos que atendem aos demais critérios, filtra por
 // produto/domínio e pagina o resultado — mantendo a contagem total correta.
 func (s *MovimentoContabilService) ConsultarLancamentosFiltradoEscopo(ctx context.Context, dataInicio, dataFim time.Time, boleto, veiculo, produto, dominio string, versao int, versaoModo string, pagina, tamanho int) (*model.PaginaLancamentos, error) {
-	if produto == "" && dominio == "" {
-		return s.movimentoRepo.ConsultarPaginadoFiltradoSemCancelados(ctx, model.FiltroMovimento{DataInicio: dataInicio, DataFim: dataFim, Boleto: boleto, Veiculo: veiculo, Versao: versao, VersaoModo: versaoModo, Pagina: pagina, Tamanho: tamanho})
-	}
-
-	completo, err := s.movimentoRepo.ConsultarPaginadoFiltradoSemCancelados(ctx, model.FiltroMovimento{DataInicio: dataInicio, DataFim: dataFim, Boleto: boleto, Veiculo: veiculo, Versao: versao, VersaoModo: versaoModo, Pagina: 1, Tamanho: 999999})
-	if err != nil {
-		return nil, err
-	}
-
-	filtrados := make([]model.LancamentoContabil, 0, len(completo.Lancamentos))
-	for _, l := range completo.Lancamentos {
-		if produto != "" && l.Produto != produto {
-			continue
-		}
-		if dominio != "" && l.Dominio != dominio {
-			continue
-		}
-		filtrados = append(filtrados, l)
-	}
-
-	total := len(filtrados)
-	if tamanho <= 0 {
-		tamanho = 100
-	}
-	if pagina <= 0 {
-		pagina = 1
-	}
-	offset := (pagina - 1) * tamanho
-	if offset >= total {
-		return &model.PaginaLancamentos{Total: total, Pagina: pagina, Tamanho: tamanho, Lancamentos: []model.LancamentoContabil{}}, nil
-	}
-	end := offset + tamanho
-	if end > total {
-		end = total
-	}
-	return &model.PaginaLancamentos{Total: total, Pagina: pagina, Tamanho: tamanho, Lancamentos: filtrados[offset:end]}, nil
+	// Produto/domínio entram no filtro do repositório (WHERE condicional), mantendo a paginação
+	// no banco em todos os casos — inclusive quando há escopo. Campos vazios não filtram.
+	return s.movimentoRepo.ConsultarPaginadoFiltradoSemCancelados(ctx, model.FiltroMovimento{
+		DataInicio: dataInicio, DataFim: dataFim, Boleto: boleto, Veiculo: veiculo,
+		Produto: produto, Dominio: dominio, Versao: versao, VersaoModo: versaoModo,
+		Pagina: pagina, Tamanho: tamanho,
+	})
 }
 
 // ExcluirMovimento exclui lançamentos de uma data e opcionalmente de uma versão específica.
@@ -1259,6 +1304,78 @@ func canonChaveLanc(l model.LancamentoContabil) (chave, contaDeb, contaCred stri
 		contaDeb, contaCred = l.ContaCredito, l.ContaDebito
 	}
 	return chaveIncremental(l.Produto, l.Dominio, l.CodigoIdentificadorBoleto, l.IDRegraContabil, contaDeb, contaCred), contaDeb, contaCred
+}
+
+// resolverMoedaBaseVeiculo calcula (valor, moeda) na moeda base do veículo para um lançamento,
+// conforme a configuração da condição (RF-036/RN-182):
+//   - base vem da posição → lê valor e moeda base das colunas configuradas;
+//   - caso contrário → converte: se a moeda do veículo (De/Para) == moeda do lançamento, usa o
+//     próprio valor/moeda; senão, busca a cotação (RF-037) da data base e aplica a direção.
+//
+// Devolve uma inconsistência (!= nil) quando a condição exige a base mas não é possível obtê-la
+// (campo ausente, moeda base do veículo inexistente, data inválida ou cotação não encontrada).
+// Quando a condição não configura a base, devolve valores em branco e inc=nil (lançamento normal).
+func (s *MovimentoContabilService) resolverMoedaBaseVeiculo(
+	data time.Time, boleto, produto, dominio string, regra model.RegraContabil, condicao model.CondicaoRegra,
+	env map[string]interface{}, veiculo string, valor float64, moeda string,
+	moedaBasePorVeiculo map[string]string, cotacoes map[string]model.Cotacao, layoutData string,
+) (float64, string, *model.InconsistenciaProcessamento) {
+
+	incMoedaBase := func(campo, detalhe string, faltantes []string) *model.InconsistenciaProcessamento {
+		inc := novaInconsistencia(data, boleto, produto, dominio, regra, model.InconsistenciaMoedaBase, campo, faltantes)
+		if detalhe != "" {
+			inc.Detalhe = detalhe
+		}
+		return &inc
+	}
+
+	if condicao.BaseNaPosicao {
+		if faltantes := camposFaltantes(env, condicao.CampoValorMoedaBase); len(faltantes) > 0 {
+			return 0, "", incMoedaBase(condicao.CampoValorMoedaBase, "", faltantes)
+		}
+		if faltantes := camposFaltantes(env, condicao.CampoMoedaBase); len(faltantes) > 0 {
+			return 0, "", incMoedaBase(condicao.CampoMoedaBase, "", faltantes)
+		}
+		vb, err := s.evaluator.EvaluateValue(condicao.CampoValorMoedaBase, env)
+		if err != nil {
+			return 0, "", incMoedaBase(condicao.CampoValorMoedaBase, fmt.Sprintf("Valor na moeda base inválido na posição (campo %q).", condicao.CampoValorMoedaBase), nil)
+		}
+		mb := strings.TrimSpace(evaluator.CampoString(env, condicao.CampoMoedaBase))
+		if mb == "" {
+			return 0, "", incMoedaBase(condicao.CampoMoedaBase, fmt.Sprintf("Moeda base do veículo em branco na posição (campo %q).", condicao.CampoMoedaBase), nil)
+		}
+		return vb, mb, nil
+	}
+
+	// Sem coluna de data configurada → condição sem configuração de moeda base (não converte).
+	if strings.TrimSpace(condicao.CampoDataConversao) == "" {
+		return 0, "", nil
+	}
+
+	// Converter: precisa da moeda base do veículo (De/Para).
+	moedaVeic := strings.TrimSpace(moedaBasePorVeiculo[chaveVeiculo(veiculo)])
+	if moedaVeic == "" {
+		return 0, "", incMoedaBase("moeda_base", fmt.Sprintf("Veículo %q sem moeda base cadastrada (De/Para). Não é possível converter.", veiculo), nil)
+	}
+	// Mesma moeda → sem conversão.
+	if strings.EqualFold(moedaVeic, strings.TrimSpace(moeda)) {
+		return valor, moedaVeic, nil
+	}
+	// Moedas diferentes → busca a cotação da data base presente na posição.
+	if faltantes := camposFaltantes(env, condicao.CampoDataConversao); len(faltantes) > 0 {
+		return 0, "", incMoedaBase(condicao.CampoDataConversao, "", faltantes)
+	}
+	// A coluna da data de conversão pode vir como time.Time ou como texto no formato do padrão;
+	// normaliza para ISO (AAAA-MM-DD), que é a chave de busca da cotação.
+	dataConv, ok := evaluator.NormalizarDataISO(env[condicao.CampoDataConversao], layoutData)
+	if !ok {
+		return 0, "", incMoedaBase(condicao.CampoDataConversao, fmt.Sprintf("Data base para conversão inválida na posição (campo %q = %q).", condicao.CampoDataConversao, evaluator.CampoString(env, condicao.CampoDataConversao)), nil)
+	}
+	cot, ok := cotacoes[chaveCotacao(dataConv, moedaVeic, moeda)]
+	if !ok {
+		return 0, "", incMoedaBase("cotacao", fmt.Sprintf("Cotação não encontrada para %s→%s em %s. Lançamento não gerado.", moedaVeic, strings.TrimSpace(moeda), dataConv), nil)
+	}
+	return aplicarCotacao(valor, cot), moedaVeic, nil
 }
 
 // acumularBaseIncremental avalia as regras incrementais sobre uma posição (de D-N) e acumula,

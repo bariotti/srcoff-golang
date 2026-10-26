@@ -15,7 +15,7 @@ type VeiculoDeParaRepo struct {
 func NewVeiculoDeParaRepo(db *sql.DB) *VeiculoDeParaRepo { return &VeiculoDeParaRepo{db: db} }
 
 func (r *VeiculoDeParaRepo) Listar(ctx context.Context) ([]model.VeiculoDePara, error) {
-	rows, err := r.db.QueryContext(ctx, "SELECT id, ISNULL(veiculo,''), ISNULL(codigo,'') FROM veiculo_de_para ORDER BY veiculo")
+	rows, err := r.db.QueryContext(ctx, "SELECT id, ISNULL(veiculo,''), ISNULL(codigo,''), ISNULL(moeda_base,'') FROM veiculo_de_para ORDER BY veiculo")
 	if err != nil {
 		return nil, err
 	}
@@ -23,7 +23,7 @@ func (r *VeiculoDeParaRepo) Listar(ctx context.Context) ([]model.VeiculoDePara, 
 	out := []model.VeiculoDePara{}
 	for rows.Next() {
 		var v model.VeiculoDePara
-		if err := rows.Scan(&v.ID, &v.Veiculo, &v.Codigo); err != nil {
+		if err := rows.Scan(&v.ID, &v.Veiculo, &v.Codigo, &v.MoedaBase); err != nil {
 			return nil, err
 		}
 		out = append(out, v)
@@ -34,8 +34,8 @@ func (r *VeiculoDeParaRepo) Listar(ctx context.Context) ([]model.VeiculoDePara, 
 func (r *VeiculoDeParaRepo) Criar(ctx context.Context, v model.VeiculoDePara) (int64, error) {
 	var id int64
 	err := r.db.QueryRowContext(ctx,
-		"INSERT INTO veiculo_de_para (veiculo, codigo) VALUES (@p1, @p2); SELECT SCOPE_IDENTITY()",
-		v.Veiculo, v.Codigo,
+		"INSERT INTO veiculo_de_para (veiculo, codigo, moeda_base) VALUES (@p1, @p2, @p3); SELECT SCOPE_IDENTITY()",
+		v.Veiculo, v.Codigo, v.MoedaBase,
 	).Scan(&id)
 	return id, err
 }

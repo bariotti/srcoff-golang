@@ -24,11 +24,17 @@ var ddlGarantido = []string{
 	`IF COL_LENGTH('regra_contabil','tipo_lancamento') IS NULL BEGIN ALTER TABLE regra_contabil ADD tipo_lancamento VARCHAR(20) NULL END`,
 	// condicao_regra
 	`IF COL_LENGTH('condicao_regra','campo_boleto') IS NULL BEGIN ALTER TABLE condicao_regra ADD campo_boleto VARCHAR(100) NULL END`,
+	`IF COL_LENGTH('condicao_regra','base_na_posicao') IS NULL BEGIN ALTER TABLE condicao_regra ADD base_na_posicao BIT NULL END`,
+	`IF COL_LENGTH('condicao_regra','campo_valor_moeda_base') IS NULL BEGIN ALTER TABLE condicao_regra ADD campo_valor_moeda_base VARCHAR(100) NULL END`,
+	`IF COL_LENGTH('condicao_regra','campo_moeda_base') IS NULL BEGIN ALTER TABLE condicao_regra ADD campo_moeda_base VARCHAR(100) NULL END`,
+	`IF COL_LENGTH('condicao_regra','campo_data_conversao') IS NULL BEGIN ALTER TABLE condicao_regra ADD campo_data_conversao VARCHAR(100) NULL END`,
 	// movimento_contabil
 	`IF COL_LENGTH('movimento_contabil','produto') IS NULL BEGIN ALTER TABLE movimento_contabil ADD produto VARCHAR(50) NULL END`,
 	`IF COL_LENGTH('movimento_contabil','dominio') IS NULL BEGIN ALTER TABLE movimento_contabil ADD dominio VARCHAR(100) NULL END`,
 	`IF COL_LENGTH('movimento_contabil','origem') IS NULL BEGIN ALTER TABLE movimento_contabil ADD origem VARCHAR(20) NULL END`,
 	`IF COL_LENGTH('movimento_contabil','veiculo') IS NULL BEGIN ALTER TABLE movimento_contabil ADD veiculo VARCHAR(100) NULL END`,
+	`IF COL_LENGTH('movimento_contabil','valor_moeda_base_veiculo') IS NULL BEGIN ALTER TABLE movimento_contabil ADD valor_moeda_base_veiculo FLOAT NULL END`,
+	`IF COL_LENGTH('movimento_contabil','moeda_base_veiculo') IS NULL BEGIN ALTER TABLE movimento_contabil ADD moeda_base_veiculo VARCHAR(50) NULL END`,
 	// movimento_execucao
 	`IF COL_LENGTH('movimento_execucao','qtd_movimento') IS NULL BEGIN ALTER TABLE movimento_execucao ADD qtd_movimento INT NULL END`,
 	// inconsistencia_processamento
@@ -47,6 +53,15 @@ var ddlGarantido = []string{
 	   CREATE TABLE veiculo_de_para (
 	     id BIGINT IDENTITY(1,1) PRIMARY KEY,
 	     veiculo VARCHAR(255) NOT NULL, codigo VARCHAR(100) NOT NULL);
+	 END`,
+	`IF COL_LENGTH('veiculo_de_para','moeda_base') IS NULL BEGIN ALTER TABLE veiculo_de_para ADD moeda_base VARCHAR(50) NULL END`,
+	// cotacao (taxa de conversão entre moedas por data — RF-037)
+	`IF OBJECT_ID('cotacao','U') IS NULL BEGIN
+	   CREATE TABLE cotacao (
+	     id BIGINT IDENTITY(1,1) PRIMARY KEY,
+	     data DATE NOT NULL, moeda1 VARCHAR(50) NOT NULL, moeda2 VARCHAR(50) NOT NULL,
+	     direcao VARCHAR(20) NOT NULL, taxa FLOAT NOT NULL);
+	   CREATE INDEX IX_cotacao_lookup ON cotacao (data, moeda1, moeda2);
 	 END`,
 	`IF COL_LENGTH('padrao_arquivo','obrigatorio_mov_d1') IS NULL BEGIN ALTER TABLE padrao_arquivo ADD obrigatorio_mov_d1 BIT NULL END`,
 	// saldo_conta (projeção materializada — RN-170). Tamanhos pequenos p/ a PK caber em 900 bytes.

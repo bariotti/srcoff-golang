@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 
+	"srcoff/internal/evaluator"
 	"srcoff/internal/model"
 	"srcoff/internal/service"
 )
@@ -15,18 +16,9 @@ type padraoArquivoResolver interface {
 	ResolverPadroes(ctx context.Context, nomeArquivo string) ([]model.PadraoArquivo, error)
 }
 
-// layoutsFormatoData mapeia o rótulo escolhido no padrão de arquivo para o layout
-// de referência do Go (Mon Jan 2 2006). Aplica-se a todas as colunas de data do arquivo.
-var layoutsFormatoData = map[string]string{
-	"AAAA/MM/DD": "2006/01/02",
-	"AAAA-MM-DD": "2006-01-02",
-	"DD/MM/AAAA": "02/01/2006",
-	"DD-MM-AAAA": "02-01-2006",
-	"AAAA/DD/MM": "2006/02/01",
-	"AAAA-DD-MM": "2006-02-01",
-	"MM/DD/AAAA": "01/02/2006",
-	"MM-DD-AAAA": "01-02-2006",
-}
+// layoutsFormatoData mapeia o rótulo escolhido no padrão de arquivo para o layout de
+// referência do Go. Fonte única em evaluator.LayoutsFormatoData (usada também na geração).
+var layoutsFormatoData = evaluator.LayoutsFormatoData
 
 // configDoPadrao converte os separadores textuais e o formato de data do padrão em parseConfig.
 func configDoPadrao(p model.PadraoArquivo) parseConfig {

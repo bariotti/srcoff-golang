@@ -27,7 +27,7 @@ func colsMov(alias string) string {
 		a + "valor_lancamento_contabil, " + a + "moeda_lancamento_contabil, " + a + "conta_debito, " + a + "conta_credito, " +
 		"IFNULL(" + a + "produto,''), IFNULL(" + a + "dominio,''), " + a + "indicador_reversao, " +
 		"IFNULL(" + a + "descricao_regra_contabil,''), IFNULL(" + a + "descricao_condicao_contabil,''), IFNULL(" + a + "id_regra_contabil,0), " +
-		"IFNULL(" + a + "origem,'automatico'), IFNULL(" + a + "veiculo,'')"
+		"IFNULL(" + a + "origem,'automatico'), IFNULL(" + a + "veiculo,''), IFNULL(" + a + "valor_moeda_base_veiculo,0), IFNULL(" + a + "moeda_base_veiculo,'')"
 }
 
 func scanLancamentos(rows *sql.Rows) ([]model.LancamentoContabil, error) {
@@ -38,7 +38,7 @@ func scanLancamentos(rows *sql.Rows) ([]model.LancamentoContabil, error) {
 		var rev int
 		if err := rows.Scan(&l.ID, &dataStr, &l.CodigoVersaoConteudo, &l.CodigoIdentificadorBoleto,
 			&l.ValorLancamentoContabil, &l.MoedaLancamentoContabil, &l.ContaDebito, &l.ContaCredito,
-			&l.Produto, &l.Dominio, &rev, &l.DescricaoRegraContabil, &l.DescricaoCondicaoContabil, &l.IDRegraContabil, &l.Origem, &l.Veiculo); err != nil {
+			&l.Produto, &l.Dominio, &rev, &l.DescricaoRegraContabil, &l.DescricaoCondicaoContabil, &l.IDRegraContabil, &l.Origem, &l.Veiculo, &l.ValorMoedaBaseVeiculo, &l.MoedaBaseVeiculo); err != nil {
 			return nil, err
 		}
 		l.DataLoteContabil = parseData(dataStr)
@@ -58,7 +58,7 @@ func (r *MovimentoContabilRepo) BulkInsert(ctx context.Context, lancamentos []mo
 	}
 	defer tx.Rollback()
 	stmt, err := tx.PrepareContext(ctx,
-		"INSERT INTO movimento_contabil (data_lote_contabil, codigo_versao_conteudo, codigo_identificador_boleto, valor_lancamento_contabil, moeda_lancamento_contabil, conta_debito, conta_credito, produto, dominio, indicador_reversao, descricao_regra_contabil, descricao_condicao_contabil, id_regra_contabil, origem, veiculo) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)")
+		"INSERT INTO movimento_contabil (data_lote_contabil, codigo_versao_conteudo, codigo_identificador_boleto, valor_lancamento_contabil, moeda_lancamento_contabil, conta_debito, conta_credito, produto, dominio, indicador_reversao, descricao_regra_contabil, descricao_condicao_contabil, id_regra_contabil, origem, veiculo, valor_moeda_base_veiculo, moeda_base_veiculo) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)")
 	if err != nil {
 		return err
 	}
@@ -67,7 +67,7 @@ func (r *MovimentoContabilRepo) BulkInsert(ctx context.Context, lancamentos []mo
 		if _, err := stmt.ExecContext(ctx,
 			fmtData(l.DataLoteContabil), l.CodigoVersaoConteudo, l.CodigoIdentificadorBoleto,
 			l.ValorLancamentoContabil, l.MoedaLancamentoContabil, l.ContaDebito, l.ContaCredito,
-			l.Produto, l.Dominio, b2i(l.IndicadorReversao), l.DescricaoRegraContabil, l.DescricaoCondicaoContabil, l.IDRegraContabil, l.OrigemOuPadrao(), l.Veiculo,
+			l.Produto, l.Dominio, b2i(l.IndicadorReversao), l.DescricaoRegraContabil, l.DescricaoCondicaoContabil, l.IDRegraContabil, l.OrigemOuPadrao(), l.Veiculo, l.ValorMoedaBaseVeiculo, l.MoedaBaseVeiculo,
 		); err != nil {
 			return err
 		}
@@ -145,6 +145,12 @@ func (r *MovimentoContabilRepo) consultarFiltrado(ctx context.Context, f model.F
 	}
 	if f.Veiculo != "" {
 		where += " AND IFNULL(m.veiculo,'') = '" + strings.ReplaceAll(f.Veiculo, "'", "''") + "'"
+	}
+	if f.Produto != "" {
+		where += " AND IFNULL(m.produto,'') = '" + strings.ReplaceAll(f.Produto, "'", "''") + "'"
+	}
+	if f.Dominio != "" {
+		where += " AND IFNULL(m.dominio,'') = '" + strings.ReplaceAll(f.Dominio, "'", "''") + "'"
 	}
 	switch f.VersaoModo {
 	case "especifica":

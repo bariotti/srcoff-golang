@@ -254,6 +254,57 @@ var acentosNorm = map[rune]rune{
 	'ç': 'c', 'ñ': 'n',
 }
 
+// LayoutsFormatoData mapeia o rótulo do padrão de arquivo (ex: "DD/MM/AAAA") para o layout
+// de referência do Go. Fonte única usada na importação e na geração.
+var LayoutsFormatoData = map[string]string{
+	"AAAA/MM/DD": "2006/01/02",
+	"AAAA-MM-DD": "2006-01-02",
+	"DD/MM/AAAA": "02/01/2006",
+	"DD-MM-AAAA": "02-01-2006",
+	"AAAA/DD/MM": "2006/02/01",
+	"AAAA-DD-MM": "2006-02-01",
+	"MM/DD/AAAA": "01/02/2006",
+	"MM-DD-AAAA": "01-02-2006",
+}
+
+// LayoutData devolve o layout Go para o rótulo de formato do padrão ("" se desconhecido).
+func LayoutData(label string) string { return LayoutsFormatoData[strings.TrimSpace(label)] }
+
+// NormalizarDataISO converte um valor de data (campo da posição) para "AAAA-MM-DD".
+// Aceita time.Time direto e strings em vários formatos — ISO, o formato configurado no
+// padrão do arquivo (layoutPadrao, quando informado) e o texto padrão de time.Time.
+// Devolve ok=false quando o valor não é uma data reconhecível.
+func NormalizarDataISO(v interface{}, layoutPadrao string) (string, bool) {
+	switch t := v.(type) {
+	case time.Time:
+		return t.Format("2006-01-02"), true
+	case nil:
+		return "", false
+	}
+	s := strings.TrimSpace(fmt.Sprintf("%v", v))
+	if s == "" {
+		return "", false
+	}
+	// Algumas datas chegam com hora anexada (ex.: "2026-10-12 00:00:00 +0000 UTC"): usa só o 1º token.
+	primeiro := s
+	if i := strings.IndexByte(s, ' '); i > 0 {
+		primeiro = s[:i]
+	}
+	layouts := []string{"2006-01-02"}
+	if layoutPadrao != "" {
+		layouts = append(layouts, layoutPadrao)
+	}
+	layouts = append(layouts, "02/01/2006", "01/02/2006", "2006/01/02", time.RFC3339, "2006-01-02T15:04:05Z07:00")
+	for _, cand := range []string{primeiro, s} {
+		for _, lay := range layouts {
+			if ti, err := time.Parse(lay, cand); err == nil {
+				return ti.Format("2006-01-02"), true
+			}
+		}
+	}
+	return "", false
+}
+
 // NormalizarNome converte um nome de coluna para snake_case sem acento. É a fonte
 // única de normalização usada tanto na importação (cabeçalho da posição) quanto na
 // geração (resolução da coluna do veículo), para que os nomes casem exatamente.

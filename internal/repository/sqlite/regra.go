@@ -73,7 +73,7 @@ func (r *RegraContabilRepo) ExcluirRegra(ctx context.Context, id int64) error {
 
 func (r *RegraContabilRepo) ListarCondicoes(ctx context.Context, idRegra int64) ([]model.CondicaoRegra, error) {
 	rows, err := r.db.QueryContext(ctx,
-		"SELECT id, id_regra, condicao, conta_debito, conta_credito, campo_valor, campo_moeda, IFNULL(campo_boleto,''), ativo FROM condicao_regra WHERE id_regra = ? AND ativo = 1 ORDER BY id",
+		"SELECT id, id_regra, condicao, conta_debito, conta_credito, campo_valor, campo_moeda, IFNULL(campo_boleto,''), ativo, IFNULL(base_na_posicao,0), IFNULL(campo_valor_moeda_base,''), IFNULL(campo_moeda_base,''), IFNULL(campo_data_conversao,'') FROM condicao_regra WHERE id_regra = ? AND ativo = 1 ORDER BY id",
 		idRegra,
 	)
 	if err != nil {
@@ -83,9 +83,11 @@ func (r *RegraContabilRepo) ListarCondicoes(ctx context.Context, idRegra int64) 
 	var condicoes []model.CondicaoRegra
 	for rows.Next() {
 		var c model.CondicaoRegra
-		if err := rows.Scan(&c.ID, &c.IDRegra, &c.Condicao, &c.ContaDebito, &c.ContaCredito, &c.CampoValor, &c.CampoMoeda, &c.CampoBoleto, &c.Ativo); err != nil {
+		var baseNaPosicao int
+		if err := rows.Scan(&c.ID, &c.IDRegra, &c.Condicao, &c.ContaDebito, &c.ContaCredito, &c.CampoValor, &c.CampoMoeda, &c.CampoBoleto, &c.Ativo, &baseNaPosicao, &c.CampoValorMoedaBase, &c.CampoMoedaBase, &c.CampoDataConversao); err != nil {
 			return nil, err
 		}
+		c.BaseNaPosicao = baseNaPosicao != 0
 		condicoes = append(condicoes, c)
 	}
 	return condicoes, rows.Err()
@@ -93,8 +95,8 @@ func (r *RegraContabilRepo) ListarCondicoes(ctx context.Context, idRegra int64) 
 
 func (r *RegraContabilRepo) CriarCondicao(ctx context.Context, condicao model.CondicaoRegra) (int64, error) {
 	res, err := r.db.ExecContext(ctx,
-		"INSERT INTO condicao_regra (id_regra, condicao, conta_debito, conta_credito, campo_valor, campo_moeda, campo_boleto, ativo) VALUES (?,?,?,?,?,?,?,1)",
-		condicao.IDRegra, condicao.Condicao, condicao.ContaDebito, condicao.ContaCredito, condicao.CampoValor, condicao.CampoMoeda, condicao.CampoBoleto,
+		"INSERT INTO condicao_regra (id_regra, condicao, conta_debito, conta_credito, campo_valor, campo_moeda, campo_boleto, ativo, base_na_posicao, campo_valor_moeda_base, campo_moeda_base, campo_data_conversao) VALUES (?,?,?,?,?,?,?,1,?,?,?,?)",
+		condicao.IDRegra, condicao.Condicao, condicao.ContaDebito, condicao.ContaCredito, condicao.CampoValor, condicao.CampoMoeda, condicao.CampoBoleto, b2i(condicao.BaseNaPosicao), condicao.CampoValorMoedaBase, condicao.CampoMoedaBase, condicao.CampoDataConversao,
 	)
 	if err != nil {
 		return 0, err
@@ -105,8 +107,8 @@ func (r *RegraContabilRepo) CriarCondicao(ctx context.Context, condicao model.Co
 func (r *RegraContabilRepo) EditarCondicao(ctx context.Context, condicao model.CondicaoRegra) error {
 	// Ativo é preservado: editar atualiza os campos, não (des)ativa a condição.
 	_, err := r.db.ExecContext(ctx,
-		"UPDATE condicao_regra SET condicao=?, conta_debito=?, conta_credito=?, campo_valor=?, campo_moeda=?, campo_boleto=? WHERE id=?",
-		condicao.Condicao, condicao.ContaDebito, condicao.ContaCredito, condicao.CampoValor, condicao.CampoMoeda, condicao.CampoBoleto, condicao.ID,
+		"UPDATE condicao_regra SET condicao=?, conta_debito=?, conta_credito=?, campo_valor=?, campo_moeda=?, campo_boleto=?, base_na_posicao=?, campo_valor_moeda_base=?, campo_moeda_base=?, campo_data_conversao=? WHERE id=?",
+		condicao.Condicao, condicao.ContaDebito, condicao.ContaCredito, condicao.CampoValor, condicao.CampoMoeda, condicao.CampoBoleto, b2i(condicao.BaseNaPosicao), condicao.CampoValorMoedaBase, condicao.CampoMoedaBase, condicao.CampoDataConversao, condicao.ID,
 	)
 	return err
 }
