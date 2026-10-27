@@ -41,6 +41,11 @@ func Open(path string) (*sql.DB, error) {
 	if err := migrarColunas(context.Background(), db); err != nil {
 		return nil, err
 	}
+	// Torna produto/domínio de movimento_contabil NOT NULL DEFAULT '' em bancos antigos,
+	// destravando o índice IX_mov_data_prod_dom_ver nas consultas (sem IFNULL).
+	if err := migrarMovimentoProdutoDominioNotNull(context.Background(), db); err != nil {
+		return nil, err
+	}
 	// Sem seed de opções padrão: os combos (Produto/Domínio) nascem vazios e são
 	// cadastrados pelo usuário via Parametrizações (ADR-009, docs/especificacao.md §8.4).
 	return db, nil
@@ -75,6 +80,96 @@ func migrarColunas(ctx context.Context, db *sql.DB) error {
 		}
 	}
 	return nil
+}
+
+// colunaAnulavel informa se a coluna aceita NULL (notnull=0 no PRAGMA table_info).
+// Retorna (false, nil) quando a coluna não existe.
+func colunaAnulavel(ctx context.Context, db *sql.DB, tabela, coluna string) (bool, error) {
+	rows, err := db.QueryContext(ctx, "PRAGMA table_info("+tabela+")")
+	if err != nil {
+		return false, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var cid, notnull, pk int
+		var name, ctype string
+		var dflt sql.NullString
+		if err := rows.Scan(&cid, &name, &ctype, &notnull, &dflt, &pk); err != nil {
+			return false, err
+		}
+		if name == coluna {
+			return notnull == 0, nil
+		}
+	}
+	return false, rows.Err()
+}
+
+// migrarMovimentoProdutoDominioNotNull reconstrói movimento_contabil com produto/domínio
+// NOT NULL DEFAULT '' quando o banco antigo ainda os tem anuláveis. É idempotente (só roda
+// uma vez, pois depois as colunas deixam de ser anuláveis) e transacional (tudo-ou-nada).
+func migrarMovimentoProdutoDominioNotNull(ctx context.Context, db *sql.DB) error {
+	prodNul, err := colunaAnulavel(ctx, db, "movimento_contabil", "produto")
+	if err != nil {
+		return err
+	}
+	domNul, err := colunaAnulavel(ctx, db, "movimento_contabil", "dominio")
+	if err != nil {
+		return err
+	}
+	if !prodNul && !domNul {
+		return nil // já migrado (ou banco novo criado pelo schema atual)
+	}
+
+	stmts := []string{
+		`CREATE TABLE movimento_contabil_new (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			data_lote_contabil TEXT NOT NULL,
+			codigo_versao_conteudo INTEGER NOT NULL,
+			codigo_identificador_boleto TEXT NOT NULL,
+			valor_lancamento_contabil REAL NOT NULL,
+			moeda_lancamento_contabil TEXT NOT NULL,
+			conta_debito TEXT NOT NULL,
+			conta_credito TEXT NOT NULL,
+			produto TEXT NOT NULL DEFAULT '',
+			dominio TEXT NOT NULL DEFAULT '',
+			indicador_reversao INTEGER NOT NULL DEFAULT 0,
+			descricao_regra_contabil TEXT,
+			descricao_condicao_contabil TEXT,
+			id_regra_contabil INTEGER,
+			origem TEXT NOT NULL DEFAULT 'automatico',
+			veiculo TEXT NOT NULL DEFAULT '',
+			valor_moeda_base_veiculo REAL NOT NULL DEFAULT 0,
+			moeda_base_veiculo TEXT NOT NULL DEFAULT ''
+		)`,
+		`INSERT INTO movimento_contabil_new (id, data_lote_contabil, codigo_versao_conteudo, codigo_identificador_boleto,
+			valor_lancamento_contabil, moeda_lancamento_contabil, conta_debito, conta_credito, produto, dominio,
+			indicador_reversao, descricao_regra_contabil, descricao_condicao_contabil, id_regra_contabil,
+			origem, veiculo, valor_moeda_base_veiculo, moeda_base_veiculo)
+		 SELECT id, data_lote_contabil, codigo_versao_conteudo, codigo_identificador_boleto,
+			valor_lancamento_contabil, moeda_lancamento_contabil, conta_debito, conta_credito,
+			IFNULL(produto,''), IFNULL(dominio,''),
+			indicador_reversao, descricao_regra_contabil, descricao_condicao_contabil, id_regra_contabil,
+			origem, veiculo, valor_moeda_base_veiculo, moeda_base_veiculo
+		 FROM movimento_contabil`,
+		`DROP TABLE movimento_contabil`,
+		`ALTER TABLE movimento_contabil_new RENAME TO movimento_contabil`,
+		`CREATE INDEX IF NOT EXISTS IX_movimento_data_versao ON movimento_contabil (data_lote_contabil, codigo_versao_conteudo)`,
+		`CREATE INDEX IF NOT EXISTS IX_movimento_data_reversao ON movimento_contabil (data_lote_contabil, indicador_reversao)`,
+		`CREATE INDEX IF NOT EXISTS IX_mov_data_prod_dom_ver ON movimento_contabil (data_lote_contabil, produto, dominio, codigo_versao_conteudo)`,
+		`CREATE INDEX IF NOT EXISTS IX_mov_data_boleto_regra ON movimento_contabil (data_lote_contabil, codigo_identificador_boleto, id_regra_contabil)`,
+	}
+
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	for _, s := range stmts {
+		if _, err := tx.ExecContext(ctx, s); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
 }
 
 // colunaExiste consulta o PRAGMA table_info para saber se a coluna já existe na tabela.
@@ -155,8 +250,8 @@ CREATE TABLE IF NOT EXISTS movimento_contabil (
   moeda_lancamento_contabil TEXT NOT NULL,
   conta_debito TEXT NOT NULL,
   conta_credito TEXT NOT NULL,
-  produto TEXT,
-  dominio TEXT,
+  produto TEXT NOT NULL DEFAULT '',
+  dominio TEXT NOT NULL DEFAULT '',
   indicador_reversao INTEGER NOT NULL DEFAULT 0,
   descricao_regra_contabil TEXT,
   descricao_condicao_contabil TEXT,
@@ -258,6 +353,19 @@ CREATE TABLE IF NOT EXISTS saldo_conta (
   PRIMARY KEY (produto, dominio, codigo_identificador_boleto, id_regra_contabil, conta_debito, conta_credito)
 );
 CREATE INDEX IF NOT EXISTS IX_saldo_combo ON saldo_conta (produto, dominio);
+CREATE TABLE IF NOT EXISTS job (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  tipo TEXT NOT NULL,
+  descricao TEXT NOT NULL DEFAULT '',
+  payload TEXT NOT NULL DEFAULT '',
+  status TEXT NOT NULL DEFAULT 'pendente',
+  tentativas INTEGER NOT NULL DEFAULT 0,
+  max_tentativas INTEGER NOT NULL DEFAULT 3,
+  log TEXT NOT NULL DEFAULT '',
+  criado_em TEXT,
+  atualizado_em TEXT
+);
+CREATE INDEX IF NOT EXISTS IX_job_status ON job (status, id);
 `
 
 // ── Helpers de data/hora (SQLite guarda como TEXT) ──────────────────────────

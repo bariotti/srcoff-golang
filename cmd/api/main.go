@@ -3,14 +3,18 @@ package main
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
 	"strings"
+	"time"
 
 	"srcoff/internal/db"
 	"srcoff/internal/evaluator"
 	"srcoff/internal/handler"
+	"srcoff/internal/model"
 	"srcoff/internal/repository"
 	filerepo "srcoff/internal/repository/file"
 	sqliterepo "srcoff/internal/repository/sqlite"
@@ -37,6 +41,7 @@ func main() {
 		saldoRepo          repository.SaldoContaRepository
 		veiculoDeParaRepo  repository.VeiculoDeParaRepository
 		cotacaoRepo        repository.CotacaoRepository
+		jobRepo            repository.JobRepository // fila de jobs (por ora apenas SQLite)
 	)
 
 	var rawSQLDB *sql.DB
@@ -84,6 +89,7 @@ func main() {
 		saldoRepo = sqliterepo.NewSaldoContaRepo(sdb)
 		veiculoDeParaRepo = sqliterepo.NewVeiculoDeParaRepo(sdb)
 		cotacaoRepo = sqliterepo.NewCotacaoRepo(sdb)
+		jobRepo = sqliterepo.NewJobRepo(sdb)
 
 	default: // sqlserver
 		rawSQLDB = db.Connect()
@@ -146,6 +152,12 @@ func main() {
 	padraoArquivoSvc := service.NewPadraoArquivoService(padraoArquivoRepo)
 	veiculoDeParaSvc := service.NewVeiculoDeParaService(veiculoDeParaRepo)
 	cotacaoSvc := service.NewCotacaoService(cotacaoRepo)
+	// O dashboard só lê a projeção de saldo quando ela está ativa (senão pode estar desatualizada).
+	dashboardSaldoRepo := saldoRepo
+	if !saldoAtivo {
+		dashboardSaldoRepo = nil
+	}
+	dashboardSvc := service.NewDashboardService(execucaoRepo, inconsistenciaRepo, dashboardSaldoRepo, cotacaoRepo)
 	// Conversão para a moeda base do veículo na geração (RF-036/RF-037).
 	movimentoSvc = movimentoSvc.ComMoedaBaseRepo(veiculoDeParaSvc).ComCotacaoRepo(cotacaoSvc)
 	configuracaoSvc := service.NewConfiguracaoService(configuracaoRepo)
@@ -160,6 +172,8 @@ func main() {
 	padraoArquivoHandler := handler.NewPadraoArquivoHandler(padraoArquivoSvc)
 	veiculoDeParaHandler := handler.NewVeiculoDeParaHandler(veiculoDeParaSvc)
 	cotacaoHandler := handler.NewCotacaoHandler(cotacaoSvc)
+	razoneteHandler := handler.NewRazoneteHandler(movimentoSvc)
+	dashboardHandler := handler.NewDashboardHandler(dashboardSvc)
 	configuracaoHandler := handler.NewConfiguracaoHandler(configuracaoSvc)
 	inconsistenciaHandler := handler.NewInconsistenciaHandler(inconsistenciaSvc)
 	execucaoHandler := handler.NewExecucaoHandler(execucaoSvc)
@@ -176,6 +190,42 @@ func main() {
 	// Importação automática de cotações (mesma mecânica, reusa o intervalo de varredura).
 	cotacaoWatcher := handler.NewCotacaoWatcher(cotacaoSvc, configuracaoSvc)
 	cotacaoWatcher.Start(context.Background())
+
+	// Fila de jobs assíncronos (RF-121). Disponível quando há repositório de jobs
+	// (atualmente só no backend SQLite). O worker roda em segundo plano.
+	var jobHandler *handler.JobHandler
+	if jobRepo != nil {
+		jobService := service.NewJobService(jobRepo)
+		jobService.Registrar("geracao_movimento", func(ctx context.Context, j *model.Job, logf func(string)) error {
+			var p struct {
+				Data    string `json:"data"`
+				Produto string `json:"produto"`
+				Dominio string `json:"dominio"`
+			}
+			if err := json.Unmarshal([]byte(j.Payload), &p); err != nil {
+				return fmt.Errorf("payload inválido: %w", err)
+			}
+			data, err := time.Parse("2006-01-02", p.Data)
+			if err != nil {
+				return fmt.Errorf("data inválida: %w", err)
+			}
+			logf("iniciando geração de movimento para " + p.Data)
+			bloqueios, err := movimentoSvc.GerarMovimentoEscopo(ctx, data, p.Produto, p.Dominio)
+			if err != nil {
+				return err
+			}
+			if len(bloqueios) > 0 {
+				logf(fmt.Sprintf("%d combinação(ões) bloqueada(s) por inconsistência", len(bloqueios)))
+			}
+			return nil
+		})
+		jobService.Start(context.Background())
+		jobHandler = handler.NewJobHandler(jobService)
+		log.Printf("[job] fila de jobs HABILITADA")
+	} else {
+		jobHandler = handler.NewJobHandler(nil)
+		log.Printf("[job] fila de jobs indisponível neste backend")
+	}
 
 	// 5. Registrar rotas
 	http.HandleFunc("/api/v1/movimento-contabil", func(w http.ResponseWriter, r *http.Request) {
@@ -208,7 +258,9 @@ func main() {
 
 	http.HandleFunc("/api/v1/regras/", func(w http.ResponseWriter, r *http.Request) {
 		path := r.URL.Path
-		if strings.HasSuffix(path, "/condicoes") {
+		if strings.HasSuffix(path, "/clonar") {
+			regraHandler.ClonarRegra(w, r)
+		} else if strings.HasSuffix(path, "/condicoes") {
 			if r.Method == http.MethodGet {
 				regraHandler.ListarCondicoes(w, r)
 			} else {
@@ -222,7 +274,9 @@ func main() {
 	})
 
 	http.HandleFunc("/api/v1/condicoes/", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == http.MethodDelete {
+		if strings.HasSuffix(r.URL.Path, "/clonar") {
+			regraHandler.ClonarCondicao(w, r)
+		} else if r.Method == http.MethodDelete {
 			regraHandler.ExcluirCondicao(w, r)
 		} else {
 			regraHandler.EditarCondicao(w, r)
@@ -233,6 +287,10 @@ func main() {
 	http.HandleFunc("/api/v1/conciliacao-ia/ajuste", conciliacaoIAHandler.AplicarAjuste)
 	validarHandler := handler.NewValidarExpressaoHandler()
 	http.HandleFunc("/api/v1/validar-expressao", validarHandler.Validar)
+	previewExprHandler := handler.NewPreviewExpressaoHandler(movimentoSvc)
+	http.HandleFunc("/api/v1/preview-expressao", previewExprHandler.Preview)
+	simulacaoWhatIfHandler := handler.NewSimulacaoWhatIfHandler(movimentoSvc)
+	http.HandleFunc("/api/v1/simulacao-whatif", simulacaoWhatIfHandler.Simular)
 	http.HandleFunc("/api/v1/nlquery", nlQueryHandler.Query)
 	http.HandleFunc("/api/v1/movimento-contabil/export", exportHandler.ExportMovimentoCSV)
 	http.HandleFunc("/api/v1/movimento-contabil/export-txt", exportHandler.ExportMovimentoTXT)
@@ -258,6 +316,10 @@ func main() {
 	http.HandleFunc("/api/v1/parametrizacoes/veiculo-depara", veiculoDeParaHandler.VeiculoDePara)
 	http.HandleFunc("/api/v1/parametrizacoes/cotacoes", cotacaoHandler.Cotacoes)
 	http.HandleFunc("/api/v1/parametrizacoes/cotacoes/import", cotacaoHandler.ImportarCSV)
+	http.HandleFunc("/api/v1/razonete", razoneteHandler.Razonete)
+	http.HandleFunc("/api/v1/dashboard", dashboardHandler.Dashboard)
+	http.HandleFunc("/api/v1/jobs", jobHandler.Raiz)
+	http.HandleFunc("/api/v1/jobs/", jobHandler.Item)
 	http.HandleFunc("/api/v1/cotacoes/scan-pasta", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodGet {
 			cotacaoWatcher.Status(w, r)

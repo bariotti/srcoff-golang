@@ -967,6 +967,291 @@ func (s *MovimentoContabilService) GerarMovimentoEscopo(ctx context.Context, dat
 	return bloqueios, nil
 }
 
+// PreviewExpressao avalia uma expressão (condição ou valor) contra uma linha de posição
+// REAL da data informada (opcionalmente filtrando por produto/domínio/boleto), devolvendo o
+// resultado, os campos referenciados e os ausentes. Permite testar a regra antes de ativá-la.
+// Spec: RF-072.
+func (s *MovimentoContabilService) PreviewExpressao(ctx context.Context, data time.Time, produto, dominio, boleto, expressao, tipo string) (*model.PreviewExpressao, error) {
+	posicoes, err := s.posicaoRepo.BuscarPorDataEVersaoMaxima(ctx, data)
+	if err != nil {
+		return nil, err
+	}
+	res := &model.PreviewExpressao{}
+	var env map[string]interface{}
+	for _, p := range posicoes {
+		e := evaluator.PosicaoToEnv(p)
+		if produto != "" && evaluator.CampoString(e, "produto") != produto {
+			continue
+		}
+		if dominio != "" && evaluator.CampoString(e, "dominio") != dominio {
+			continue
+		}
+		if boleto != "" && evaluator.CampoString(e, "codigo_identificador_boleto") != boleto {
+			continue
+		}
+		env = e
+		res.Boleto = evaluator.CampoString(e, "codigo_identificador_boleto")
+		break
+	}
+	if env == nil {
+		return res, nil // nenhuma posição casou → Encontrada=false
+	}
+	res.Encontrada = true
+	res.CamposRef, _ = evaluator.CamposReferenciados(expressao)
+	if faltantes := camposFaltantes(env, expressao); len(faltantes) > 0 {
+		res.CamposFaltantes = faltantes
+		res.Erro = "campos ausentes na posição: " + strings.Join(faltantes, ", ")
+		return res, nil
+	}
+	if tipo == "valor" {
+		v, err := s.evaluator.EvaluateValue(expressao, env)
+		if err != nil {
+			res.Erro = err.Error()
+		} else {
+			res.Resultado = v
+		}
+	} else {
+		v, err := s.evaluator.EvaluateCondition(expressao, env)
+		if err != nil {
+			res.Erro = err.Error()
+		} else {
+			res.Resultado = v
+		}
+	}
+	return res, nil
+}
+
+// SimularRegra avalia uma regra CANDIDATA (hipotética) sobre a posição de carteira da
+// data/escopo e devolve os lançamentos que ela geraria, SEM persistir nada. Reaproveita a
+// mesma lógica de avaliação da geração (pré-condição, condição, campo_valor, campo_moeda,
+// campo_boleto, inconsistências por campo ausente). Não trata estorno, baixa, saldo nem
+// conversão de moeda base — é uma projeção dos lançamentos NORMAIS. Spec: RF-122.
+func (s *MovimentoContabilService) SimularRegra(ctx context.Context, in model.SimulacaoRegraInput) (*model.SimulacaoWhatIf, error) {
+	data, err := time.Parse("2006-01-02", strings.TrimSpace(in.Data))
+	if err != nil {
+		return nil, fmt.Errorf("data inválida (use AAAA-MM-DD)")
+	}
+	limite := in.LimiteLinhas
+	if limite <= 0 {
+		limite = 500
+	}
+	if limite > 5000 {
+		limite = 5000
+	}
+	// Ao menos uma condição com expressão.
+	temCond := false
+	for _, c := range in.Condicoes {
+		if strings.TrimSpace(c.Condicao) != "" || strings.TrimSpace(c.CampoValor) != "" {
+			temCond = true
+			break
+		}
+	}
+	if !temCond {
+		return nil, fmt.Errorf("informe ao menos uma condição com expressão e campo_valor")
+	}
+
+	// Monta uma RegraContabil a partir da candidata para reusar a avaliação/boletoDaPosicao.
+	// O casamento de produto/domínio vem do escopo (que já filtra as posições abaixo), então
+	// a regra aqui não precisa de codigo_produto_corporativo/dominio.
+	regra := model.RegraContabil{
+		Descricao:      "(simulação)",
+		PreCondicao:    in.PreCondicao,
+		TipoLancamento: model.NormalizaTipoLancamento(in.TipoLancamento),
+		Ativo:          true,
+	}
+	condicoes := make([]model.CondicaoRegra, 0, len(in.Condicoes))
+	for _, c := range in.Condicoes {
+		if strings.TrimSpace(c.Condicao) == "" && strings.TrimSpace(c.CampoValor) == "" {
+			continue
+		}
+		condicoes = append(condicoes, model.CondicaoRegra{
+			Condicao: c.Condicao, ContaDebito: c.ContaDebito, ContaCredito: c.ContaCredito,
+			CampoValor: c.CampoValor, CampoMoeda: c.CampoMoeda, CampoBoleto: c.CampoBoleto, Ativo: true,
+		})
+	}
+	regra.Condicoes = condicoes
+
+	posicoes, err := s.posicaoRepo.BuscarPorDataEVersaoMaxima(ctx, data)
+	if err != nil {
+		return nil, fmt.Errorf("erro ao buscar posicao_carteira: %w", err)
+	}
+
+	res := &model.SimulacaoWhatIf{}
+	if regra.UsaCalculoIncremental() {
+		res.Aviso = "Regra incremental: a simulação mostra o valor BRUTO de campo_valor em D0 (o valor diário real |D0 − D-N| depende do histórico persistido desta regra)."
+	}
+
+	boletoFiltro := strings.TrimSpace(in.Boleto)
+	addInconsistencia := func(boleto, tipo, expr, detalhe string) {
+		res.TotalInconsistencias++
+		if len(res.Inconsistencias) < limite {
+			res.Inconsistencias = append(res.Inconsistencias, model.SimulacaoInconsistencia{
+				Boleto: boleto, Tipo: tipo, Expressao: expr, Detalhe: detalhe,
+			})
+		}
+	}
+
+	for _, posicao := range posicoes {
+		env := evaluator.PosicaoToEnv(posicao)
+		produto := evaluator.CampoString(env, "produto")
+		dominio := evaluator.CampoString(env, "dominio")
+		// Escopo: produto/domínio filtram as posições avaliadas.
+		if in.Produto != "" && produto != strings.TrimSpace(in.Produto) {
+			continue
+		}
+		if in.Dominio != "" && dominio != strings.TrimSpace(in.Dominio) {
+			continue
+		}
+		boleto := boletoDaPosicao(env, regra.Condicoes)
+		// Escopo opcional por boleto: avalia só o boleto informado (resolvido pelo campo_boleto da regra).
+		if boletoFiltro != "" && boleto != boletoFiltro {
+			continue
+		}
+		res.PosicoesAvaliadas++
+
+		// Pré-condição (opcional): campo ausente → inconsistência; falsa → não gera.
+		if strings.TrimSpace(regra.PreCondicao) != "" {
+			if faltantes := camposFaltantes(env, regra.PreCondicao); len(faltantes) > 0 {
+				addInconsistencia(boleto, "pré-condição", regra.PreCondicao,
+					"referencia campo(s) inexistente(s) na posição: "+strings.Join(faltantes, ", "))
+				continue
+			}
+			ok, err := s.evaluator.EvaluateCondition(regra.PreCondicao, env)
+			if err != nil {
+				addInconsistencia(boleto, "erro na pré-condição", regra.PreCondicao, err.Error())
+				continue
+			}
+			if !ok {
+				continue
+			}
+		}
+
+		for _, condicao := range regra.Condicoes {
+			if faltantes := camposFaltantes(env, condicao.Condicao); len(faltantes) > 0 {
+				addInconsistencia(boleto, "condição", condicao.Condicao,
+					"referencia campo(s) inexistente(s) na posição: "+strings.Join(faltantes, ", "))
+				continue
+			}
+			if strings.TrimSpace(condicao.Condicao) != "" {
+				ok, err := s.evaluator.EvaluateCondition(condicao.Condicao, env)
+				if err != nil {
+					addInconsistencia(boleto, "erro na condição", condicao.Condicao, err.Error())
+					continue
+				}
+				if !ok {
+					continue
+				}
+			}
+			// Condição satisfeita (ou vazia = sempre): avalia campo_valor.
+			if faltantes := camposFaltantes(env, condicao.CampoValor); len(faltantes) > 0 {
+				addInconsistencia(boleto, "campo valor", condicao.CampoValor,
+					"referencia campo(s) inexistente(s) na posição: "+strings.Join(faltantes, ", "))
+				continue
+			}
+			valor, err := s.evaluator.EvaluateValue(condicao.CampoValor, env)
+			if err != nil {
+				addInconsistencia(boleto, "erro no campo valor", condicao.CampoValor, err.Error())
+				continue
+			}
+			if faltantes := camposFaltantes(env, condicao.CampoMoeda); len(faltantes) > 0 {
+				addInconsistencia(boleto, "campo moeda", condicao.CampoMoeda,
+					"referencia campo(s) inexistente(s) na posição: "+strings.Join(faltantes, ", "))
+				continue
+			}
+			moeda := evaluator.CampoString(env, condicao.CampoMoeda)
+			if strings.TrimSpace(moeda) == "" {
+				addInconsistencia(boleto, "campo moeda", condicao.CampoMoeda,
+					"a moeda resultou em branco (campo vazio/ausente na posição)")
+				continue
+			}
+			boletoLanc := evaluator.CampoString(env, campoBoletoOuPadrao(condicao.CampoBoleto))
+
+			res.TotalLancamentos++
+			if len(res.Lancamentos) < limite {
+				res.Lancamentos = append(res.Lancamentos, model.SimulacaoLancamento{
+					Boleto: boletoLanc, Valor: valor, Moeda: moeda,
+					ContaDebito: condicao.ContaDebito, ContaCredito: condicao.ContaCredito,
+					Produto: produto, Dominio: dominio, Condicao: condicao.Condicao,
+				})
+			}
+		}
+	}
+
+	res.Truncado = res.TotalLancamentos > len(res.Lancamentos) || res.TotalInconsistencias > len(res.Inconsistencias)
+	return res, nil
+}
+
+// Razonete monta o razonete (livro razão em T) por conta, a partir dos lançamentos
+// vigentes do período. Cada lançamento contribui com um DÉBITO na conta_debito e um
+// CRÉDITO na conta_credito (partida dobrada); estornos aparecem no lado oposto. Filtros
+// opcionais: boleto, conta (débito OU crédito), produto, domínio. Spec: RF-070.
+func (s *MovimentoContabilService) Razonete(ctx context.Context, dataInicio, dataFim time.Time, boleto, conta, produto, dominio, versaoModo string) ([]model.RazoneteConta, error) {
+	if strings.TrimSpace(boleto) == "" {
+		return nil, fmt.Errorf("informe o número do boleto")
+	}
+	if versaoModo == "" {
+		versaoModo = "vigente"
+	}
+	pag, err := s.movimentoRepo.ConsultarPaginadoFiltrado(ctx, model.FiltroMovimento{
+		DataInicio: dataInicio, DataFim: dataFim, Boleto: boleto, BoletoExato: true, Produto: produto, Dominio: dominio,
+		VersaoModo: versaoModo, Pagina: 1, Tamanho: 1000000,
+	})
+	if err != nil {
+		return nil, err
+	}
+	contaFiltro := strings.TrimSpace(conta)
+
+	type chave struct{ conta, moeda string }
+	grupos := map[chave]*model.RazoneteConta{}
+	var ordem []chave
+	add := func(c, moeda string, l model.LancamentoContabil, deb, cred float64) {
+		if contaFiltro != "" && c != contaFiltro {
+			return
+		}
+		k := chave{c, moeda}
+		g, ok := grupos[k]
+		if !ok {
+			g = &model.RazoneteConta{Conta: c, Moeda: moeda}
+			grupos[k] = g
+			ordem = append(ordem, k)
+		}
+		g.Linhas = append(g.Linhas, model.RazoneteLinha{
+			Data: l.DataLoteContabil.Format("2006-01-02"), Boleto: l.CodigoIdentificadorBoleto,
+			Historico: l.DescricaoRegraContabil, Debito: deb, Credito: cred, Reversao: l.IndicadorReversao, Moeda: moeda,
+		})
+	}
+	for _, l := range pag.Lancamentos {
+		add(l.ContaDebito, l.MoedaLancamentoContabil, l, l.ValorLancamentoContabil, 0)
+		add(l.ContaCredito, l.MoedaLancamentoContabil, l, 0, l.ValorLancamentoContabil)
+	}
+
+	out := make([]model.RazoneteConta, 0, len(ordem))
+	for _, k := range ordem {
+		g := grupos[k]
+		sort.SliceStable(g.Linhas, func(i, j int) bool { return g.Linhas[i].Data < g.Linhas[j].Data })
+		saldo := 0.0
+		for i := range g.Linhas {
+			saldo += g.Linhas[i].Debito - g.Linhas[i].Credito
+			g.Linhas[i].SaldoAcumulado = saldo
+			g.TotalDebito += g.Linhas[i].Debito
+			g.TotalCredito += g.Linhas[i].Credito
+		}
+		g.Saldo = g.TotalDebito - g.TotalCredito
+		g.Natureza = "D"
+		if g.Saldo < 0 {
+			g.Natureza = "C"
+		}
+		out = append(out, *g)
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].Conta != out[j].Conta {
+			return out[i].Conta < out[j].Conta
+		}
+		return out[i].Moeda < out[j].Moeda
+	})
+	return out, nil
+}
+
 // ConsultarLancamentos retorna os lançamentos paginados para a data informada.
 func (s *MovimentoContabilService) ConsultarLancamentos(ctx context.Context, data time.Time, pagina, tamanho int) (*model.PaginaLancamentos, error) {
 	return s.movimentoRepo.ConsultarPaginado(ctx, data, pagina, tamanho)

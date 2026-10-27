@@ -35,10 +35,11 @@ type LancamentoContabil struct {
 // (período, boleto, veículo, versão). Substitui a lista de parâmetros soltos para
 // que novos filtros não quebrem a assinatura do repositório. Spec: RF-034/RN-180.
 type FiltroMovimento struct {
-	DataInicio time.Time
-	DataFim    time.Time
-	Boleto     string
-	Veiculo    string
+	DataInicio  time.Time
+	DataFim     time.Time
+	Boleto      string
+	BoletoExato bool // true = casa exatamente o boleto; false (padrão) = LIKE parcial
+	Veiculo     string
 	Produto    string // filtro exato por produto (vazio = todos)
 	Dominio    string // filtro exato por domínio (vazio = todos)
 	Versao     int

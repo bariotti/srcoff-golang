@@ -27,6 +27,16 @@ type RegraContabilRepository interface {
 	ExcluirCondicao(ctx context.Context, id int64) error
 }
 
+// JobRepository persiste a fila de jobs assíncronos (RF-121): criação, atualização
+// de status/log, listagem paginada e reivindicação do próximo pendente.
+type JobRepository interface {
+	Criar(ctx context.Context, j model.Job) (int64, error)
+	Atualizar(ctx context.Context, j model.Job) error
+	ObterPorID(ctx context.Context, id int64) (*model.Job, error)
+	ProximoPendente(ctx context.Context) (*model.Job, error)
+	ListarPaginado(ctx context.Context, status string, pagina, tamanho int) (*model.JobPagina, error)
+}
+
 // InconsistenciaRepository persiste as inconsistências detectadas na geração do
 // movimento contábil, chaveadas pela data do lote.
 type InconsistenciaRepository interface {

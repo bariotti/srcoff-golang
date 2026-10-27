@@ -19,6 +19,8 @@ type regraContabilSvc interface {
 	CriarCondicao(ctx context.Context, condicao model.CondicaoRegra) (int64, error)
 	EditarCondicao(ctx context.Context, condicao model.CondicaoRegra) error
 	ExcluirCondicao(ctx context.Context, id int64) error
+	ClonarRegra(ctx context.Context, id int64) (int64, error)
+	ClonarCondicao(ctx context.Context, idCondicao int64) (int64, error)
 }
 
 // RegraContabilHandler expõe os endpoints de regras contábeis.
@@ -119,6 +121,48 @@ func (h *RegraContabilHandler) ExcluirRegra(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"mensagem": "regra excluída com sucesso"})
+}
+
+// ClonarRegra trata POST /api/v1/regras/{id}/clonar. Spec: RF-071.
+func (h *RegraContabilHandler) ClonarRegra(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	// path: /api/v1/regras/42/clonar
+	parts := strings.Split(strings.TrimPrefix(r.URL.Path, "/api/v1/regras/"), "/")
+	id, err := strconv.ParseInt(parts[0], 10, 64)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"erro": "id inválido"})
+		return
+	}
+	novoID, err := h.svc.ClonarRegra(r.Context(), id)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"erro": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusCreated, map[string]interface{}{"id": novoID, "mensagem": "regra clonada"})
+}
+
+// ClonarCondicao trata POST /api/v1/condicoes/{id}/clonar. Spec: RF-071.
+func (h *RegraContabilHandler) ClonarCondicao(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	// path: /api/v1/condicoes/42/clonar
+	parts := strings.Split(strings.TrimPrefix(r.URL.Path, "/api/v1/condicoes/"), "/")
+	id, err := strconv.ParseInt(parts[0], 10, 64)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"erro": "id inválido"})
+		return
+	}
+	novoID, err := h.svc.ClonarCondicao(r.Context(), id)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"erro": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusCreated, map[string]interface{}{"id": novoID, "mensagem": "condição clonada"})
 }
 
 // ListarCondicoes trata GET /api/v1/regras/{id}/condicoes.

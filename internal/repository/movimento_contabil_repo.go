@@ -181,7 +181,11 @@ func (r *MovimentoContabilRepo) consultarFiltrado(ctx context.Context, f model.F
 
 	where := "WHERE m.data_lote_contabil >= '" + inicioStr + "' AND m.data_lote_contabil <= '" + fimStr + "'"
 	if f.Boleto != "" {
-		where += " AND m.codigo_identificador_boleto LIKE '%" + strings.ReplaceAll(f.Boleto, "'", "''") + "%'"
+		if f.BoletoExato {
+			where += " AND m.codigo_identificador_boleto = '" + strings.ReplaceAll(f.Boleto, "'", "''") + "'"
+		} else {
+			where += " AND m.codigo_identificador_boleto LIKE '%" + strings.ReplaceAll(f.Boleto, "'", "''") + "%'"
+		}
 	}
 	if f.Veiculo != "" {
 		where += " AND ISNULL(m.veiculo,'') = '" + strings.ReplaceAll(f.Veiculo, "'", "''") + "'"

@@ -51,6 +51,8 @@ func (f *fakeRegraSvc) EditarCondicao(_ context.Context, c model.CondicaoRegra) 
 	return nil
 }
 func (f *fakeRegraSvc) ExcluirCondicao(context.Context, int64) error { return nil }
+func (f *fakeRegraSvc) ClonarRegra(context.Context, int64) (int64, error)    { return 0, nil }
+func (f *fakeRegraSvc) ClonarCondicao(context.Context, int64) (int64, error) { return 0, nil }
 
 // TestImportarRegrasCSV_UpdateSkipErro valida: regra alterada é atualizada, condição
 // idêntica é pulada e ids numéricos inexistentes viram erro (não criam).

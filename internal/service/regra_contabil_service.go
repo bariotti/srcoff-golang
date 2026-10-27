@@ -39,6 +39,73 @@ func (s *RegraContabilService) CriarRegra(ctx context.Context, regra model.Regra
 	return s.repo.CriarRegra(ctx, regra)
 }
 
+// ClonarRegra duplica uma regra e todas as suas condições, criando uma nova regra com a
+// descrição sufixada " (cópia)". Spec: RF-071.
+func (s *RegraContabilService) ClonarRegra(ctx context.Context, id int64) (int64, error) {
+	if id == 0 {
+		return 0, fmt.Errorf("id da regra é obrigatório")
+	}
+	regras, err := s.repo.ListarRegrasAtivas(ctx)
+	if err != nil {
+		return 0, err
+	}
+	var orig *model.RegraContabil
+	for i := range regras {
+		if regras[i].ID == id {
+			orig = &regras[i]
+			break
+		}
+	}
+	if orig == nil {
+		return 0, fmt.Errorf("regra %d não encontrada", id)
+	}
+	nova := *orig
+	nova.ID = 0
+	nova.Condicoes = nil
+	nova.Descricao = strings.TrimSpace(orig.Descricao) + " (cópia)"
+	novoID, err := s.repo.CriarRegra(ctx, nova)
+	if err != nil {
+		return 0, err
+	}
+	conds, err := s.repo.ListarCondicoes(ctx, id)
+	if err != nil {
+		return novoID, err
+	}
+	for _, c := range conds {
+		c.ID = 0
+		c.IDRegra = novoID
+		if _, err := s.repo.CriarCondicao(ctx, c); err != nil {
+			return novoID, err
+		}
+	}
+	return novoID, nil
+}
+
+// ClonarCondicao duplica uma condição dentro da mesma regra (localizada pelo id). Spec: RF-071.
+func (s *RegraContabilService) ClonarCondicao(ctx context.Context, idCondicao int64) (int64, error) {
+	if idCondicao == 0 {
+		return 0, fmt.Errorf("id da condição é obrigatório")
+	}
+	regras, err := s.repo.ListarRegrasAtivas(ctx)
+	if err != nil {
+		return 0, err
+	}
+	for _, rg := range regras {
+		conds, err := s.repo.ListarCondicoes(ctx, rg.ID)
+		if err != nil {
+			return 0, err
+		}
+		for _, c := range conds {
+			if c.ID == idCondicao {
+				c.ID = 0
+				c.IDRegra = rg.ID
+				return s.repo.CriarCondicao(ctx, c)
+			}
+		}
+	}
+	return 0, fmt.Errorf("condição %d não encontrada", idCondicao)
+}
+
 func (s *RegraContabilService) EditarRegra(ctx context.Context, regra model.RegraContabil) error {
 	if regra.ID == 0 {
 		return fmt.Errorf("id da regra é obrigatório")

@@ -117,7 +117,11 @@
     <div class="col-auto sidebar d-flex flex-column" style="width:220px">
       <div class="sidebar-brand" title="Bariottex" style="cursor:default"><i class="bi bi-bank me-2"></i>SRCOff</div>
       <nav class="nav flex-column mt-2">        <a class="nav-link active" href="#" onclick="showPage('operacao')"><i class="bi bi-play-circle me-2"></i>Operação</a>
+        <a class="nav-link" href="#" onclick="showPage('dashboard')"><i class="bi bi-speedometer2 me-2"></i>Dashboard</a>
+        <a class="nav-link" href="#" onclick="showPage('jobs')"><i class="bi bi-list-task me-2"></i>Jobs</a>
+        <a class="nav-link" href="#" onclick="showPage('whatif')"><i class="bi bi-magic me-2"></i>What-if</a>
         <a class="nav-link" href="#" onclick="showPage('consulta')"><i class="bi bi-search me-2"></i>Consulta</a>
+        <a class="nav-link" href="#" onclick="showPage('razonete')"><i class="bi bi-bank me-2"></i>Razonete</a>
         <a class="nav-link" href="#" onclick="showPage('posicao')"><i class="bi bi-table me-2"></i>Posição</a>
         <a class="nav-link" href="#" onclick="showPage('regras')"><i class="bi bi-gear me-2"></i>Regras</a>
         <a class="nav-link" href="#" onclick="showPage('manual')"><i class="bi bi-pencil-square me-2"></i>Lançamento Manual</a>
@@ -587,6 +591,146 @@
           </div>
         </div>
         <div id="s-lista"></div>
+      </div>
+
+      <!-- ==================== RAZONETE ==================== -->
+      <div id="page-razonete" class="page">
+        <h4 class="mb-3"><i class="bi bi-bank me-2"></i>Razonete (livro razão)</h4>
+        <p class="text-muted">Movimento em formato de razonete (T) por conta. Informe o período e, opcionalmente, um boleto e/ou conta. Mostra débitos e créditos (inclusive estornos) e o saldo por conta.</p>
+        <div class="card shadow-sm mb-3"><div class="card-body">
+          <div class="row g-2 align-items-end">
+            <div class="col-md-2"><label class="form-label form-label-sm">Data início <span class="text-danger">*</span></label><input type="date" id="rz-data-inicio" class="form-control form-control-sm"></div>
+            <div class="col-md-2"><label class="form-label form-label-sm">Data fim <span class="text-danger">*</span></label><input type="date" id="rz-data-fim" class="form-control form-control-sm"></div>
+            <div class="col-md-2"><label class="form-label form-label-sm">Boleto <span class="text-danger">*</span></label><input type="text" id="rz-boleto" class="form-control form-control-sm" placeholder="exato"></div>
+            <div class="col-md-2"><label class="form-label form-label-sm">Conta</label><input type="text" id="rz-conta" class="form-control form-control-sm" placeholder="exata"></div>
+            <div class="col-md-2"><label class="form-label form-label-sm">Produto <small class="text-muted">(opc.)</small></label><select id="rz-produto" class="form-select form-select-sm"></select></div>
+            <div class="col-md-2"><label class="form-label form-label-sm">Domínio <small class="text-muted">(opc.)</small></label><select id="rz-dominio" class="form-select form-select-sm"></select></div>
+            <div class="col-auto"><button class="btn btn-primary btn-sm" onclick="consultarRazonete()"><i class="bi bi-search me-1"></i>Consultar</button></div>
+          </div>
+        </div></div>
+        <div id="rz-resultado"></div>
+      </div>
+
+      <!-- ==================== DASHBOARD ==================== -->
+      <div id="page-dashboard" class="page">
+        <h4 class="mb-3"><i class="bi bi-speedometer2 me-2"></i>Dashboard</h4>
+        <p class="text-muted">Visão consolidada do período: volumes por dia e por produto, inconsistências, saldos e câmbio.</p>
+        <div class="card shadow-sm mb-3"><div class="card-body">
+          <div class="row g-2 align-items-end">
+            <div class="col-md-3"><label class="form-label form-label-sm">Data início</label><input type="date" id="dash-data-inicio" class="form-control form-control-sm"></div>
+            <div class="col-md-3"><label class="form-label form-label-sm">Data fim</label><input type="date" id="dash-data-fim" class="form-control form-control-sm"></div>
+            <div class="col-auto"><button class="btn btn-primary btn-sm" onclick="carregarDashboard()"><i class="bi bi-arrow-clockwise me-1"></i>Atualizar</button></div>
+          </div>
+        </div></div>
+
+        <div class="row g-3 mb-1" id="dash-cards">
+          <div class="col-6 col-md-3"><div class="card shadow-sm h-100"><div class="card-body text-center">
+            <div class="text-muted small">Movimento</div><div class="fs-3 fw-bold" id="dash-total-movimento">—</div></div></div></div>
+          <div class="col-6 col-md-3"><div class="card shadow-sm h-100"><div class="card-body text-center">
+            <div class="text-muted small">Estornos</div><div class="fs-3 fw-bold" id="dash-total-estornos">—</div></div></div></div>
+          <div class="col-6 col-md-3"><div class="card shadow-sm h-100"><div class="card-body text-center">
+            <div class="text-muted small">Inconsistências</div><div class="fs-3 fw-bold text-warning" id="dash-total-inconsistencias">—</div></div></div></div>
+          <div class="col-6 col-md-3"><div class="card shadow-sm h-100"><div class="card-body text-center">
+            <div class="text-muted small">Contas c/ saldo</div><div class="fs-3 fw-bold" id="dash-total-saldos">—</div></div></div></div>
+        </div>
+
+        <div class="row g-3">
+          <div class="col-lg-8"><div class="card shadow-sm h-100"><div class="card-header"><i class="bi bi-bar-chart me-2"></i>Volume de movimento por dia</div>
+            <div class="card-body"><canvas id="dash-chart-dia" height="110"></canvas></div></div></div>
+          <div class="col-lg-4"><div class="card shadow-sm h-100"><div class="card-header"><i class="bi bi-pie-chart me-2"></i>Movimento por produto</div>
+            <div class="card-body"><canvas id="dash-chart-produto" height="200"></canvas></div></div></div>
+        </div>
+        <div class="row g-3 mt-0">
+          <div class="col-lg-6"><div class="card shadow-sm h-100"><div class="card-header"><i class="bi bi-exclamation-triangle me-2"></i>Inconsistências por tipo</div>
+            <div class="card-body"><canvas id="dash-chart-inc" height="160"></canvas><div id="dash-inc-vazio" class="text-muted small d-none">Nenhuma inconsistência no período.</div></div></div></div>
+          <div class="col-lg-6"><div class="card shadow-sm h-100"><div class="card-header"><i class="bi bi-currency-exchange me-2"></i>Câmbio (cotações recentes)</div>
+            <div class="card-body p-0"><div class="table-responsive" style="max-height:260px;overflow:auto"><table class="table table-sm table-striped mb-0">
+              <thead><tr><th>Data</th><th>Moeda base</th><th>Moeda lanç.</th><th>Direção</th><th class="text-end">Taxa</th></tr></thead>
+              <tbody id="dash-cambio-body"><tr><td colspan="5" class="text-muted p-3">—</td></tr></tbody>
+            </table></div></div></div></div>
+        </div>
+      </div>
+
+      <!-- ==================== JOBS (fila/monitor) ==================== -->
+      <div id="page-jobs" class="page">
+        <h4 class="mb-3"><i class="bi bi-list-task me-2"></i>Jobs — Fila &amp; Monitor</h4>
+        <p class="text-muted">Enfileire a geração de movimento para processar em segundo plano e acompanhe status, tentativas e logs. Jobs com erro podem ser reprocessados.</p>
+
+        <div class="card shadow-sm mb-3"><div class="card-body">
+          <div class="row g-2 align-items-end">
+            <div class="col-md-2"><label class="form-label form-label-sm">Data <span class="text-danger">*</span></label><input type="date" id="job-data" class="form-control form-control-sm"></div>
+            <div class="col-md-3"><label class="form-label form-label-sm">Produto <small class="text-muted">(opc.)</small></label><select id="job-produto" class="form-select form-select-sm"></select></div>
+            <div class="col-md-3"><label class="form-label form-label-sm">Domínio <small class="text-muted">(opc.)</small></label><select id="job-dominio" class="form-select form-select-sm"></select></div>
+            <div class="col-auto"><button class="btn btn-primary btn-sm" onclick="enfileirarJob()"><i class="bi bi-plus-circle me-1"></i>Enfileirar geração</button></div>
+          </div>
+        </div></div>
+
+        <div class="card shadow-sm">
+          <div class="card-header d-flex align-items-center gap-2">
+            <i class="bi bi-list-task me-1"></i><span>Fila</span>
+            <select id="job-filtro-status" class="form-select form-select-sm ms-2" style="width:auto" onchange="carregarJobs()">
+              <option value="">Todos os status</option>
+              <option value="pendente">Pendente</option>
+              <option value="executando">Executando</option>
+              <option value="sucesso">Sucesso</option>
+              <option value="erro">Erro</option>
+            </select>
+            <div class="form-check form-switch ms-2 mb-0"><input class="form-check-input" type="checkbox" id="job-auto" checked><label class="form-check-label small" for="job-auto">Auto-atualizar</label></div>
+            <button class="btn btn-outline-secondary btn-sm ms-auto" onclick="carregarJobs()"><i class="bi bi-arrow-clockwise"></i></button>
+          </div>
+          <div class="table-responsive">
+            <table class="table table-sm table-hover align-middle mb-0">
+              <thead><tr><th>#</th><th>Descrição</th><th>Status</th><th>Tent.</th><th>Atualizado</th><th class="text-end">Ações</th></tr></thead>
+              <tbody id="job-lista"><tr><td colspan="6" class="text-muted p-3">—</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- Modal de log do job -->
+      <div class="modal fade" id="modalJobLog" tabindex="-1"><div class="modal-dialog modal-lg"><div class="modal-content">
+        <div class="modal-header"><h5 class="modal-title">Log do job <span id="job-log-id"></span></h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+        <div class="modal-body"><pre id="job-log-conteudo" class="small mb-0" style="white-space:pre-wrap;max-height:50vh;overflow:auto"></pre></div>
+      </div></div></div>
+
+      <!-- ==================== WHAT-IF (simulação de regra candidata) ==================== -->
+      <div id="page-whatif" class="page">
+        <h4 class="mb-3"><i class="bi bi-magic me-2"></i>What-if — Simulação de regra candidata</h4>
+        <p class="text-muted">Avalie uma regra <strong>hipotética</strong> sobre a posição de uma data/escopo e veja os lançamentos que ela <strong>geraria</strong> — sem gravar nada. Útil para testar uma regra nova (ou uma alteração) antes de cadastrá-la.</p>
+
+        <div class="card shadow-sm mb-3"><div class="card-body">
+          <div class="row g-2 align-items-end mb-2">
+            <div class="col-md-3"><label class="form-label form-label-sm">Data da posição <span class="text-danger">*</span></label><input type="date" id="wi-data" class="form-control form-control-sm"></div>
+            <div class="col-md-3"><label class="form-label form-label-sm">Produto <small class="text-muted">(escopo, opc.)</small></label><select id="wi-produto" class="form-select form-select-sm"></select></div>
+            <div class="col-md-3"><label class="form-label form-label-sm">Domínio <small class="text-muted">(escopo, opc.)</small></label><select id="wi-dominio" class="form-select form-select-sm"></select></div>
+            <div class="col-md-3"><label class="form-label form-label-sm">Boleto <small class="text-muted">(opc.)</small></label><input type="text" id="wi-boleto" class="form-control form-control-sm" placeholder="simular 1 boleto"></div>
+          </div>
+          <div class="row g-2 align-items-end">
+            <div class="col-md-3"><label class="form-label form-label-sm">Tipo de lançamento</label><select id="wi-tipo" class="form-select form-select-sm">
+              <option value="reverte">Reverte</option><option value="nao_reverte">Não reverte</option><option value="incremental">Incremental</option><option value="incremental_reverte">Incremental/Reverte</option></select></div>
+            <div class="col-md-2"><label class="form-label form-label-sm">Limite de linhas</label><input type="number" id="wi-limite" class="form-control form-control-sm" value="500" min="1" max="5000"></div>
+            <div class="col-md-3"><label class="form-label form-label-sm">Pré-condição <small class="text-muted">(opc.)</small></label><input type="text" id="wi-precond" class="form-control form-control-sm" placeholder="ex.: tipo == 'A'"></div>
+            <div class="col-md-4"><label class="form-label form-label-sm">Descrição da regra <small class="text-muted">(p/ criar)</small></label><input type="text" id="wi-descricao" class="form-control form-control-sm" placeholder="ex.: Registro de MTM"></div>
+          </div>
+          <div class="form-text mt-1">O escopo (produto/domínio) filtra as posições e, ao criar a regra real, vira o produto/domínio dela.</div>
+        </div></div>
+
+        <div class="card shadow-sm mb-3">
+          <div class="card-header d-flex align-items-center"><i class="bi bi-list-check me-2"></i><span>Condições da regra candidata</span>
+            <button class="btn btn-outline-primary btn-sm ms-auto" onclick="wiAddCondRow()"><i class="bi bi-plus"></i> Condição</button></div>
+          <div class="table-responsive"><table class="table table-sm align-middle mb-0">
+            <thead><tr><th style="min-width:160px">Condição</th><th style="min-width:130px">Campo valor</th><th style="min-width:110px">Campo moeda</th><th style="min-width:110px">Campo boleto</th><th style="min-width:110px">Conta débito</th><th style="min-width:110px">Conta crédito</th><th></th></tr></thead>
+            <tbody id="wi-cond-rows"></tbody>
+          </table></div>
+        </div>
+
+        <div class="mb-3 d-flex gap-2">
+          <button class="btn btn-primary" onclick="simularWhatif()"><i class="bi bi-magic me-1"></i>Simular</button>
+          <button class="btn btn-outline-success" onclick="criarRegraDoWhatif()"><i class="bi bi-plus-circle me-1"></i>Criar regra real</button>
+        </div>
+        <div class="form-text mb-3"><i class="bi bi-exclamation-triangle me-1 text-warning"></i>A regra é criada <strong>ativa</strong> e passa a valer nas próximas gerações. Revise em <em>Regras</em> (inclusive a moeda base do veículo) logo em seguida.</div>
+
+        <div id="wi-resultado"></div>
       </div>
 
       <!-- ==================== SOBRE (passo a passo) ==================== -->
@@ -1132,6 +1276,16 @@ NOVA-1;Minha Regra;NDF;Posição;;;Sim;reverte;;valor_mtm &lt; 0;3333333333;4444
           <div class="small text-muted mt-2"><i class="bi bi-info-circle me-1"></i><strong>Converter na geração</strong>: preencha só a <em>Data de Conversão</em> (usa a cotação). <strong>Vem da posição</strong>: preencha o <em>Valor</em> e a <em>Moeda</em> base.</div>
         </div>
 
+        <div class="border rounded p-3 mt-3">
+          <div class="d-flex flex-wrap align-items-end gap-2 mb-2">
+            <span class="fw-semibold"><i class="bi bi-play-circle me-1"></i>Testar na posição</span>
+            <div><label class="form-label form-label-sm mb-0">Data</label><input type="date" id="r-prev-data" class="form-control form-control-sm"></div>
+            <div><label class="form-label form-label-sm mb-0">Boleto <small class="text-muted">(opc.)</small></label><input type="text" id="r-prev-boleto" class="form-control form-control-sm" placeholder="exato"></div>
+            <button type="button" class="btn btn-outline-primary btn-sm" onclick="testarPreviewCondicao()"><i class="bi bi-lightning me-1"></i>Testar</button>
+          </div>
+          <div id="r-prev-resultado" class="small text-muted">Avalia a condição e o campo valor contra uma posição real da data.</div>
+        </div>
+
         <p class="text-muted small mt-2 mb-0"><i class="bi bi-info-circle me-1"></i>Os campos sugeridos vêm da última posição importada para a data consultada na aba Posição.</p>
       </div>
       <div class="modal-footer">
@@ -1143,6 +1297,7 @@ NOVA-1;Minha Regra;NDF;Posição;;;Sim;reverte;;valor_mtm &lt; 0;3333333333;4444
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <script>
 const API = '';  // mesmo host, proxy pelo frontend Go
 
@@ -1180,8 +1335,12 @@ function showPage(name) {
   }
   if (name === 'posicao') { preencherSelectOpcoes('p-consulta-produto', 'produto', { incluirVazio: true }); preencherSelectOpcoes('p-consulta-dominio', 'dominio', { incluirVazio: true }); }
   if (name === 'consulta') { preencherSelectOpcoes('c-produto', 'produto', { incluirVazio: true }); preencherSelectOpcoes('c-dominio', 'dominio', { incluirVazio: true }); }
+  if (name === 'razonete') { preencherSelectOpcoes('rz-produto', 'produto', { incluirVazio: true }); preencherSelectOpcoes('rz-dominio', 'dominio', { incluirVazio: true }); }
   if (name === 'parametrizacoes') { renderParametrizacoes(); }
   if (name === 'cotacoes') { renderCotacoes(); }
+  if (name === 'dashboard') { initDashboard(); }
+  if (name === 'jobs') { initJobs(); }
+  if (name === 'whatif') { initWhatif(); }
   if (name === 'operacao') {
     preencherSelectOpcoes('op-produto', 'produto', { incluirVazio: true });
     preencherSelectOpcoes('op-dominio', 'dominio', { incluirVazio: true });
@@ -1526,6 +1685,297 @@ async function api(method, path, body) {
   } finally {
     spin(false);
   }
+}
+
+// ── DASHBOARD ──────────────────────────────────────────────
+const dashCharts = {};
+function initDashboard() {
+  const di = document.getElementById('dash-data-inicio');
+  const df = document.getElementById('dash-data-fim');
+  if (!di.value || !df.value) {
+    const hoje = new Date();
+    const ini = new Date(); ini.setDate(hoje.getDate() - 30);
+    df.value = hoje.toISOString().slice(0, 10);
+    di.value = ini.toISOString().slice(0, 10);
+  }
+  carregarDashboard();
+}
+async function carregarDashboard() {
+  const di = document.getElementById('dash-data-inicio').value;
+  const df = document.getElementById('dash-data-fim').value;
+  const qs = [];
+  if (di) qs.push('data_inicio=' + di);
+  if (df) qs.push('data_fim=' + df);
+  const d = await api('GET', '/v1/dashboard' + (qs.length ? '?' + qs.join('&') : ''));
+  if (!d) return;
+  if (d.erro) { toast(d.erro, 'danger'); return; }
+  renderDashboard(d);
+}
+function fmtNum(n) { return (n || 0).toLocaleString('pt-BR'); }
+function dashDestroy(id) { if (dashCharts[id]) { dashCharts[id].destroy(); delete dashCharts[id]; } }
+const DASH_CORES = ['#0d6efd', '#20c997', '#fd7e14', '#6f42c1', '#d63384', '#198754', '#dc3545', '#0dcaf0', '#ffc107', '#6610f2'];
+function renderDashboard(d) {
+  document.getElementById('dash-total-movimento').textContent = fmtNum(d.total_movimento);
+  document.getElementById('dash-total-estornos').textContent = fmtNum(d.total_estornos);
+  document.getElementById('dash-total-inconsistencias').textContent = fmtNum(d.total_inconsistencias);
+  document.getElementById('dash-total-saldos').textContent = fmtNum(d.total_contas_com_saldo);
+
+  const temChart = typeof Chart !== 'undefined';
+
+  // Volume por dia (barras)
+  const dias = d.volumes_por_dia || [];
+  dashDestroy('dia');
+  if (temChart) {
+    dashCharts['dia'] = new Chart(document.getElementById('dash-chart-dia'), {
+      type: 'bar',
+      data: {
+        labels: dias.map(x => x.data),
+        datasets: [
+          { label: 'Movimento', data: dias.map(x => x.movimento), backgroundColor: '#0d6efd' },
+          { label: 'Estornos', data: dias.map(x => x.estornos), backgroundColor: '#fd7e14' }
+        ]
+      },
+      options: { responsive: true, maintainAspectRatio: false, scales: { x: { stacked: false }, y: { beginAtZero: true } } }
+    });
+  }
+
+  // Movimento por produto (rosca)
+  const prods = (d.volumes_por_produto || []).slice(0, 10);
+  dashDestroy('produto');
+  if (temChart) {
+    dashCharts['produto'] = new Chart(document.getElementById('dash-chart-produto'), {
+      type: 'doughnut',
+      data: {
+        labels: prods.map(p => p.produto + (p.dominio ? ' / ' + p.dominio : '')),
+        datasets: [{ data: prods.map(p => p.movimento), backgroundColor: DASH_CORES }]
+      },
+      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 10 } } } } }
+    });
+  }
+
+  // Inconsistências por tipo (barras horizontais)
+  const inc = d.inconsistencias_por_tipo || [];
+  const incVazio = document.getElementById('dash-inc-vazio');
+  dashDestroy('inc');
+  if (inc.length === 0) {
+    incVazio.classList.remove('d-none');
+  } else {
+    incVazio.classList.add('d-none');
+    if (temChart) {
+      dashCharts['inc'] = new Chart(document.getElementById('dash-chart-inc'), {
+        type: 'bar',
+        data: { labels: inc.map(x => x.rotulo), datasets: [{ label: 'Inconsistências', data: inc.map(x => x.total), backgroundColor: '#ffc107' }] },
+        options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { beginAtZero: true } } }
+      });
+    }
+  }
+
+  // Câmbio
+  const cb = d.cambio || [];
+  const body = document.getElementById('dash-cambio-body');
+  if (cb.length === 0) {
+    body.innerHTML = '<tr><td colspan="5" class="text-muted p-3">Nenhuma cotação cadastrada.</td></tr>';
+  } else {
+    body.innerHTML = cb.map(c => `<tr><td>${c.data}</td><td>${c.moeda1}</td><td>${c.moeda2}</td><td>${c.direcao}</td><td class="text-end">${(c.taxa ?? 0).toLocaleString('pt-BR', { minimumFractionDigits: 4, maximumFractionDigits: 6 })}</td></tr>`).join('');
+  }
+}
+
+// ── JOBS (fila/monitor) ────────────────────────────────────
+let jobTimer = null;
+const JOB_BADGE = { pendente: 'secondary', executando: 'info', sucesso: 'success', erro: 'danger' };
+function initJobs() {
+  const di = document.getElementById('job-data');
+  if (!di.value) di.value = new Date().toISOString().slice(0, 10);
+  preencherSelectOpcoes('job-produto', 'produto', { incluirVazio: true });
+  preencherSelectOpcoes('job-dominio', 'dominio', { incluirVazio: true });
+  carregarJobs();
+  if (jobTimer) clearInterval(jobTimer);
+  jobTimer = setInterval(() => {
+    if (currentPage !== 'jobs') { clearInterval(jobTimer); jobTimer = null; return; }
+    if (document.getElementById('job-auto').checked) carregarJobs(true);
+  }, 4000);
+}
+async function jobFetchSilent(path) {
+  try { const r = await fetch('/api' + path); return await r.json(); } catch (e) { return null; }
+}
+async function enfileirarJob() {
+  const data = document.getElementById('job-data').value;
+  if (!data) { toast('Informe a data', 'warning'); return; }
+  const produto = document.getElementById('job-produto').value;
+  const dominio = document.getElementById('job-dominio').value;
+  const r = await api('POST', '/v1/jobs', { data, produto, dominio });
+  if (!r) return;
+  if (r.erro) { toast(r.erro, 'danger'); return; }
+  toast('Job #' + r.id + ' enfileirado', 'success');
+  carregarJobs();
+}
+async function carregarJobs(silencioso) {
+  const status = document.getElementById('job-filtro-status').value;
+  const qs = '?tamanho=100' + (status ? '&status=' + status : '');
+  const r = silencioso ? await jobFetchSilent('/v1/jobs' + qs) : await api('GET', '/v1/jobs' + qs);
+  if (!r) return;
+  const body = document.getElementById('job-lista');
+  if (r.erro) { body.innerHTML = `<tr><td colspan="6" class="text-muted p-3">${esc(r.erro)}</td></tr>`; return; }
+  const jobs = r.jobs || [];
+  if (jobs.length === 0) { body.innerHTML = '<tr><td colspan="6" class="text-muted p-3">Nenhum job na fila.</td></tr>'; return; }
+  body.innerHTML = jobs.map(j => {
+    const badge = JOB_BADGE[j.status] || 'secondary';
+    const atual = (j.atualizado_em || '').replace('T', ' ').slice(0, 19);
+    const retry = j.status === 'erro' ? `<button class="btn btn-outline-warning btn-sm" onclick="retryJob(${j.id})"><i class="bi bi-arrow-repeat"></i> Retry</button>` : '';
+    return `<tr>
+      <td>${j.id}</td>
+      <td>${esc(j.descricao || j.tipo)}</td>
+      <td><span class="badge text-bg-${badge}">${j.status}</span></td>
+      <td>${j.tentativas}/${j.max_tentativas}</td>
+      <td class="small">${atual}</td>
+      <td class="text-end"><button class="btn btn-outline-secondary btn-sm" onclick="verJobLog(${j.id})"><i class="bi bi-journal-text"></i> Log</button> ${retry}</td>
+    </tr>`;
+  }).join('');
+}
+async function retryJob(id) {
+  const r = await api('POST', '/v1/jobs/' + id + '/retry', {});
+  if (!r) return;
+  if (r.erro) { toast(r.erro, 'danger'); return; }
+  toast('Job #' + id + ' reagendado', 'success');
+  carregarJobs();
+}
+async function verJobLog(id) {
+  const j = await api('GET', '/v1/jobs/' + id);
+  if (!j) return;
+  if (j.erro) { toast(j.erro, 'danger'); return; }
+  document.getElementById('job-log-id').textContent = '#' + j.id;
+  document.getElementById('job-log-conteudo').textContent = j.log || '(sem log)';
+  new bootstrap.Modal(document.getElementById('modalJobLog')).show();
+}
+
+// ── WHAT-IF (simulação de regra candidata) ──────────────────
+function initWhatif() {
+  const di = document.getElementById('wi-data');
+  if (!di.value) di.value = new Date().toISOString().slice(0, 10);
+  preencherSelectOpcoes('wi-produto', 'produto', { incluirVazio: true });
+  preencherSelectOpcoes('wi-dominio', 'dominio', { incluirVazio: true });
+  if (!document.querySelector('#wi-cond-rows tr')) wiAddCondRow();
+}
+function wiAddCondRow() {
+  const tb = document.getElementById('wi-cond-rows');
+  const tr = document.createElement('tr');
+  tr.innerHTML = `
+    <td><input type="text" class="form-control form-control-sm wi-c-cond" placeholder="ex.: valor > 0"></td>
+    <td><input type="text" class="form-control form-control-sm wi-c-valor" placeholder="ex.: valor_mtm"></td>
+    <td><input type="text" class="form-control form-control-sm wi-c-moeda" placeholder="ex.: moeda"></td>
+    <td><input type="text" class="form-control form-control-sm wi-c-boleto" placeholder="(opc.)"></td>
+    <td><input type="text" class="form-control form-control-sm wi-c-debito" placeholder="conta D"></td>
+    <td><input type="text" class="form-control form-control-sm wi-c-credito" placeholder="conta C"></td>
+    <td><button class="btn btn-outline-danger btn-sm" title="Remover" onclick="this.closest('tr').remove()"><i class="bi bi-x"></i></button></td>`;
+  tb.appendChild(tr);
+}
+function wiColetarCondicoes() {
+  return [...document.querySelectorAll('#wi-cond-rows tr')].map(tr => ({
+    condicao: tr.querySelector('.wi-c-cond').value.trim(),
+    campo_valor: tr.querySelector('.wi-c-valor').value.trim(),
+    campo_moeda: tr.querySelector('.wi-c-moeda').value.trim(),
+    campo_boleto: tr.querySelector('.wi-c-boleto').value.trim(),
+    conta_debito: tr.querySelector('.wi-c-debito').value.trim(),
+    conta_credito: tr.querySelector('.wi-c-credito').value.trim(),
+  })).filter(c => c.condicao || c.campo_valor);
+}
+async function simularWhatif() {
+  const data = document.getElementById('wi-data').value;
+  if (!data) { toast('Informe a data da posição', 'warning'); return; }
+  const condicoes = wiColetarCondicoes();
+  if (condicoes.length === 0) { toast('Informe ao menos uma condição com expressão e campo valor', 'warning'); return; }
+  const payload = {
+    data,
+    produto: document.getElementById('wi-produto').value,
+    dominio: document.getElementById('wi-dominio').value,
+    boleto: document.getElementById('wi-boleto').value.trim(),
+    pre_condicao: document.getElementById('wi-precond').value.trim(),
+    tipo_lancamento: document.getElementById('wi-tipo').value,
+    limite_linhas: parseInt(document.getElementById('wi-limite').value) || 500,
+    condicoes,
+  };
+  spin(true);
+  const r = await api('POST', '/v1/simulacao-whatif', payload);
+  spin(false);
+  const el = document.getElementById('wi-resultado');
+  if (!r) return;
+  if (r.erro) { el.innerHTML = `<div class="alert alert-danger">${esc(r.erro)}</div>`; return; }
+  wiRenderResultado(r);
+}
+function wiFmt(n) { return (n ?? 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+function wiRenderResultado(r) {
+  const el = document.getElementById('wi-resultado');
+  let html = `<div class="row g-3 mb-3">
+    <div class="col-12 col-md-4"><div class="card shadow-sm h-100"><div class="card-body text-center"><div class="text-muted small">Posições avaliadas</div><div class="fs-4 fw-bold">${r.posicoes_avaliadas}</div></div></div></div>
+    <div class="col-6 col-md-4"><div class="card shadow-sm h-100"><div class="card-body text-center"><div class="text-muted small">Lançamentos</div><div class="fs-4 fw-bold text-success">${r.total_lancamentos}</div></div></div></div>
+    <div class="col-6 col-md-4"><div class="card shadow-sm h-100"><div class="card-body text-center"><div class="text-muted small">Inconsistências</div><div class="fs-4 fw-bold text-warning">${r.total_inconsistencias}</div></div></div></div>
+  </div>`;
+  if (r.aviso) html += `<div class="alert alert-info py-2"><i class="bi bi-info-circle me-2"></i>${esc(r.aviso)}</div>`;
+  if (r.truncado) html += `<div class="alert alert-warning py-2"><i class="bi bi-exclamation-triangle me-2"></i>Resultado truncado pelo limite de linhas: as contagens são completas, mas as listas de detalhe estão limitadas.</div>`;
+
+  const ls = r.lancamentos || [];
+  html += `<div class="card shadow-sm mb-3"><div class="card-header"><i class="bi bi-receipt me-2"></i>Lançamentos gerados ${r.truncado ? '<span class="text-muted small">(amostra)</span>' : ''}</div>
+    <div class="table-responsive" style="max-height:420px;overflow:auto"><table class="table table-sm table-hover mb-0">
+    <thead><tr><th>Boleto</th><th>Produto</th><th>Domínio</th><th>Condição</th><th class="text-end">Valor</th><th>Moeda</th><th>Conta D</th><th>Conta C</th></tr></thead><tbody>`;
+  if (ls.length === 0) html += `<tr><td colspan="8" class="text-muted p-3">Nenhum lançamento gerado.</td></tr>`;
+  else for (const l of ls) html += `<tr><td>${esc(l.boleto)}</td><td>${esc(l.produto)}</td><td>${esc(l.dominio)}</td><td class="small">${esc(l.condicao)}</td><td class="text-end">${wiFmt(l.valor)}</td><td>${esc(l.moeda)}</td><td>${esc(l.conta_debito)}</td><td>${esc(l.conta_credito)}</td></tr>`;
+  html += `</tbody></table></div></div>`;
+
+  const inc = r.inconsistencias || [];
+  if (inc.length) {
+    html += `<div class="card shadow-sm mb-3"><div class="card-header text-warning"><i class="bi bi-exclamation-triangle me-2"></i>Inconsistências ${r.truncado ? '<span class="small">(amostra)</span>' : ''}</div>
+      <div class="table-responsive" style="max-height:320px;overflow:auto"><table class="table table-sm mb-0">
+      <thead><tr><th>Boleto</th><th>Tipo</th><th>Expressão</th><th>Detalhe</th></tr></thead><tbody>`;
+    for (const i of inc) html += `<tr><td>${esc(i.boleto)}</td><td>${esc(i.tipo)}</td><td class="small"><code>${esc(i.expressao)}</code></td><td class="small">${esc(i.detalhe)}</td></tr>`;
+    html += `</tbody></table></div></div>`;
+  }
+  el.innerHTML = html;
+}
+
+// Cria uma regra real a partir da regra candidata da simulação. O escopo produto/domínio
+// vira o produto/domínio da regra; cada condição recebe a config padrão de moeda base
+// (data_posicao_carteira). O sistema não tem rascunho: a regra nasce ATIVA — o usuário
+// confirma e depois revisa em Regras.
+async function criarRegraDoWhatif() {
+  const descricao = document.getElementById('wi-descricao').value.trim();
+  if (!descricao) { toast('Informe a descrição da regra para criar', 'warning'); return; }
+  const condicoes = wiColetarCondicoes();
+  if (condicoes.length === 0) { toast('Informe ao menos uma condição', 'warning'); return; }
+  for (let i = 0; i < condicoes.length; i++) {
+    const c = condicoes[i], n = i + 1;
+    if (!c.condicao) { toast(`Condição ${n}: informe a expressão da condição`, 'warning'); return; }
+    if (!c.campo_valor) { toast(`Condição ${n}: informe o campo valor`, 'warning'); return; }
+    if (!c.campo_moeda) { toast(`Condição ${n}: informe o campo moeda`, 'warning'); return; }
+    if (!c.conta_debito || !c.conta_credito) { toast(`Condição ${n}: informe conta débito e crédito`, 'warning'); return; }
+  }
+  const produto = document.getElementById('wi-produto').value;
+  const dominio = document.getElementById('wi-dominio').value;
+  if (!confirm(`Criar a regra "${descricao}" com ${condicoes.length} condição(ões)?\n\nEla será criada ATIVA e passará a valer nas próximas gerações de movimento.`)) return;
+  spin(true);
+  const reg = await api('POST', '/v1/regras', {
+    descricao,
+    codigo_produto_corporativo: produto,
+    dominio,
+    campo_produto: '',
+    pre_condicao: document.getElementById('wi-precond').value.trim(),
+    tipo_lancamento: document.getElementById('wi-tipo').value,
+    ativo: true,
+  });
+  if (!reg || reg.erro) { spin(false); toast(reg?.erro || 'falha ao criar regra', 'danger'); return; }
+  const id = reg.id;
+  let okCond = 0; const falhas = [];
+  for (let i = 0; i < condicoes.length; i++) {
+    const c = condicoes[i];
+    const rc = await api('POST', `/v1/regras/${id}/condicoes`, {
+      condicao: c.condicao, conta_debito: c.conta_debito, conta_credito: c.conta_credito,
+      campo_valor: c.campo_valor, campo_moeda: c.campo_moeda, campo_boleto: c.campo_boleto,
+      ativo: true, base_na_posicao: false, campo_data_conversao: 'data_posicao_carteira',
+    });
+    if (rc && rc.id) okCond++; else falhas.push(`${i + 1}: ${rc?.erro || 'erro'}`);
+  }
+  spin(false);
+  if (falhas.length) toast(`Regra #${id} criada, mas ${falhas.length} condição(ões) falharam — ${falhas.join('; ')}`, 'warning');
+  else toast(`Regra #${id} criada (ativa) com ${okCond} condição(ões). Revise em Regras.`, 'success');
 }
 
 // ── OPERAÇÃO ───────────────────────────────────────────────
@@ -1939,6 +2389,64 @@ function exportarCSV() {
   }
   const params = buildConsultaParams(1).replace('pagina=1&', '');
   window.open('/consulta/export' + params, '_blank');
+}
+
+// ── Razonete (RF-070) ──────────────────────────────────────
+function fmtRz(v) { return Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+
+async function consultarRazonete() {
+  const di = document.getElementById('rz-data-inicio').value;
+  const df = document.getElementById('rz-data-fim').value;
+  if (!di || !df) { toast('Informe o período (data início e fim)', 'warning'); return; }
+  const boleto = document.getElementById('rz-boleto').value.trim();
+  if (!boleto) { toast('Informe o número do boleto (exato)', 'warning'); return; }
+  let p = `?data_inicio=${di}&data_fim=${df}`;
+  const conta = document.getElementById('rz-conta').value.trim();
+  const produto = document.getElementById('rz-produto').value;
+  const dominio = document.getElementById('rz-dominio').value;
+  if (boleto) p += `&boleto=${encodeURIComponent(boleto)}`;
+  if (conta) p += `&conta=${encodeURIComponent(conta)}`;
+  if (produto) p += `&produto=${encodeURIComponent(produto)}`;
+  if (dominio) p += `&dominio=${encodeURIComponent(dominio)}`;
+  const r = await api('GET', '/v1/razonete' + p);
+  const el = document.getElementById('rz-resultado');
+  if (!r || r.erro) { el.innerHTML = `<div class="alert alert-danger">${r?.erro || 'Erro'}</div>`; return; }
+  if (!Array.isArray(r) || r.length === 0) { el.innerHTML = `<div class="alert alert-info">Nenhum movimento encontrado para o filtro.</div>`; return; }
+  el.innerHTML = r.map(razoneteCard).join('');
+}
+
+function linhaRz(l, valor) {
+  const estorno = l.reversao ? ' <span class="badge bg-warning text-dark">estorno</span>' : '';
+  return `<tr>
+    <td class="small">${esc(l.data)}</td>
+    <td class="small text-muted">${esc(l.boleto)} · ${esc(l.historico || '')}${estorno}</td>
+    <td class="small text-end">${fmtRz(valor)}</td>
+  </tr>`;
+}
+
+function razoneteCard(c) {
+  const deb = (c.linhas || []).filter(l => l.debito > 0).map(l => linhaRz(l, l.debito)).join('');
+  const cred = (c.linhas || []).filter(l => l.credito > 0).map(l => linhaRz(l, l.credito)).join('');
+  return `<div class="card shadow-sm mb-3">
+    <div class="card-header d-flex justify-content-between align-items-center">
+      <span><i class="bi bi-bank me-2"></i>Conta <strong>${esc(c.conta)}</strong> <span class="badge bg-secondary ms-1">${esc(c.moeda || '—')}</span></span>
+      <span class="small">Saldo: <strong>${fmtRz(Math.abs(c.saldo))} ${c.natureza}</strong></span>
+    </div>
+    <div class="card-body p-0"><div class="row g-0">
+      <div class="col-6 border-end">
+        <div class="px-3 py-1 fw-semibold bg-body-secondary small">Débito</div>
+        <div class="table-responsive"><table class="table table-sm table-hover mb-0"><tbody>${deb || '<tr><td class="text-muted small p-2">—</td></tr>'}</tbody></table></div>
+      </div>
+      <div class="col-6">
+        <div class="px-3 py-1 fw-semibold bg-body-secondary small">Crédito</div>
+        <div class="table-responsive"><table class="table table-sm table-hover mb-0"><tbody>${cred || '<tr><td class="text-muted small p-2">—</td></tr>'}</tbody></table></div>
+      </div>
+    </div>
+    <div class="d-flex justify-content-between px-3 py-2 border-top small">
+      <span>Σ Débito: <strong>${fmtRz(c.total_debito)}</strong></span>
+      <span>Σ Crédito: <strong>${fmtRz(c.total_credito)}</strong></span>
+    </div></div>
+  </div>`;
 }
 
 function showExportTxt() {
@@ -2536,6 +3044,7 @@ function renderizarRegras(regras) {
         <i class="bi bi-list-check me-1"></i>Condições
       </button>
       <button class="btn btn-sm btn-outline-secondary" onclick="abrirEdicaoRegra(${reg.id})" title="Editar regra"><i class="bi bi-pencil"></i></button>
+      <button class="btn btn-sm btn-outline-success" onclick="clonarRegra(${reg.id})" title="Clonar regra (com as condições)"><i class="bi bi-copy"></i></button>
       <button class="btn btn-sm btn-outline-danger" onclick="excluirRegra(${reg.id}, '${reg.descricao.replace(/'/g,"\\'")}')" title="Excluir regra"><i class="bi bi-trash"></i></button>
     </td>
   </tr>`).join('');
@@ -2565,6 +3074,7 @@ async function selecionarRegra(id, nome) {
       <td>${c.campo_boleto || '<span class="text-muted">padrão</span>'}</td>
       <td class="text-nowrap">
         <button class="btn btn-outline-secondary btn-sm py-0 px-1" onclick="abrirEdicaoCondicao(${c.id})" title="Editar"><i class="bi bi-pencil"></i></button>
+        <button class="btn btn-outline-success btn-sm py-0 px-1" onclick="clonarCondicao(${c.id}, '${nome.replace(/'/g,"\\'")}')" title="Clonar condição"><i class="bi bi-copy"></i></button>
         <button class="btn btn-outline-danger btn-sm py-0 px-1" onclick="excluirCondicao(${c.id}, '${nome.replace(/'/g,"\\'")}')" title="Excluir"><i class="bi bi-trash"></i></button>
       </td>
     </tr>`).join('');
@@ -2724,7 +3234,44 @@ async function excluirRegra(id, nome) {
   else if (r?.erro) toast(r.erro, 'danger');
 }
 
+async function clonarRegra(id) {
+  if (!confirm('Clonar esta regra com todas as condições?')) return;
+  const r = await api('POST', `/v1/regras/${id}/clonar`);
+  if (r?.id) { toast('Regra clonada!'); carregarRegras(); }
+  else if (r?.erro) toast(r.erro, 'danger');
+}
+
+async function clonarCondicao(id, nomeRegra) {
+  const r = await api('POST', `/v1/condicoes/${id}/clonar`);
+  if (r?.id) { toast('Condição clonada!'); selecionarRegra(regraAtualId, nomeRegra); }
+  else if (r?.erro) toast(r.erro, 'danger');
+}
+
 // Cria (POST) ou edita (PUT) a condição conforme condicaoEditId.
+function linhaPreview(rotulo, r) {
+  if (!r) return `<div class="text-danger">${rotulo}: erro na chamada.</div>`;
+  if (!r.encontrada) return `<div class="text-warning">${rotulo}: nenhuma posição encontrada para a data/boleto informados.</div>`;
+  if (r.erro) return `<div class="text-danger"><strong>${rotulo}</strong> (boleto ${esc(r.boleto)}): ${esc(r.erro)}</div>`;
+  let res = r.resultado;
+  if (typeof res === 'boolean') res = res ? '<span class="badge bg-success">verdadeiro</span>' : '<span class="badge bg-secondary">falso</span>';
+  else res = `<strong>${esc(String(res))}</strong>`;
+  return `<div><strong>${rotulo}</strong> (boleto ${esc(r.boleto)}): ${res}</div>`;
+}
+
+async function testarPreviewCondicao() {
+  const data = document.getElementById('r-prev-data').value;
+  if (!data) { toast('Informe a data para testar na posição', 'warning'); return; }
+  const boleto = document.getElementById('r-prev-boleto').value.trim();
+  const cond = document.getElementById('r-cond-expr').value.trim();
+  const valor = document.getElementById('r-cond-valor').value.trim();
+  const el = document.getElementById('r-prev-resultado');
+  if (!cond && !valor) { el.innerHTML = '<span class="text-muted">Preencha a condição e/ou o campo valor para testar.</span>'; return; }
+  let html = '';
+  if (cond) html += linhaPreview('Condição', await api('POST', '/v1/preview-expressao', { expressao: cond, tipo: 'condicao', data, boleto }));
+  if (valor) html += linhaPreview('Campo Valor', await api('POST', '/v1/preview-expressao', { expressao: valor, tipo: 'valor', data, boleto }));
+  el.innerHTML = html;
+}
+
 function atualizarCamposBaseCondicao() {
   const vemDaPosicao = document.getElementById('r-cond-base-sim').checked;
   document.getElementById('r-cond-valor-base').disabled = !vemDaPosicao;
