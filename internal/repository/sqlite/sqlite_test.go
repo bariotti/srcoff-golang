@@ -260,3 +260,69 @@ func TestPadraoParamConfigNotif(t *testing.T) {
 		t.Fatalf("após marcar lidas, não lidas deveria ser 0, obteve %d", n)
 	}
 }
+
+// TestExpurgarAteData valida o expurgo por data de corte (RF-123): apaga movimentos,
+// inconsistências e execuções com data_lote <= corte (inclusive) e preserva as posteriores.
+func TestExpurgarAteData(t *testing.T) {
+	ctx := context.Background()
+	s := abrirTeste(t)
+	d := func(s string) time.Time { t, _ := time.Parse("2006-01-02", s); return t }
+	datas := []string{"2026-01-05", "2026-01-10", "2026-01-15"}
+
+	for _, ds := range datas {
+		if err := s.pos.ImportarLote(ctx, d(ds), 1, []map[string]interface{}{
+			{"codigo_identificador_boleto": "B-" + ds, "valor_mtm": 100.0, "moeda": "BRL"},
+		}); err != nil {
+			t.Fatalf("ImportarLote %s: %v", ds, err)
+		}
+		if err := s.mov.BulkInsert(ctx, []model.LancamentoContabil{{
+			DataLoteContabil: d(ds), CodigoVersaoConteudo: 1, CodigoIdentificadorBoleto: "B-" + ds,
+			ValorLancamentoContabil: 100, MoedaLancamentoContabil: "BRL", ContaDebito: "1001", ContaCredito: "2001",
+			Produto: "NDF", Dominio: "Posição",
+		}}); err != nil {
+			t.Fatalf("BulkInsert %s: %v", ds, err)
+		}
+		if err := s.exec.RegistrarExecucao(ctx, model.MovimentoExecucao{DataLote: d(ds), Produto: "NDF", Dominio: "Posição", QtdLancamentos: 1, QtdMovimento: 1}); err != nil {
+			t.Fatalf("RegistrarExecucao %s: %v", ds, err)
+		}
+		if err := s.inc.SubstituirPorEscopo(ctx, d(ds), []model.ProdutoDominio{{Produto: "NDF", Dominio: "Posição"}},
+			[]model.InconsistenciaProcessamento{{DataLoteContabil: d(ds), Produto: "NDF", Dominio: "Posição", Tipo: "x", Detalhe: "y"}}); err != nil {
+			t.Fatalf("SubstituirPorEscopo %s: %v", ds, err)
+		}
+	}
+
+	// Corte em 10/01 → apaga 05 e 10 (<=), mantém 15.
+	corte := d("2026-01-10")
+	if n, err := s.mov.ExpurgarAteData(ctx, corte); err != nil || n != 2 {
+		t.Fatalf("expurgo movimentos: n=%d err=%v (esperava 2)", n, err)
+	}
+	if n, err := s.exec.ExpurgarAteData(ctx, corte); err != nil || n != 2 {
+		t.Fatalf("expurgo execuções: n=%d err=%v (esperava 2)", n, err)
+	}
+	if n, err := s.inc.ExpurgarAteData(ctx, corte); err != nil || n != 2 {
+		t.Fatalf("expurgo inconsistências: n=%d err=%v (esperava 2)", n, err)
+	}
+	if n, err := s.pos.ExpurgarAteData(ctx, corte); err != nil || n != 2 {
+		t.Fatalf("expurgo posições: n=%d err=%v (esperava 2)", n, err)
+	}
+
+	// 15/01 preservado; 05/01 removido.
+	if pag, _ := s.mov.ConsultarPaginado(ctx, d("2026-01-15"), 1, 10); pag == nil || pag.Total != 1 {
+		t.Fatalf("15/01 deveria ter 1 movimento, obteve %v", pag)
+	}
+	if pag, _ := s.mov.ConsultarPaginado(ctx, d("2026-01-05"), 1, 10); pag == nil || pag.Total != 0 {
+		t.Fatalf("05/01 deveria ter 0 movimentos, obteve %v", pag)
+	}
+	if lst, _ := s.exec.ListarPorData(ctx, d("2026-01-15")); len(lst) != 1 {
+		t.Fatalf("execução 15/01 deveria existir, obteve %d", len(lst))
+	}
+	if lst, _ := s.inc.ListarPorData(ctx, d("2026-01-05")); len(lst) != 0 {
+		t.Fatalf("inconsistência 05/01 deveria ter sido apagada, obteve %d", len(lst))
+	}
+	if ps, _ := s.pos.BuscarPorDataEVersaoMaxima(ctx, d("2026-01-15")); len(ps) != 1 {
+		t.Fatalf("posição 15/01 deveria existir, obteve %d", len(ps))
+	}
+	if ps, _ := s.pos.BuscarPorDataEVersaoMaxima(ctx, d("2026-01-05")); len(ps) != 0 {
+		t.Fatalf("posição 05/01 deveria ter sido apagada, obteve %d", len(ps))
+	}
+}

@@ -5,9 +5,12 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"os"
+	"os/exec"
+	"runtime"
 	"strings"
 	"time"
 
@@ -19,6 +22,7 @@ import (
 	filerepo "srcoff/internal/repository/file"
 	sqliterepo "srcoff/internal/repository/sqlite"
 	"srcoff/internal/service"
+	"srcoff/internal/webui"
 )
 
 func main() {
@@ -219,6 +223,22 @@ func main() {
 			}
 			return nil
 		})
+		// Expurgo/retenção de movimentos (RF-123): job recorrente que remove movimentos
+		// contábeis (e as inconsistências/execuções correspondentes) além da retenção
+		// configurada. Disponível quando os repositórios sabem expurgar por data (SQLite).
+		posExp, ok0 := posicaoRepo.(service.ExpurgavelPorData)
+		movExp, ok1 := movimentoRepo.(service.ExpurgavelPorData)
+		incExp, ok2 := inconsistenciaRepo.(service.ExpurgavelPorData)
+		exeExp, ok3 := execucaoRepo.(service.ExpurgavelPorData)
+		if ok0 && ok1 && ok2 && ok3 {
+			expurgoSvc := service.NewExpurgoService(configuracaoSvc, posExp, movExp, incExp, exeExp)
+			jobService.Registrar("expurgo_movimento", func(ctx context.Context, j *model.Job, logf func(string)) error {
+				return expurgoSvc.Executar(ctx, logf)
+			})
+			go agendarExpurgo(context.Background(), jobService, expurgoSvc)
+			log.Printf("[expurgo] agendador de retenção HABILITADO")
+		}
+
 		jobService.Start(context.Background())
 		jobHandler = handler.NewJobHandler(jobService)
 		log.Printf("[job] fila de jobs HABILITADA")
@@ -339,14 +359,86 @@ func main() {
 	http.HandleFunc("/api/v1/lancamentos-manuais", lancManualHandler.Inserir)
 	http.HandleFunc("/api/v1/lancamentos-manuais/import", lancManualHandler.ImportarCSV)
 
+	// Interface web (SPA) servida pelo PRÓPRIO binário: um executável único sobe API + UI
+	// na mesma porta, sem proxy e sem CORS. Os exports são chamados direto (antes passavam
+	// pelo proxy /consulta/*). O app.html vai embutido (internal/webui), então o exe é
+	// autocontido. Como a API não registra "/", a SPA é o catch-all das demais rotas.
+	http.HandleFunc("/consulta/export", exportHandler.ExportMovimentoCSV)
+	http.HandleFunc("/consulta/export-txt", exportHandler.ExportMovimentoTXT)
+	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		io.WriteString(w, webui.AppHTML())
+	})
+
 	// 6. Ler porta
 	port := os.Getenv("API_PORT")
 	if port == "" {
 		port = "8080"
 	}
 
-	log.Printf("API SRCOff iniciada na porta %s", port)
+	// Abre a UI no navegador padrão automaticamente (desligar com SRCOFF_NO_BROWSER=1).
+	if os.Getenv("SRCOFF_NO_BROWSER") == "" {
+		go abrirNavegador("http://localhost:" + port)
+	}
+
+	log.Printf("SRCOff iniciado — API e UI em http://localhost:%s", port)
 	if err := http.ListenAndServe(":"+port, nil); err != nil {
 		log.Fatalf("erro ao iniciar servidor: %v", err)
 	}
+}
+
+// abrirNavegador tenta abrir a URL no navegador padrão do SO após um pequeno atraso
+// (tempo de o servidor subir). Falha silenciosamente — o usuário pode abrir manualmente.
+func abrirNavegador(url string) {
+	time.Sleep(800 * time.Millisecond)
+	var cmd *exec.Cmd
+	switch runtime.GOOS {
+	case "windows":
+		cmd = exec.Command("rundll32", "url.dll,FileProtocolHandler", url)
+	case "darwin":
+		cmd = exec.Command("open", url)
+	default:
+		cmd = exec.Command("xdg-open", url)
+	}
+	_ = cmd.Start()
+}
+
+// agendarExpurgo enfileira periodicamente o job de expurgo (RF-123), respeitando o
+// intervalo configurado. Só enfileira quando a retenção está habilitada (N>0) e não há
+// outro expurgo pendente/executando — evitando acúmulo. O expurgo em si roda no worker.
+func agendarExpurgo(ctx context.Context, js *service.JobService, exp *service.ExpurgoService) {
+	for {
+		horas := exp.IntervaloHoras(ctx)
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(time.Duration(horas) * time.Hour):
+		}
+		if exp.DiasRetencao(ctx) <= 0 {
+			continue // retenção desativada
+		}
+		if expurgoPendente(ctx, js) {
+			continue // já há um expurgo na fila
+		}
+		n := exp.DiasRetencao(ctx)
+		if _, err := js.Enfileirar(ctx, "expurgo_movimento", fmt.Sprintf("Expurgo: reter últimos %d dia(s)", n), "", 1); err != nil {
+			log.Printf("[expurgo] erro ao enfileirar: %v", err)
+		}
+	}
+}
+
+// expurgoPendente informa se já existe um job de expurgo pendente ou executando.
+func expurgoPendente(ctx context.Context, js *service.JobService) bool {
+	for _, st := range []string{model.JobPendente, model.JobExecutando} {
+		pag, err := js.Listar(ctx, st, 1, 100)
+		if err != nil || pag == nil {
+			continue
+		}
+		for _, j := range pag.Jobs {
+			if j.Tipo == "expurgo_movimento" {
+				return true
+			}
+		}
+	}
+	return false
 }

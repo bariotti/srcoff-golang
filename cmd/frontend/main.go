@@ -1,17 +1,16 @@
 package main
 
 import (
-	"html/template"
 	"io"
 	"log"
 	"net/http"
 	"net/url"
 	"os"
+
+	"srcoff/internal/webui"
 )
 
 func main() {
-	tmpl := template.Must(template.ParseGlob("cmd/frontend/templates/*.html"))
-
 	apiURL := os.Getenv("API_URL")
 	if apiURL == "" {
 		apiURL = "http://localhost:8080"
@@ -42,13 +41,10 @@ func main() {
 		proxyDownload(client, w, r, target)
 	})
 
-	// SPA — serve app.html para todas as rotas de navegação
+	// SPA — serve app.html (embutido) para todas as rotas de navegação
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		if err := tmpl.ExecuteTemplate(w, "app.html", nil); err != nil {
-			log.Printf("erro ao renderizar app.html: %v", err)
-			http.Error(w, "Erro interno", http.StatusInternalServerError)
-		}
+		io.WriteString(w, webui.AppHTML())
 	})
 
 	log.Printf("Frontend SRCOff iniciado na porta %s", frontendPort)

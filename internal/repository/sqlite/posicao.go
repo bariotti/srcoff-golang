@@ -15,6 +15,16 @@ type PosicaoCarteiraRepo struct{ db *sql.DB }
 
 func NewPosicaoCarteiraRepo(db *sql.DB) *PosicaoCarteiraRepo { return &PosicaoCarteiraRepo{db: db} }
 
+// ExpurgarAteData apaga as posições cuja data é <= corte (retenção). Retorna quantas
+// linhas foram removidas. Usado pelo job de expurgo (RF-123).
+func (r *PosicaoCarteiraRepo) ExpurgarAteData(ctx context.Context, corte time.Time) (int64, error) {
+	res, err := r.db.ExecContext(ctx, "DELETE FROM posicao_carteira WHERE data_posicao_carteira <= ?", fmtData(corte))
+	if err != nil {
+		return 0, err
+	}
+	return res.RowsAffected()
+}
+
 func (r *PosicaoCarteiraRepo) BuscarPorDataEVersaoMaxima(ctx context.Context, data time.Time) ([]model.PosicaoCarteira, error) {
 	rows, err := r.db.QueryContext(ctx,
 		"SELECT id, data_posicao_carteira, codigo_versao_conteudo, campos FROM posicao_carteira WHERE data_posicao_carteira = ? ORDER BY id",

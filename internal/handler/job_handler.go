@@ -123,6 +123,9 @@ func (h *JobHandler) Item(w http.ResponseWriter, r *http.Request) {
 }
 
 func descricaoJob(tipo, data, produto, dominio string) string {
+	if tipo == "expurgo_movimento" {
+		return "Expurgo de movimentos antigos (retenção)"
+	}
 	if tipo == "geracao_movimento" {
 		d := "Geração de movimento " + data
 		escopo := strings.TrimSpace(produto + " " + dominio)

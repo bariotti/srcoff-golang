@@ -300,6 +300,16 @@ func (r *MovimentoContabilRepo) consultarFiltrado(ctx context.Context, f model.F
 	return &model.PaginaLancamentos{Total: total, Pagina: f.Pagina, Tamanho: f.Tamanho, Lancamentos: lancamentos}, nil
 }
 
+// ExpurgarAteData apaga os lançamentos cuja data de lote é <= corte (retenção).
+// Retorna quantas linhas foram removidas. Usado pelo job de expurgo (RF-123).
+func (r *MovimentoContabilRepo) ExpurgarAteData(ctx context.Context, corte time.Time) (int64, error) {
+	res, err := r.db.ExecContext(ctx, "DELETE FROM movimento_contabil WHERE data_lote_contabil <= ?", fmtData(corte))
+	if err != nil {
+		return 0, err
+	}
+	return res.RowsAffected()
+}
+
 func (r *MovimentoContabilRepo) ExcluirPorDataEVersao(ctx context.Context, data time.Time, versao int) error {
 	if versao > 0 {
 		_, err := r.db.ExecContext(ctx, "DELETE FROM movimento_contabil WHERE data_lote_contabil = ? AND codigo_versao_conteudo = ?", fmtData(data), versao)

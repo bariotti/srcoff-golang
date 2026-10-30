@@ -40,6 +40,16 @@ func (r *InconsistenciaRepo) SubstituirPorEscopo(ctx context.Context, data time.
 	return tx.Commit()
 }
 
+// ExpurgarAteData apaga as inconsistências cuja data de lote é <= corte (retenção).
+// Retorna quantas linhas foram removidas. Usado pelo job de expurgo (RF-123).
+func (r *InconsistenciaRepo) ExpurgarAteData(ctx context.Context, corte time.Time) (int64, error) {
+	res, err := r.db.ExecContext(ctx, "DELETE FROM inconsistencia_processamento WHERE data_lote_contabil <= ?", fmtData(corte))
+	if err != nil {
+		return 0, err
+	}
+	return res.RowsAffected()
+}
+
 func (r *InconsistenciaRepo) ListarPorData(ctx context.Context, data time.Time) ([]model.InconsistenciaProcessamento, error) {
 	rows, err := r.db.QueryContext(ctx,
 		`SELECT id, data_lote_contabil, IFNULL(codigo_identificador_boleto,''), IFNULL(produto,''), IFNULL(dominio,''), IFNULL(id_regra_contabil,0),

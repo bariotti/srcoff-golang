@@ -8,3 +8,6 @@
 
 # Massa de testes gerada por cmd/massa_testes
 data-massa/
+
+# Massa de posição gerada para teste (não versionar)
+posicao_massa_*.csv

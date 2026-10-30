@@ -34,6 +34,16 @@ func (r *ExecucaoRepo) RegistrarExecucao(ctx context.Context, e model.MovimentoE
 	return tx.Commit()
 }
 
+// ExpurgarAteData apaga as execuções cuja data de lote é <= corte (retenção).
+// Retorna quantas linhas foram removidas. Usado pelo job de expurgo (RF-123).
+func (r *ExecucaoRepo) ExpurgarAteData(ctx context.Context, corte time.Time) (int64, error) {
+	res, err := r.db.ExecContext(ctx, "DELETE FROM movimento_execucao WHERE data_lote <= ?", fmtData(corte))
+	if err != nil {
+		return 0, err
+	}
+	return res.RowsAffected()
+}
+
 func (r *ExecucaoRepo) ListarPorData(ctx context.Context, data time.Time) ([]model.MovimentoExecucao, error) {
 	rows, err := r.db.QueryContext(ctx,
 		"SELECT id, data_lote, produto, dominio, qtd_lancamentos, qtd_estornos, IFNULL(qtd_movimento,0), IFNULL(criado_em,'') FROM movimento_execucao WHERE data_lote = ? ORDER BY produto, dominio",
