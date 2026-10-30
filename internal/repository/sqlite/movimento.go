@@ -77,7 +77,17 @@ func (r *MovimentoContabilRepo) BulkInsert(ctx context.Context, lancamentos []mo
 
 func (r *MovimentoContabilRepo) BuscarPorDataEIndicador(ctx context.Context, data time.Time, indicadorReversao bool) ([]model.LancamentoContabil, error) {
 	dataStr := fmtData(data)
-	query := "SELECT " + colsMov("m") + " FROM movimento_contabil m WHERE m.data_lote_contabil = ? AND m.indicador_reversao = ? AND m.codigo_versao_conteudo = (SELECT MAX(m2.codigo_versao_conteudo) FROM movimento_contabil m2 WHERE m2.data_lote_contabil = m.data_lote_contabil AND m2.produto = m.produto AND m2.dominio = m.dominio)"
+	// Em vez de subquery de vigência correlacionada (reavaliada linha a linha → custo
+	// O(versões × linhas), que explode quando o dia acumula muitas versões), calcula a
+	// versão vigente (MAX) por (data,produto,domínio) UMA vez via índice de cobertura
+	// IX_mov_data_prod_dom_ver e faz seek apenas nas linhas vigentes pelo MESMO índice.
+	// O CROSS JOIN fixa a ordem (vigência primeiro), garantindo o plano de seek mesmo
+	// num banco sem ANALYZE.
+	query := "SELECT " + colsMov("m") + " FROM " +
+		"(SELECT data_lote_contabil d, produto p, dominio dom, MAX(codigo_versao_conteudo) maxv" +
+		" FROM movimento_contabil WHERE data_lote_contabil = ? GROUP BY data_lote_contabil, produto, dominio) v" +
+		" CROSS JOIN movimento_contabil m ON m.data_lote_contabil = v.d AND m.produto = v.p AND m.dominio = v.dom AND m.codigo_versao_conteudo = v.maxv" +
+		" WHERE m.indicador_reversao = ?"
 	rows, err := r.db.QueryContext(ctx, query, dataStr, b2i(indicadorReversao))
 	if err != nil {
 		return nil, err
@@ -163,24 +173,27 @@ func (r *MovimentoContabilRepo) consultarFiltrado(ctx context.Context, f model.F
 		where += fmt.Sprintf(" AND m.codigo_versao_conteudo = %d", f.Versao)
 	}
 
-	// Subquery de vigência correlacionada: versão vigente (MAX) por (data, produto, domínio).
-	// produto/domínio são NOT NULL (sem IFNULL), o que permite o uso do índice IX_mov_data_prod_dom_ver.
-	const vigSub = " AND m.codigo_versao_conteudo = (SELECT MAX(m2.codigo_versao_conteudo) FROM movimento_contabil m2 WHERE m2.data_lote_contabil = m.data_lote_contabil AND m2.produto = m.produto AND m2.dominio = m.dominio)"
-
-	// Caminho leve (sem exclusão de saldo-zero): os filtros costumam ser seletivos
-	// (ex.: razonete por boleto exato), então a subquery de vigência correlacionada
-	// é avaliada para poucas linhas e sai barata.
+	// Caminho leve (sem exclusão de saldo-zero). No modo "vigente", em vez da subquery
+	// de vigência correlacionada (reavaliada linha a linha → O(versões × linhas), que
+	// fica lenta quando o dia acumula muitas versões), calcula a versão vigente (MAX)
+	// por (data,produto,domínio) UMA vez via índice de cobertura IX_mov_data_prod_dom_ver
+	// e faz seek apenas nas linhas vigentes. O CROSS JOIN fixa a ordem (vigência primeiro),
+	// garantindo o plano de seek mesmo sem ANALYZE. Os demais modos ("todas"/"especifica")
+	// não precisam da vigência e consultam a tabela direto.
 	if !excluirSaldoZero {
-		w := where
+		from := "movimento_contabil m"
 		if f.VersaoModo == "vigente" {
-			w += vigSub
+			from = "(SELECT data_lote_contabil d, produto p, dominio dom, MAX(codigo_versao_conteudo) maxv" +
+				" FROM movimento_contabil WHERE data_lote_contabil >= '" + ini + "' AND data_lote_contabil <= '" + fim + "'" +
+				" GROUP BY data_lote_contabil, produto, dominio) v" +
+				" CROSS JOIN movimento_contabil m ON m.data_lote_contabil = v.d AND m.produto = v.p AND m.dominio = v.dom AND m.codigo_versao_conteudo = v.maxv"
 		}
 		var total int
-		if err := r.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM movimento_contabil m "+w).Scan(&total); err != nil {
+		if err := r.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM "+from+" "+where).Scan(&total); err != nil {
 			return nil, err
 		}
 		offset := (f.Pagina - 1) * f.Tamanho
-		query := "SELECT " + colsMov("m") + " FROM movimento_contabil m " + w +
+		query := "SELECT " + colsMov("m") + " FROM " + from + " " + where +
 			fmt.Sprintf(" ORDER BY m.data_lote_contabil, m.codigo_versao_conteudo, m.id LIMIT %d OFFSET %d", f.Tamanho, offset)
 		rows, err := r.db.QueryContext(ctx, query)
 		if err != nil {
