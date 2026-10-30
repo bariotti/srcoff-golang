@@ -971,11 +971,14 @@ func (s *MovimentoContabilService) GerarMovimentoEscopo(ctx context.Context, dat
 // REAL da data informada (opcionalmente filtrando por produto/domínio/boleto), devolvendo o
 // resultado, os campos referenciados e os ausentes. Permite testar a regra antes de ativá-la.
 // Spec: RF-072.
-func (s *MovimentoContabilService) PreviewExpressao(ctx context.Context, data time.Time, produto, dominio, boleto, expressao, tipo string) (*model.PreviewExpressao, error) {
+func (s *MovimentoContabilService) PreviewExpressao(ctx context.Context, data time.Time, produto, dominio, boleto, campoBoleto, expressao, tipo string) (*model.PreviewExpressao, error) {
 	posicoes, err := s.posicaoRepo.BuscarPorDataEVersaoMaxima(ctx, data)
 	if err != nil {
 		return nil, err
 	}
+	// O identificador do boleto é lido do campo informado na condição (campo_boleto), caindo
+	// no padrão do sistema quando vazio — assim o filtro e o boleto exibido batem com a regra.
+	campoBol := campoBoletoOuPadrao(campoBoleto)
 	res := &model.PreviewExpressao{}
 	var env map[string]interface{}
 	for _, p := range posicoes {
@@ -986,11 +989,11 @@ func (s *MovimentoContabilService) PreviewExpressao(ctx context.Context, data ti
 		if dominio != "" && evaluator.CampoString(e, "dominio") != dominio {
 			continue
 		}
-		if boleto != "" && evaluator.CampoString(e, "codigo_identificador_boleto") != boleto {
+		if boleto != "" && evaluator.CampoString(e, campoBol) != boleto {
 			continue
 		}
 		env = e
-		res.Boleto = evaluator.CampoString(e, "codigo_identificador_boleto")
+		res.Boleto = evaluator.CampoString(e, campoBol)
 		break
 	}
 	if env == nil {
@@ -1067,6 +1070,10 @@ func (s *MovimentoContabilService) SimularRegra(ctx context.Context, in model.Si
 		condicoes = append(condicoes, model.CondicaoRegra{
 			Condicao: c.Condicao, ContaDebito: c.ContaDebito, ContaCredito: c.ContaCredito,
 			CampoValor: c.CampoValor, CampoMoeda: c.CampoMoeda, CampoBoleto: c.CampoBoleto, Ativo: true,
+			BaseNaPosicao:       c.BaseNaPosicao,
+			CampoValorMoedaBase: c.CampoValorMoedaBase,
+			CampoMoedaBase:      c.CampoMoedaBase,
+			CampoDataConversao:  c.CampoDataConversao,
 		})
 	}
 	regra.Condicoes = condicoes
@@ -1074,6 +1081,34 @@ func (s *MovimentoContabilService) SimularRegra(ctx context.Context, in model.Si
 	posicoes, err := s.posicaoRepo.BuscarPorDataEVersaoMaxima(ctx, data)
 	if err != nil {
 		return nil, fmt.Errorf("erro ao buscar posicao_carteira: %w", err)
+	}
+
+	// Moeda base do veículo (RF-036/RN-182): carrega De/Para e cotações uma vez e resolve
+	// o veículo/layout por combinação a partir do padrão — mesma lógica da geração — para
+	// reproduzir na simulação o valor na moeda base do veículo.
+	moedaBasePorVeiculo := map[string]string{}
+	if s.moedaBaseRepo != nil {
+		if m, err := s.moedaBaseRepo.MapaVeiculoMoedaBase(ctx); err == nil {
+			moedaBasePorVeiculo = m
+		}
+	}
+	cotacoes := map[string]model.Cotacao{}
+	if s.cotacaoRepo != nil {
+		if m, err := s.cotacaoRepo.MapaCotacoes(ctx); err == nil {
+			cotacoes = m
+		}
+	}
+	var padroes []model.PadraoArquivo
+	if s.padraoRepo != nil {
+		padroes, _ = s.padraoRepo.Listar(ctx)
+	}
+	padraoDe := func(produto, dominio string) (colVeiculo, layoutData string) {
+		for _, p := range padroes {
+			if strings.TrimSpace(p.Produto) == produto && strings.TrimSpace(p.Dominio) == dominio {
+				return evaluator.NormalizarNome(p.ColunaVeiculo), evaluator.LayoutData(p.FormatoData)
+			}
+		}
+		return "", ""
 	}
 
 	res := &model.SimulacaoWhatIf{}
@@ -1166,10 +1201,27 @@ func (s *MovimentoContabilService) SimularRegra(ctx context.Context, in model.Si
 			}
 			boletoLanc := evaluator.CampoString(env, campoBoletoOuPadrao(condicao.CampoBoleto))
 
+			// Valor na moeda base do veículo (RF-036/RN-182), igual à geração: quando a condição
+			// configura a base e ela não pode ser resolvida (campo ausente, veículo sem De/Para,
+			// cotação faltante), vira inconsistência e NÃO gera lançamento — como na geração real.
+			colVeiculo, layoutData := padraoDe(produto, dominio)
+			veiculo := evaluator.CampoString(env, colVeiculo)
+			valorBase, moedaBase, incMB := s.resolverMoedaBaseVeiculo(
+				data, boletoLanc, produto, dominio, regra, condicao, env, veiculo, valor, moeda, moedaBasePorVeiculo, cotacoes, layoutData)
+			if incMB != nil {
+				det := incMB.Detalhe
+				if det == "" && incMB.CamposFaltantes != "" {
+					det = "campo(s) ausente(s) na posição: " + incMB.CamposFaltantes
+				}
+				addInconsistencia(boletoLanc, "moeda base", incMB.Expressao, det)
+				continue
+			}
+
 			res.TotalLancamentos++
 			if len(res.Lancamentos) < limite {
 				res.Lancamentos = append(res.Lancamentos, model.SimulacaoLancamento{
 					Boleto: boletoLanc, Valor: valor, Moeda: moeda,
+					ValorMoedaBaseVeiculo: valorBase, MoedaBaseVeiculo: moedaBase,
 					ContaDebito: condicao.ContaDebito, ContaCredito: condicao.ContaCredito,
 					Produto: produto, Dominio: dominio, Condicao: condicao.Condicao,
 				})

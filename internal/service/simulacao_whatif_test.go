@@ -158,3 +158,67 @@ func TestSimularRegra_SemCondicao(t *testing.T) {
 		t.Fatal("esperava erro quando não há condição")
 	}
 }
+
+// TestSimularRegra_MoedaBaseDaPosicao: com base_na_posicao, a simulação lê o valor e a
+// moeda base das colunas configuradas e os devolve no lançamento (RF-036/RN-182).
+func TestSimularRegra_MoedaBaseDaPosicao(t *testing.T) {
+	ctx := context.Background()
+	dia := d("2024-01-08")
+	pos := model.PosicaoCarteira{
+		ID: 1, DataPosicaoCarteira: dia, CodigoVersaoConteudo: 1,
+		Campos: map[string]interface{}{
+			"produto": "NDF", "dominio": "Posição", "codigo_identificador_boleto": "B1",
+			"valor_mtm": 1000.0, "moeda": "USD", "valor_base_brl": 5250.0, "moeda_base_col": "BRL",
+		},
+	}
+	svc := NewMovimentoContabilService(&fakePosicaoRepo{registros: []model.PosicaoCarteira{pos}}, &fakeRegraRepo{}, &fakeMovimentoRepo{}, evaluator.New())
+	res, err := svc.SimularRegra(ctx, model.SimulacaoRegraInput{
+		Data: "2024-01-08", Produto: "NDF", TipoLancamento: model.TipoReverte,
+		Condicoes: []model.SimulacaoCondicao{{
+			Condicao: "valor_mtm > 0", CampoValor: "valor_mtm", CampoMoeda: "moeda",
+			ContaDebito: "1001", ContaCredito: "2001",
+			BaseNaPosicao: true, CampoValorMoedaBase: "valor_base_brl", CampoMoedaBase: "moeda_base_col",
+		}},
+	})
+	if err != nil {
+		t.Fatalf("SimularRegra: %v", err)
+	}
+	if res.TotalLancamentos != 1 || len(res.Lancamentos) != 1 {
+		t.Fatalf("esperava 1 lançamento, obteve total=%d len=%d", res.TotalLancamentos, len(res.Lancamentos))
+	}
+	if l := res.Lancamentos[0]; l.ValorMoedaBaseVeiculo != 5250.0 || l.MoedaBaseVeiculo != "BRL" {
+		t.Errorf("moeda base inesperada: valor=%v moeda=%q", l.ValorMoedaBaseVeiculo, l.MoedaBaseVeiculo)
+	}
+}
+
+// TestSimularRegra_MoedaBaseCampoAusente: base_na_posicao com coluna de valor base
+// ausente vira inconsistência e não gera lançamento (igual à geração).
+func TestSimularRegra_MoedaBaseCampoAusente(t *testing.T) {
+	ctx := context.Background()
+	dia := d("2024-01-08")
+	pos := model.PosicaoCarteira{
+		ID: 1, DataPosicaoCarteira: dia, CodigoVersaoConteudo: 1,
+		Campos: map[string]interface{}{
+			"produto": "NDF", "dominio": "Posição", "codigo_identificador_boleto": "B1",
+			"valor_mtm": 1000.0, "moeda": "USD", "moeda_base_col": "BRL",
+		},
+	}
+	svc := NewMovimentoContabilService(&fakePosicaoRepo{registros: []model.PosicaoCarteira{pos}}, &fakeRegraRepo{}, &fakeMovimentoRepo{}, evaluator.New())
+	res, err := svc.SimularRegra(ctx, model.SimulacaoRegraInput{
+		Data: "2024-01-08", Produto: "NDF", TipoLancamento: model.TipoReverte,
+		Condicoes: []model.SimulacaoCondicao{{
+			Condicao: "valor_mtm > 0", CampoValor: "valor_mtm", CampoMoeda: "moeda",
+			ContaDebito: "1001", ContaCredito: "2001",
+			BaseNaPosicao: true, CampoValorMoedaBase: "valor_base_inexistente", CampoMoedaBase: "moeda_base_col",
+		}},
+	})
+	if err != nil {
+		t.Fatalf("SimularRegra: %v", err)
+	}
+	if res.TotalLancamentos != 0 {
+		t.Errorf("esperava 0 lançamentos, obteve %d", res.TotalLancamentos)
+	}
+	if res.TotalInconsistencias != 1 {
+		t.Errorf("esperava 1 inconsistência, obteve %d (%+v)", res.TotalInconsistencias, res.Inconsistencias)
+	}
+}

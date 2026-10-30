@@ -719,7 +719,7 @@
           <div class="card-header d-flex align-items-center"><i class="bi bi-list-check me-2"></i><span>Condições da regra candidata</span>
             <button class="btn btn-outline-primary btn-sm ms-auto" onclick="wiAddCondRow()"><i class="bi bi-plus"></i> Condição</button></div>
           <div class="table-responsive"><table class="table table-sm align-middle mb-0">
-            <thead><tr><th style="min-width:160px">Condição</th><th style="min-width:130px">Campo valor</th><th style="min-width:110px">Campo moeda</th><th style="min-width:110px">Campo boleto</th><th style="min-width:110px">Conta débito</th><th style="min-width:110px">Conta crédito</th><th></th></tr></thead>
+            <thead><tr><th style="min-width:150px">Condição</th><th style="min-width:120px">Campo valor</th><th style="min-width:105px">Campo moeda</th><th style="min-width:105px">Campo boleto</th><th style="min-width:100px">Conta débito</th><th style="min-width:100px">Conta crédito</th><th style="min-width:150px" title="Moeda base do veículo (igual ao cadastro da condição)">Moeda base</th><th style="min-width:125px">Valor base <small class="text-muted">/ Moeda base</small></th><th style="min-width:120px">Data conversão</th><th></th></tr></thead>
             <tbody id="wi-cond-rows"></tbody>
           </table></div>
         </div>
@@ -1286,7 +1286,7 @@ NOVA-1;Minha Regra;NDF;Posição;;;Sim;reverte;;valor_mtm &lt; 0;3333333333;4444
             <div id="r-cond-valor-validacao" class="mt-1"></div>
           </div>
           <div class="col-md-4"><label class="form-label mb-1">Campo Moeda</label><input type="text" id="r-cond-moeda" class="form-control" list="r-campos-datalist" placeholder="ex: moeda_principal"></div>
-          <div class="col-md-4"><label class="form-label mb-1">Campo Boleto <small class="text-muted">(id do lançamento)</small></label><input type="text" id="r-cond-boleto" class="form-control" list="r-campos-datalist" placeholder="ex: codigo_identificador_boleto"></div>
+          <div class="col-md-4"><label class="form-label mb-1">Campo Boleto <span class="text-danger">*</span> <small class="text-muted">(id do lançamento)</small></label><input type="text" id="r-cond-boleto" class="form-control" list="r-campos-datalist" placeholder="ex: codigo_identificador_boleto"></div>
         </div>
 
         <div class="border rounded p-3 mt-3">
@@ -1920,18 +1920,42 @@ function wiAddCondRow() {
     <td><input type="text" class="form-control form-control-sm wi-c-boleto" placeholder="(opc.)"></td>
     <td><input type="text" class="form-control form-control-sm wi-c-debito" placeholder="conta D"></td>
     <td><input type="text" class="form-control form-control-sm wi-c-credito" placeholder="conta C"></td>
+    <td><select class="form-select form-select-sm wi-c-basemodo" onchange="wiToggleBase(this)">
+      <option value="converter">Converter na geração</option>
+      <option value="posicao">Vem da posição</option></select></td>
+    <td>
+      <input type="text" class="form-control form-control-sm wi-c-valorbase mb-1" placeholder="coluna valor base" disabled>
+      <input type="text" class="form-control form-control-sm wi-c-moedabase" placeholder="coluna moeda base" disabled>
+    </td>
+    <td><input type="text" class="form-control form-control-sm wi-c-dataconv" placeholder="coluna data conv."></td>
     <td><button class="btn btn-outline-danger btn-sm" title="Remover" onclick="this.closest('tr').remove()"><i class="bi bi-x"></i></button></td>`;
   tb.appendChild(tr);
 }
+// wiToggleBase habilita os campos conforme a origem da moeda base, como no cadastro:
+// "Converter na geração" usa só a Data de conversão; "Vem da posição" usa Valor+Moeda base.
+function wiToggleBase(sel) {
+  const tr = sel.closest('tr');
+  const posicao = sel.value === 'posicao';
+  tr.querySelector('.wi-c-valorbase').disabled = !posicao;
+  tr.querySelector('.wi-c-moedabase').disabled = !posicao;
+  tr.querySelector('.wi-c-dataconv').disabled = posicao;
+}
 function wiColetarCondicoes() {
-  return [...document.querySelectorAll('#wi-cond-rows tr')].map(tr => ({
-    condicao: tr.querySelector('.wi-c-cond').value.trim(),
-    campo_valor: tr.querySelector('.wi-c-valor').value.trim(),
-    campo_moeda: tr.querySelector('.wi-c-moeda').value.trim(),
-    campo_boleto: tr.querySelector('.wi-c-boleto').value.trim(),
-    conta_debito: tr.querySelector('.wi-c-debito').value.trim(),
-    conta_credito: tr.querySelector('.wi-c-credito').value.trim(),
-  })).filter(c => c.condicao || c.campo_valor);
+  return [...document.querySelectorAll('#wi-cond-rows tr')].map(tr => {
+    const basePos = tr.querySelector('.wi-c-basemodo').value === 'posicao';
+    return {
+      condicao: tr.querySelector('.wi-c-cond').value.trim(),
+      campo_valor: tr.querySelector('.wi-c-valor').value.trim(),
+      campo_moeda: tr.querySelector('.wi-c-moeda').value.trim(),
+      campo_boleto: tr.querySelector('.wi-c-boleto').value.trim(),
+      conta_debito: tr.querySelector('.wi-c-debito').value.trim(),
+      conta_credito: tr.querySelector('.wi-c-credito').value.trim(),
+      base_na_posicao: basePos,
+      campo_valor_moeda_base: basePos ? tr.querySelector('.wi-c-valorbase').value.trim() : '',
+      campo_moeda_base: basePos ? tr.querySelector('.wi-c-moedabase').value.trim() : '',
+      campo_data_conversao: basePos ? '' : tr.querySelector('.wi-c-dataconv').value.trim(),
+    };
+  }).filter(c => c.condicao || c.campo_valor);
 }
 async function simularWhatif() {
   const data = document.getElementById('wi-data').value;
@@ -1970,9 +1994,9 @@ function wiRenderResultado(r) {
   const ls = r.lancamentos || [];
   html += `<div class="card shadow-sm mb-3"><div class="card-header"><i class="bi bi-receipt me-2"></i>Lançamentos gerados ${r.truncado ? '<span class="text-muted small">(amostra)</span>' : ''}</div>
     <div class="table-responsive" style="max-height:420px;overflow:auto"><table class="table table-sm table-hover mb-0">
-    <thead><tr><th>Boleto</th><th>Produto</th><th>Domínio</th><th>Condição</th><th class="text-end">Valor</th><th>Moeda</th><th>Conta D</th><th>Conta C</th></tr></thead><tbody>`;
-  if (ls.length === 0) html += `<tr><td colspan="8" class="text-muted p-3">Nenhum lançamento gerado.</td></tr>`;
-  else for (const l of ls) html += `<tr><td>${esc(l.boleto)}</td><td>${esc(l.produto)}</td><td>${esc(l.dominio)}</td><td class="small">${esc(l.condicao)}</td><td class="text-end">${wiFmt(l.valor)}</td><td>${esc(l.moeda)}</td><td>${esc(l.conta_debito)}</td><td>${esc(l.conta_credito)}</td></tr>`;
+    <thead><tr><th>Boleto</th><th>Produto</th><th>Domínio</th><th>Condição</th><th class="text-end">Valor</th><th>Moeda</th><th class="text-end">Valor base</th><th>Moeda base</th><th>Conta D</th><th>Conta C</th></tr></thead><tbody>`;
+  if (ls.length === 0) html += `<tr><td colspan="10" class="text-muted p-3">Nenhum lançamento gerado.</td></tr>`;
+  else for (const l of ls) html += `<tr><td>${esc(l.boleto)}</td><td>${esc(l.produto)}</td><td>${esc(l.dominio)}</td><td class="small">${esc(l.condicao)}</td><td class="text-end">${wiFmt(l.valor)}</td><td>${esc(l.moeda)}</td><td class="text-end">${l.moeda_base_veiculo ? wiFmt(l.valor_moeda_base_veiculo) : '<span class="text-muted">—</span>'}</td><td>${l.moeda_base_veiculo ? esc(l.moeda_base_veiculo) : '<span class="text-muted">—</span>'}</td><td>${esc(l.conta_debito)}</td><td>${esc(l.conta_credito)}</td></tr>`;
   html += `</tbody></table></div></div>`;
 
   const inc = r.inconsistencias || [];
@@ -1987,9 +2011,9 @@ function wiRenderResultado(r) {
 }
 
 // Cria uma regra real a partir da regra candidata da simulação. O escopo produto/domínio
-// vira o produto/domínio da regra; cada condição recebe a config padrão de moeda base
-// (data_posicao_carteira). O sistema não tem rascunho: a regra nasce ATIVA — o usuário
-// confirma e depois revisa em Regras.
+// vira o produto/domínio da regra; cada condição leva a configuração de moeda base do
+// veículo informada no form (igual ao cadastro de condição). O sistema não tem rascunho:
+// a regra nasce ATIVA — o usuário confirma e depois revisa em Regras.
 async function criarRegraDoWhatif() {
   const descricao = document.getElementById('wi-descricao').value.trim();
   if (!descricao) { toast('Informe a descrição da regra para criar', 'warning'); return; }
@@ -2001,6 +2025,11 @@ async function criarRegraDoWhatif() {
     if (!c.campo_valor) { toast(`Condição ${n}: informe o campo valor`, 'warning'); return; }
     if (!c.campo_moeda) { toast(`Condição ${n}: informe o campo moeda`, 'warning'); return; }
     if (!c.conta_debito || !c.conta_credito) { toast(`Condição ${n}: informe conta débito e crédito`, 'warning'); return; }
+    if (c.base_na_posicao) {
+      if (!c.campo_valor_moeda_base || !c.campo_moeda_base) { toast(`Condição ${n}: informe as colunas de valor e moeda base (base vem da posição)`, 'warning'); return; }
+    } else if (!c.campo_data_conversao) {
+      toast(`Condição ${n}: informe a coluna da data de conversão (converter na geração)`, 'warning'); return;
+    }
   }
   const produto = document.getElementById('wi-produto').value;
   const dominio = document.getElementById('wi-dominio').value;
@@ -2023,7 +2052,11 @@ async function criarRegraDoWhatif() {
     const rc = await api('POST', `/v1/regras/${id}/condicoes`, {
       condicao: c.condicao, conta_debito: c.conta_debito, conta_credito: c.conta_credito,
       campo_valor: c.campo_valor, campo_moeda: c.campo_moeda, campo_boleto: c.campo_boleto,
-      ativo: true, base_na_posicao: false, campo_data_conversao: 'data_posicao_carteira',
+      ativo: true,
+      base_na_posicao: c.base_na_posicao,
+      campo_valor_moeda_base: c.campo_valor_moeda_base,
+      campo_moeda_base: c.campo_moeda_base,
+      campo_data_conversao: c.campo_data_conversao,
     });
     if (rc && rc.id) okCond++; else falhas.push(`${i + 1}: ${rc?.erro || 'erro'}`);
   }
@@ -3316,13 +3349,14 @@ async function testarPreviewCondicao() {
   const data = document.getElementById('r-prev-data').value;
   if (!data) { toast('Informe a data para testar na posição', 'warning'); return; }
   const boleto = document.getElementById('r-prev-boleto').value.trim();
+  const campoBoleto = document.getElementById('r-cond-boleto').value.trim();
   const cond = document.getElementById('r-cond-expr').value.trim();
   const valor = document.getElementById('r-cond-valor').value.trim();
   const el = document.getElementById('r-prev-resultado');
   if (!cond && !valor) { el.innerHTML = '<span class="text-muted">Preencha a condição e/ou o campo valor para testar.</span>'; return; }
   let html = '';
-  if (cond) html += linhaPreview('Condição', await api('POST', '/v1/preview-expressao', { expressao: cond, tipo: 'condicao', data, boleto }));
-  if (valor) html += linhaPreview('Campo Valor', await api('POST', '/v1/preview-expressao', { expressao: valor, tipo: 'valor', data, boleto }));
+  if (cond) html += linhaPreview('Condição', await api('POST', '/v1/preview-expressao', { expressao: cond, tipo: 'condicao', data, boleto, campo_boleto: campoBoleto }));
+  if (valor) html += linhaPreview('Campo Valor', await api('POST', '/v1/preview-expressao', { expressao: valor, tipo: 'valor', data, boleto, campo_boleto: campoBoleto }));
   el.innerHTML = html;
 }
 
@@ -3335,6 +3369,8 @@ function atualizarCamposBaseCondicao() {
 
 async function salvarCondicao() {
   if (!regraAtualId) return;
+  const campoBoleto = document.getElementById('r-cond-boleto').value.trim();
+  if (!campoBoleto) { toast('Informe o Campo Boleto (identificador do lançamento)', 'warning'); return; }
   const baseNaPosicao = document.getElementById('r-cond-base-sim').checked;
   const valorBase = document.getElementById('r-cond-valor-base').value.trim();
   const moedaBase = document.getElementById('r-cond-moeda-base').value.trim();
@@ -3350,7 +3386,7 @@ async function salvarCondicao() {
     conta_credito: document.getElementById('r-cond-credito').value,
     campo_valor: document.getElementById('r-cond-valor').value,
     campo_moeda: document.getElementById('r-cond-moeda').value,
-    campo_boleto: document.getElementById('r-cond-boleto').value,
+    campo_boleto: campoBoleto,
     base_na_posicao: baseNaPosicao,
     campo_valor_moeda_base: valorBase,
     campo_moeda_base: moedaBase,

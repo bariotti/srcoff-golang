@@ -19,7 +19,8 @@ type SimulacaoRegraInput struct {
 	Condicoes      []SimulacaoCondicao `json:"condicoes"`
 }
 
-// SimulacaoCondicao é uma condição da regra candidata.
+// SimulacaoCondicao é uma condição da regra candidata. Espelha o cadastro de condição,
+// inclusive a configuração de moeda base do veículo (RF-036/RN-182).
 type SimulacaoCondicao struct {
 	Condicao     string `json:"condicao"`
 	ContaDebito  string `json:"conta_debito"`
@@ -27,6 +28,12 @@ type SimulacaoCondicao struct {
 	CampoValor   string `json:"campo_valor"`
 	CampoMoeda   string `json:"campo_moeda"`
 	CampoBoleto  string `json:"campo_boleto"`
+	// Moeda base do veículo (igual ao cadastro da condição): base_na_posicao=true lê
+	// valor/moeda base da posição; caso contrário converte pela data de campo_data_conversao.
+	BaseNaPosicao       bool   `json:"base_na_posicao"`
+	CampoValorMoedaBase string `json:"campo_valor_moeda_base"`
+	CampoMoedaBase      string `json:"campo_moeda_base"`
+	CampoDataConversao  string `json:"campo_data_conversao"`
 }
 
 // SimulacaoWhatIf é o resultado da simulação (nada é persistido).
@@ -42,14 +49,16 @@ type SimulacaoWhatIf struct {
 
 // SimulacaoLancamento é um lançamento que a regra candidata geraria.
 type SimulacaoLancamento struct {
-	Boleto       string  `json:"boleto"`
-	Valor        float64 `json:"valor"`
-	Moeda        string  `json:"moeda"`
-	ContaDebito  string  `json:"conta_debito"`
-	ContaCredito string  `json:"conta_credito"`
-	Produto      string  `json:"produto"`
-	Dominio      string  `json:"dominio"`
-	Condicao     string  `json:"condicao"`
+	Boleto                string  `json:"boleto"`
+	Valor                 float64 `json:"valor"`
+	Moeda                 string  `json:"moeda"`
+	ValorMoedaBaseVeiculo float64 `json:"valor_moeda_base_veiculo"` // valor na moeda base do veículo (RF-036); 0 quando não configurado
+	MoedaBaseVeiculo      string  `json:"moeda_base_veiculo"`       // moeda base do veículo; "" quando não configurado
+	ContaDebito           string  `json:"conta_debito"`
+	ContaCredito          string  `json:"conta_credito"`
+	Produto               string  `json:"produto"`
+	Dominio               string  `json:"dominio"`
+	Condicao              string  `json:"condicao"`
 }
 
 // SimulacaoInconsistencia descreve por que uma linha não gerou lançamento.
