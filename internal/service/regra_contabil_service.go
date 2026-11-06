@@ -5,15 +5,18 @@ import (
 	"fmt"
 	"strings"
 
+	"srcoff/internal/evaluator"
 	"srcoff/internal/model"
 )
 
 type regraContabilRepoFull interface {
 	ListarRegrasAtivas(ctx context.Context) ([]model.RegraContabil, error)
+	ListarRegras(ctx context.Context) ([]model.RegraContabil, error)
 	CriarRegra(ctx context.Context, regra model.RegraContabil) (int64, error)
 	EditarRegra(ctx context.Context, regra model.RegraContabil) error
 	ExcluirRegra(ctx context.Context, id int64) error
 	ListarCondicoes(ctx context.Context, idRegra int64) ([]model.CondicaoRegra, error)
+	ListarCondicoesVisiveis(ctx context.Context, idRegra int64) ([]model.CondicaoRegra, error)
 	CriarCondicao(ctx context.Context, condicao model.CondicaoRegra) (int64, error)
 	EditarCondicao(ctx context.Context, condicao model.CondicaoRegra) error
 	ExcluirCondicao(ctx context.Context, id int64) error
@@ -27,14 +30,39 @@ func NewRegraContabilService(repo regraContabilRepoFull) *RegraContabilService {
 	return &RegraContabilService{repo: repo}
 }
 
+// ListarRegras devolve as regras visíveis na UI (ativa + rascunho; sem excluídas) — RF-125.
 func (s *RegraContabilService) ListarRegras(ctx context.Context) ([]model.RegraContabil, error) {
-	return s.repo.ListarRegrasAtivas(ctx)
+	return s.repo.ListarRegras(ctx)
+}
+
+// normalizarCamposRegra normaliza os nomes de coluna e as expressões de uma regra (e suas
+// condições) para o mesmo formato da importação da posição (snake_case sem acento), para que
+// casem com as colunas normalizadas da posição. Expressões vão por NormalizarExpressao (que
+// normaliza só os identificadores); campos que são um nome de coluna único vão por
+// NormalizarNome. Usada no cadastro (Criar/Editar) e na simulação (WhatIf).
+func normalizarCamposRegra(r *model.RegraContabil) {
+	r.CampoProduto = evaluator.NormalizarNome(r.CampoProduto)
+	r.PreCondicao = evaluator.NormalizarExpressao(r.PreCondicao)
+	for i := range r.Condicoes {
+		normalizarCamposCondicao(&r.Condicoes[i])
+	}
+}
+
+func normalizarCamposCondicao(c *model.CondicaoRegra) {
+	c.Condicao = evaluator.NormalizarExpressao(c.Condicao)
+	c.CampoValor = evaluator.NormalizarExpressao(c.CampoValor)
+	c.CampoValorMoedaBase = evaluator.NormalizarExpressao(c.CampoValorMoedaBase)
+	c.CampoMoeda = evaluator.NormalizarNome(c.CampoMoeda)
+	c.CampoBoleto = evaluator.NormalizarNome(c.CampoBoleto)
+	c.CampoMoedaBase = evaluator.NormalizarNome(c.CampoMoedaBase)
+	c.CampoDataConversao = evaluator.NormalizarNome(c.CampoDataConversao)
 }
 
 func (s *RegraContabilService) CriarRegra(ctx context.Context, regra model.RegraContabil) (int64, error) {
 	if regra.Descricao == "" {
 		return 0, fmt.Errorf("campo obrigatório ausente: descricao")
 	}
+	normalizarCamposRegra(&regra)
 	// Produto é opcional: uma regra sem produto se aplica a todas as posições.
 	return s.repo.CriarRegra(ctx, regra)
 }
@@ -45,7 +73,7 @@ func (s *RegraContabilService) ClonarRegra(ctx context.Context, id int64) (int64
 	if id == 0 {
 		return 0, fmt.Errorf("id da regra é obrigatório")
 	}
-	regras, err := s.repo.ListarRegrasAtivas(ctx)
+	regras, err := s.repo.ListarRegras(ctx)
 	if err != nil {
 		return 0, err
 	}
@@ -67,7 +95,7 @@ func (s *RegraContabilService) ClonarRegra(ctx context.Context, id int64) (int64
 	if err != nil {
 		return 0, err
 	}
-	conds, err := s.repo.ListarCondicoes(ctx, id)
+	conds, err := s.repo.ListarCondicoesVisiveis(ctx, id)
 	if err != nil {
 		return novoID, err
 	}
@@ -86,12 +114,12 @@ func (s *RegraContabilService) ClonarCondicao(ctx context.Context, idCondicao in
 	if idCondicao == 0 {
 		return 0, fmt.Errorf("id da condição é obrigatório")
 	}
-	regras, err := s.repo.ListarRegrasAtivas(ctx)
+	regras, err := s.repo.ListarRegras(ctx)
 	if err != nil {
 		return 0, err
 	}
 	for _, rg := range regras {
-		conds, err := s.repo.ListarCondicoes(ctx, rg.ID)
+		conds, err := s.repo.ListarCondicoesVisiveis(ctx, rg.ID)
 		if err != nil {
 			return 0, err
 		}
@@ -113,6 +141,7 @@ func (s *RegraContabilService) EditarRegra(ctx context.Context, regra model.Regr
 	if regra.Descricao == "" {
 		return fmt.Errorf("campo obrigatório ausente: descricao")
 	}
+	normalizarCamposRegra(&regra)
 	return s.repo.EditarRegra(ctx, regra)
 }
 
@@ -127,10 +156,12 @@ func (s *RegraContabilService) ListarCondicoes(ctx context.Context, idRegra int6
 	if idRegra == 0 {
 		return nil, fmt.Errorf("id da regra é obrigatório")
 	}
-	return s.repo.ListarCondicoes(ctx, idRegra)
+	// UI: inclui condições em rascunho (sem excluídas). A geração usa repo.ListarCondicoes.
+	return s.repo.ListarCondicoesVisiveis(ctx, idRegra)
 }
 
 func (s *RegraContabilService) CriarCondicao(ctx context.Context, condicao model.CondicaoRegra) (int64, error) {
+	normalizarCamposCondicao(&condicao)
 	if condicao.Condicao == "" {
 		return 0, fmt.Errorf("campo obrigatório ausente: condicao")
 	}
@@ -179,6 +210,7 @@ func (s *RegraContabilService) EditarCondicao(ctx context.Context, condicao mode
 	if condicao.ID == 0 {
 		return fmt.Errorf("id da condição é obrigatório")
 	}
+	normalizarCamposCondicao(&condicao)
 	if condicao.Condicao == "" {
 		return fmt.Errorf("campo obrigatório ausente: condicao")
 	}
@@ -205,4 +237,56 @@ func (s *RegraContabilService) ExcluirCondicao(ctx context.Context, id int64) er
 		return fmt.Errorf("id da condição é obrigatório")
 	}
 	return s.repo.ExcluirCondicao(ctx, id)
+}
+
+// Lint analisa estaticamente as regras/condições ATIVAS e devolve achados (erro/aviso):
+// regra sem condição, expressão (pré-condição/condição/campo valor) que não compila,
+// conta de débito == crédito e condições duplicadas no mesmo escopo. Spec: RF-129.
+func (s *RegraContabilService) Lint(ctx context.Context) (*model.LintResultado, error) {
+	regras, err := s.repo.ListarRegrasAtivas(ctx)
+	if err != nil {
+		return nil, err
+	}
+	res := &model.LintResultado{Achados: []model.LintAchado{}}
+	add := func(sev, tipo string, idRegra int64, regra string, idCond int64, det string) {
+		res.Achados = append(res.Achados, model.LintAchado{Severidade: sev, Tipo: tipo, IDRegra: idRegra, Regra: regra, IDCondicao: idCond, Detalhe: det})
+	}
+	compila := func(expr string) error {
+		_, err := evaluator.CamposReferenciados(expr)
+		return err
+	}
+	vistos := map[string]string{} // chave de escopo+condição+contas → origem (para detectar duplicatas)
+	for _, r := range regras {
+		if pc := strings.TrimSpace(r.PreCondicao); pc != "" {
+			if err := compila(pc); err != nil {
+				add("erro", "pre_condicao_invalida", r.ID, r.Descricao, 0, "pré-condição não compila: "+err.Error())
+			}
+		}
+		if len(r.Condicoes) == 0 {
+			add("aviso", "sem_condicao", r.ID, r.Descricao, 0, "regra ativa sem condição ativa — não gera lançamentos")
+		}
+		for _, c := range r.Condicoes {
+			if strings.TrimSpace(c.Condicao) != "" {
+				if err := compila(c.Condicao); err != nil {
+					add("erro", "condicao_invalida", r.ID, r.Descricao, c.ID, "condição não compila: "+err.Error())
+				}
+			}
+			if strings.TrimSpace(c.CampoValor) != "" {
+				if err := compila(c.CampoValor); err != nil {
+					add("erro", "campo_valor_invalido", r.ID, r.Descricao, c.ID, "campo valor não compila: "+err.Error())
+				}
+			}
+			if c.ContaDebito != "" && c.ContaDebito == c.ContaCredito {
+				add("erro", "contas_iguais", r.ID, r.Descricao, c.ID, "conta de débito e crédito iguais ("+c.ContaDebito+")")
+			}
+			chave := strings.ToLower(r.CodigoProdutoCorporativo + "|" + r.Dominio + "|" + strings.TrimSpace(c.Condicao) + "|" + c.ContaDebito + "|" + c.ContaCredito)
+			if origem, ok := vistos[chave]; ok {
+				add("aviso", "duplicada", r.ID, r.Descricao, c.ID, "condição duplicada de "+origem+" (mesmo produto/domínio, expressão e contas)")
+			} else {
+				vistos[chave] = fmt.Sprintf("regra #%d", r.ID)
+			}
+		}
+	}
+	res.Total = len(res.Achados)
+	return res, nil
 }

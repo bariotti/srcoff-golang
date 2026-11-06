@@ -97,6 +97,27 @@ func mapToPosicao(m map[string]interface{}) model.PosicaoCarteira {
 	return p
 }
 
+// UltimaDataPosicao devolve a data mais recente com posição importada (RF-126).
+func (r *PosicaoCarteiraRepo) UltimaDataPosicao(_ context.Context) (time.Time, bool, error) {
+	all, err := r.st.load()
+	if err != nil {
+		return time.Time{}, false, err
+	}
+	var max time.Time
+	ok := false
+	for _, m := range all {
+		d := mapToPosicao(m).DataPosicaoCarteira
+		if d.IsZero() {
+			continue
+		}
+		if !ok || d.After(max) {
+			max = d
+			ok = true
+		}
+	}
+	return max, ok, nil
+}
+
 func (r *PosicaoCarteiraRepo) BuscarPorDataEVersaoMaxima(_ context.Context, data time.Time) ([]model.PosicaoCarteira, error) {
 	all, err := r.st.load()
 	if err != nil {

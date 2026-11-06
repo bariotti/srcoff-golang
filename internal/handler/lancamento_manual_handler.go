@@ -53,7 +53,8 @@ func (h *LancamentoManualHandler) Inserir(w http.ResponseWriter, r *http.Request
 }
 
 // ImportarCSV trata POST /api/v1/lancamentos-manuais/import (multipart, campo "arquivo").
-// Colunas: data;produto;dominio;id_regra;id_condicao;boleto;veiculo;valor;moeda;indicador_reversao
+// Colunas: data;produto;dominio;id_regra;id_condicao;boleto;veiculo;valor;moeda;indicador_reversao;valor_moeda_base_veiculo;moeda_base_veiculo
+// (as duas últimas são opcionais — valor/moeda na moeda base do veículo, digitados).
 // Spec: RF-033 (docs/especificacao.md §5b, §11.1).
 func (h *LancamentoManualHandler) ImportarCSV(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
@@ -115,18 +116,21 @@ func parseLancamentosManuaisCSV(r io.Reader) ([]model.LancamentoManualInput, err
 		idCond, _ := strconv.ParseInt(col(linha, "id_condicao"), 10, 64)
 		valorStr := strings.ReplaceAll(col(linha, "valor"), ",", ".")
 		valor, _ := strconv.ParseFloat(valorStr, 64)
+		valorBase, _ := strconv.ParseFloat(strings.ReplaceAll(col(linha, "valor_moeda_base_veiculo"), ",", "."), 64)
 		rev := col(linha, "indicador_reversao")
 		itens = append(itens, model.LancamentoManualInput{
-			Data:              col(linha, "data"),
-			Produto:           col(linha, "produto"),
-			Dominio:           col(linha, "dominio"),
-			Boleto:            col(linha, "boleto"),
-			Veiculo:           col(linha, "veiculo"),
-			Moeda:             col(linha, "moeda"),
-			IDRegra:           idRegra,
-			IDCondicao:        idCond,
-			Valor:             valor,
-			IndicadorReversao: ehVerdadeiro(rev),
+			Data:                  col(linha, "data"),
+			Produto:               col(linha, "produto"),
+			Dominio:               col(linha, "dominio"),
+			Boleto:                col(linha, "boleto"),
+			Veiculo:               col(linha, "veiculo"),
+			Moeda:                 col(linha, "moeda"),
+			IDRegra:               idRegra,
+			IDCondicao:            idCond,
+			Valor:                 valor,
+			IndicadorReversao:     ehVerdadeiro(rev),
+			ValorMoedaBaseVeiculo: valorBase,
+			MoedaBaseVeiculo:      col(linha, "moeda_base_veiculo"),
 		})
 	}
 	return itens, nil

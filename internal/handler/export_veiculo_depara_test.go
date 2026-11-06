@@ -51,3 +51,29 @@ func TestExportCSV_AplicaDeParaVeiculo(t *testing.T) {
 		t.Fatalf("esperava BAHAMAS (nome) no CSV, corpo:\n%s", body)
 	}
 }
+
+// TestExportCSV_LayoutIntegracao valida o layout de integração: cabeçalho, data MM/DD/YYYY,
+// valor com vírgula decimal e sem milhar, e REVERSAO Y/N.
+func TestExportCSV_LayoutIntegracao(t *testing.T) {
+	svc := &fakeExportSvc{lancs: []model.LancamentoContabil{{
+		DataLoteContabil: time.Date(2024, 1, 8, 0, 0, 0, 0, time.UTC), Produto: "SWAP",
+		CodigoIdentificadorBoleto: "B1", Veiculo: "NASSAU", IDRegraContabil: 7,
+		DescricaoRegraContabil: "Registro MTM", ContaDebito: "1001", ContaCredito: "2001",
+		ValorLancamentoContabil: 1234.5, MoedaLancamentoContabil: "USD",
+		ValorMoedaBaseVeiculo: 6789, MoedaBaseVeiculo: "BRL", IndicadorReversao: true,
+	}}}
+	h := NewExportHandler(svc)
+	req := httptest.NewRequest("GET", "/api/v1/movimento-contabil/export", nil)
+	rec := httptest.NewRecorder()
+	h.ExportMovimentoCSV(rec, req)
+	body := rec.Body.String()
+
+	if !strings.Contains(body, "PRODUTO;DATA_MOVIMENTO;VEICULO;CONTRATO;ID_REGRA;REGRA;VALOR;CONTA_DEBITO;CONTA_CREDITO;MOEDA;REVERSAO;DATA_CONVERSAO;VALOR_CONVERTIDO;VALOR_COTACAO;ENTRY_DATE") {
+		t.Fatalf("cabeçalho inesperado:\n%s", body)
+	}
+	// data MM/DD/YYYY, valor 1234.50 (ponto decimal, sem milhar), convertido 6789.00, reversão Y.
+	linha := "SWAP;01/08/2024;NASSAU;B1;7;Registro MTM;1234.50;1001;2001;USD;Y;;6789.00;;"
+	if !strings.Contains(body, linha) {
+		t.Fatalf("linha de detalhe inesperada; esperava conter:\n%s\n\ncorpo:\n%s", linha, body)
+	}
+}

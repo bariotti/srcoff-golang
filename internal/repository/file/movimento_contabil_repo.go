@@ -2,6 +2,7 @@ package file
 
 import (
 	"context"
+	"sort"
 	"strings"
 	"time"
 
@@ -70,6 +71,28 @@ func (r *MovimentoContabilRepo) BuscarPorDataEIndicador(_ context.Context, data 
 		}
 	}
 	return result, nil
+}
+
+// VersoesMovimento lista as versões existentes (ordenadas) de um (data, produto, domínio).
+// Usado pelo diff de versões (RF-124).
+func (r *MovimentoContabilRepo) VersoesMovimento(_ context.Context, data time.Time, produto, dominio string) ([]int, error) {
+	all, err := r.st.load()
+	if err != nil {
+		return nil, err
+	}
+	dataStr := data.Format("2006-01-02")
+	set := map[int]bool{}
+	for _, l := range all {
+		if l.DataLoteContabil.Format("2006-01-02") == dataStr && l.Produto == produto && l.Dominio == dominio {
+			set[l.CodigoVersaoConteudo] = true
+		}
+	}
+	vs := make([]int, 0, len(set))
+	for v := range set {
+		vs = append(vs, v)
+	}
+	sort.Ints(vs)
+	return vs, nil
 }
 
 func (r *MovimentoContabilRepo) ObterProximaVersao(_ context.Context, data time.Time) (int, error) {

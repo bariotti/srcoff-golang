@@ -17,6 +17,7 @@
     .sidebar .nav-link:hover, .sidebar .nav-link.active { background: #0d6efd; color: #fff; }
     .sidebar .nav-link i { width: 20px; }
     .sidebar-brand { color: #fff; font-size: 1.2rem; font-weight: 700; padding: 20px 16px 10px; }
+    .sidebar-section { color: #6c757d; font-size: .68rem; text-transform: uppercase; letter-spacing: .06em; font-weight: 700; padding: 14px 16px 4px; }
     .page { display: none; }
     .page.active { display: block; overflow: hidden; }
     .toast-container { position: fixed; top: 20px; right: 20px; z-index: 9999; }
@@ -116,18 +117,28 @@
     <!-- Sidebar -->
     <div class="col-auto sidebar d-flex flex-column" style="width:220px">
       <div class="sidebar-brand" title="Bariottex" style="cursor:default"><i class="bi bi-bank me-2"></i>SRCOff</div>
-      <nav class="nav flex-column mt-2">        <a class="nav-link active" href="#" onclick="showPage('operacao')"><i class="bi bi-play-circle me-2"></i>Operação</a>
-        <a class="nav-link" href="#" onclick="showPage('dashboard')"><i class="bi bi-speedometer2 me-2"></i>Dashboard</a>
-        <a class="nav-link" href="#" onclick="showPage('jobs')"><i class="bi bi-list-task me-2"></i>Jobs</a>
-        <a class="nav-link" href="#" onclick="showPage('whatif')"><i class="bi bi-magic me-2"></i>What-if</a>
+      <nav class="nav flex-column mt-2">
+        <div class="sidebar-section">Operação</div>
+        <a class="nav-link active" href="#" onclick="showPage('operacao')"><i class="bi bi-play-circle me-2"></i>Operação</a>
+        <a class="nav-link" href="#" onclick="showPage('fechamento')"><i class="bi bi-lock me-2"></i>Fechamento</a>
+        <a class="nav-link" href="#" onclick="showPage('posicao')"><i class="bi bi-table me-2"></i>Posição</a>
         <a class="nav-link" href="#" onclick="showPage('consulta')"><i class="bi bi-search me-2"></i>Consulta</a>
         <a class="nav-link" href="#" onclick="showPage('razonete')"><i class="bi bi-bank me-2"></i>Razonete</a>
-        <a class="nav-link" href="#" onclick="showPage('posicao')"><i class="bi bi-table me-2"></i>Posição</a>
-        <a class="nav-link" href="#" onclick="showPage('regras')"><i class="bi bi-gear me-2"></i>Regras</a>
-        <a class="nav-link" href="#" onclick="showPage('manual')"><i class="bi bi-pencil-square me-2"></i>Lançamento Manual</a>
         <a class="nav-link" href="#" onclick="showPage('saldos')"><i class="bi bi-wallet2 me-2"></i>Saldos</a>
+        <a class="nav-link" href="#" onclick="showPage('manual')"><i class="bi bi-pencil-square me-2"></i>Lançamento Manual</a>
+        <a class="nav-link" href="#" onclick="showPage('regras')"><i class="bi bi-gear me-2"></i>Regras</a>
+        <a class="nav-link" href="#" onclick="showPage('whatif')"><i class="bi bi-magic me-2"></i>What-if</a>
+        <a class="nav-link" href="#" onclick="showPage('jobs')"><i class="bi bi-list-task me-2"></i>Jobs</a>
+
+        <div class="sidebar-section">Parametrização</div>
         <a class="nav-link" href="#" onclick="showPage('parametrizacoes')"><i class="bi bi-sliders me-2"></i>Parametrizações</a>
         <a class="nav-link" href="#" onclick="showPage('cotacoes')"><i class="bi bi-currency-exchange me-2"></i>Cotações</a>
+
+        <div class="sidebar-section">Análise</div>
+        <a class="nav-link" href="#" onclick="showPage('conciliacao')"><i class="bi bi-check2-circle me-2"></i>Conciliação</a>
+        <a class="nav-link" href="#" onclick="showPage('dashboard')"><i class="bi bi-speedometer2 me-2"></i>Dashboard</a>
+
+        <div class="sidebar-section">Ajuda</div>
         <a class="nav-link" href="#" onclick="showPage('sobre')"><i class="bi bi-info-circle me-2"></i>Sobre</a>
       </nav>
       <div class="mt-auto px-3 py-3" style="font-size:0.7rem;color:#6c757d;border-top:1px solid #343a40">
@@ -292,6 +303,7 @@
                 <button class="btn btn-primary btn-sm" onclick="consultarMovimento(1)"><i class="bi bi-search me-1"></i>Consultar</button>
                 <button class="btn btn-success btn-sm ms-1" onclick="exportarCSV()"><i class="bi bi-file-earmark-excel me-1"></i>Excel</button>
                 <button class="btn btn-purple btn-sm ms-1" style="background:#6f42c1;color:white" onclick="showExportTxt()"><i class="bi bi-file-earmark-text me-1"></i>TXT</button>
+                <button class="btn btn-outline-info btn-sm ms-1" onclick="abrirDiffVersoes()" title="Comparar versões de um produto/domínio no dia"><i class="bi bi-arrow-left-right me-1"></i>Comparar versões</button>
                 <button class="btn btn-outline-secondary btn-sm ms-1" onclick="toggleColunasPanel()" title="Mostrar/ocultar e reordenar colunas"><i class="bi bi-layout-three-columns me-1"></i>Colunas</button>
                 <div id="c-colunas-panel" class="card shadow-sm p-2" style="display:none"></div>
               </div>
@@ -420,44 +432,19 @@
       <div id="page-conciliacao" class="page">
         <h4 class="mb-4"><i class="bi bi-check2-circle me-2"></i>Conciliação</h4>
 
-        <!-- Conciliação Inteligente com IA -->
-        <div class="card shadow-sm mb-3 border-primary">
-          <div class="card-header bg-primary text-white"><i class="bi bi-robot me-2"></i>Conciliação Inteligente (IA)</div>
-          <div class="card-body">
-            <p class="text-muted small mb-3">Descreva o que deseja conciliar em linguagem natural. O sistema analisará a posição e o movimento contábil e sugerirá ajustes se necessário.</p>
-            <div class="row g-2 mb-3">
-              <div class="col-md-3">
-                <label class="form-label form-label-sm">Data</label>
-                <input type="date" id="cia-data" class="form-control form-control-sm">
-              </div>
-              <div class="col-md-9">
-                <label class="form-label form-label-sm">Pergunta</label>
-                <input type="text" id="cia-pergunta" class="form-control form-control-sm"
-                  placeholder='Ex: As contas 111111111 e 222222222 são de Principal NDF. O saldo está coerente com a posição?'>
-              </div>
-            </div>
-            <button class="btn btn-primary btn-sm" onclick="analisarIA()"><i class="bi bi-send me-1"></i>Analisar</button>
-          </div>
-        </div>
-
-        <div id="cia-resultado"></div>
-
-        <!-- Conciliação Simples -->
         <div class="card shadow-sm mb-3">
-          <div class="card-header"><i class="bi bi-check2-circle me-2"></i>Conciliação Simples</div>
+          <div class="card-header"><i class="bi bi-diagram-2 me-2"></i>Conciliação posição × movimento</div>
           <div class="card-body">
-            <div class="row g-2 align-items-end">
-              <div class="col-auto">
-                <label class="form-label form-label-sm">Data</label>
-                <input type="date" id="conc-data" class="form-control form-control-sm">
-              </div>
-              <div class="col-auto">
-                <button class="btn btn-primary btn-sm" onclick="conciliar()"><i class="bi bi-check2-circle me-1"></i>Conciliar</button>
-              </div>
+            <p class="text-muted small mb-2">Numa execução, analisa: <strong>Saldo × Posição</strong> (o saldo projetado × o valor da posição na coluna que alimenta a regra) e <strong>Na posição, sem contábil</strong> (boletos que deveriam gerar mas não têm lançamento). <em>Incremental/estorno podem divergir legitimamente.</em></p>
+            <div class="row g-2 align-items-end mb-2">
+              <div class="col-md-2"><label class="form-label form-label-sm">Data</label><input type="date" id="cc-data" class="form-control form-control-sm"></div>
+              <div class="col-md-3"><label class="form-label form-label-sm">Produto <small class="text-muted">(opc.)</small></label><select id="cc-produto" class="form-select form-select-sm"></select></div>
+              <div class="col-md-3"><label class="form-label form-label-sm">Domínio <small class="text-muted">(opc.)</small></label><select id="cc-dominio" class="form-select form-select-sm"></select></div>
+              <div class="col-md-2"><button class="btn btn-primary btn-sm w-100" onclick="carregarConciliacao()"><i class="bi bi-check2-circle me-1"></i>Conciliar</button></div>
             </div>
+            <div id="cc-resultado"></div>
           </div>
         </div>
-        <div id="conc-resultado"></div>
       </div>
 
       <!-- ==================== CONSULTA IA ==================== -->
@@ -494,6 +481,7 @@
                 <button class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#modalAjudaCSV" title="Como preencher o CSV"><i class="bi bi-question-circle"></i></button>
               </div>
               <input type="file" id="r-import-file" accept=".csv" style="display:none" onchange="importarRegras(this)">
+              <button class="btn btn-sm btn-outline-warning" onclick="lintRegras()" title="Verificar regras ativas (achados estáticos: sem condição, expressão inválida, contas iguais, duplicadas)"><i class="bi bi-shield-check me-1"></i>Verificar</button>
               <button class="btn btn-sm btn-primary" onclick="abrirNovaRegra()"><i class="bi bi-plus me-1"></i>Nova Regra</button>
             </div>
           </div>
@@ -524,6 +512,8 @@
               <div class="col-md-2"><label class="form-label mb-1">Veículo</label><input id="lm-veiculo" class="form-control form-control-sm" placeholder="VH-1"></div>
               <div class="col-md-2"><label class="form-label mb-1">Valor *</label><input id="lm-valor" type="number" step="any" class="form-control form-control-sm"></div>
               <div class="col-md-2"><label class="form-label mb-1">Moeda</label><input id="lm-moeda" class="form-control form-control-sm" placeholder="USD"></div>
+              <div class="col-md-2"><label class="form-label mb-1">Valor base veículo</label><input id="lm-valor-base" type="number" step="any" class="form-control form-control-sm" placeholder="digitado"></div>
+              <div class="col-md-2"><label class="form-label mb-1">Moeda base veículo</label><input id="lm-moeda-base" class="form-control form-control-sm" placeholder="BRL"></div>
               <div class="col-md-2"><div class="form-check mt-4"><input class="form-check-input" type="checkbox" id="lm-estorno"><label class="form-check-label" for="lm-estorno">Estorno</label></div></div>
               <div class="col-md-4 d-flex align-items-end"><button class="btn btn-outline-primary btn-sm" onclick="lmAdd()"><i class="bi bi-plus-lg me-1"></i>Adicionar à lista</button></div>
             </div>
@@ -535,11 +525,12 @@
         <div id="lm-pane-csv" style="display:none">
           <div class="card"><div class="card-body">
             <p>Envie um CSV (delimitador <code>;</code>) com o cabeçalho:</p>
-            <pre class="bg-light p-2 rounded small"><code>data;produto;dominio;id_regra;id_condicao;boleto;veiculo;valor;moeda;indicador_reversao
-2026-09-28;NDF;Posição;2;2;BOL-2;VH-2;1000;USD;Não</code></pre>
+            <pre class="bg-light p-2 rounded small"><code>data;produto;dominio;id_regra;id_condicao;boleto;veiculo;valor;moeda;indicador_reversao;valor_moeda_base_veiculo;moeda_base_veiculo
+2026-09-28;NDF;Posição;2;2;BOL-2;VH-2;1000;USD;Não;5250;BRL</code></pre>
             <ul class="small text-muted">
               <li><code>data</code> no formato <code>AAAA-MM-DD</code> (dia útil). <code>id_regra</code>/<code>id_condicao</code> são os ids numéricos (veja na tela Regras).</li>
               <li><code>indicador_reversao</code>: <code>Sim</code>/<code>Não</code> (vazio = lançamento normal). As contas vêm da condição.</li>
+              <li><code>valor_moeda_base_veiculo</code>/<code>moeda_base_veiculo</code>: <strong>opcionais</strong> — valor e moeda na moeda base do veículo, digitados (sem confronto com o cadastro de veículo).</li>
             </ul>
             <input type="file" accept=".csv" class="form-control" onchange="lmImportCSV(this)">
           </div></div>
@@ -649,6 +640,17 @@
               <tbody id="dash-cambio-body"><tr><td colspan="5" class="text-muted p-3">—</td></tr></tbody>
             </table></div></div></div></div>
         </div>
+        <div class="row g-3 mt-0">
+          <div class="col-12"><div class="card shadow-sm">
+            <div class="card-header d-flex align-items-center flex-wrap gap-2">
+              <i class="bi bi-graph-up me-2"></i><span>Série de saldo por conta</span>
+              <input id="serie-conta" class="form-control form-control-sm ms-auto" style="max-width:160px" placeholder="conta (ex.: 1001)">
+              <select id="serie-produto" class="form-select form-select-sm" style="max-width:150px" title="Produto (opcional)"></select>
+              <button class="btn btn-sm btn-primary" onclick="carregarSerieSaldo()"><i class="bi bi-graph-up me-1"></i>Plotar</button>
+            </div>
+            <div class="card-body"><canvas id="dash-chart-serie" height="110"></canvas><div id="serie-vazio" class="text-muted small d-none">Sem movimento da conta no período.</div></div>
+          </div></div>
+        </div>
       </div>
 
       <!-- ==================== JOBS (fila/monitor) ==================== -->
@@ -724,13 +726,60 @@
           </table></div>
         </div>
 
-        <div class="mb-3 d-flex gap-2">
+        <div class="mb-2 d-flex gap-2 align-items-center">
           <button class="btn btn-primary" onclick="simularWhatif()"><i class="bi bi-magic me-1"></i>Simular</button>
           <button class="btn btn-outline-success" onclick="criarRegraDoWhatif()"><i class="bi bi-plus-circle me-1"></i>Criar regra real</button>
+          <div class="form-check ms-2 mb-0"><input class="form-check-input" type="checkbox" id="wi-rascunho" checked><label class="form-check-label small" for="wi-rascunho">Criar como <strong>rascunho</strong> (não vale na geração até você ativar)</label></div>
         </div>
-        <div class="form-text mb-3"><i class="bi bi-exclamation-triangle me-1 text-warning"></i>A regra é criada <strong>ativa</strong> e passa a valer nas próximas gerações. Revise em <em>Regras</em> (inclusive a moeda base do veículo) logo em seguida.</div>
+        <div class="form-text mb-3"><i class="bi bi-info-circle me-1 text-primary"></i>Como <strong>rascunho</strong>, a regra fica em <em>Regras</em> sem valer na geração — ative quando quiser. Desmarque a opção para criá-la já <strong>ativa</strong>. Revise a moeda base do veículo em seguida.</div>
 
         <div id="wi-resultado"></div>
+      </div>
+
+      <!-- ==================== ANÁLISES ==================== -->
+      <div id="page-fechamento" class="page">
+        <h4 class="mb-3"><i class="bi bi-lock me-2"></i>Fechamento de competência</h4>
+        <p class="text-muted">Com o controle ligado, uma <strong>nova competência (mês/ano)</strong> só é processada depois que você a <strong>libera</strong> aqui. Não há data de corte: a trava vale a cada virada de mês. A primeira competência de cada produto/domínio passa livre; as seguintes exigem liberação.</p>
+
+        <div class="card shadow-sm mb-3">
+          <div class="card-header"><i class="bi bi-toggles me-2"></i>Como o controle se aplica</div>
+          <div class="card-body">
+            <div class="row g-2 align-items-end">
+              <div class="col-md-6">
+                <label class="form-label form-label-sm">Modo</label>
+                <select id="fc-modo" class="form-select form-select-sm" onchange="fcSalvarModo()">
+                  <option value="off">Desativado (sem trava)</option>
+                  <option value="todos">Todos os produtos e domínios (inclusive novos)</option>
+                  <option value="selecionados">Somente os produtos/domínios selecionados</option>
+                </select>
+              </div>
+            </div>
+            <div id="fc-escopos-box" class="mt-3" style="display:none">
+              <label class="form-label form-label-sm">Produtos/domínios controlados</label>
+              <div class="row g-2 align-items-end mb-2">
+                <div class="col-md-4"><select id="fc-esc-produto" class="form-select form-select-sm"></select></div>
+                <div class="col-md-4"><select id="fc-esc-dominio" class="form-select form-select-sm"></select></div>
+                <div class="col-md-3"><button class="btn btn-outline-primary btn-sm w-100" onclick="fcAdicionarEscopo()"><i class="bi bi-plus-lg me-1"></i>Adicionar</button></div>
+              </div>
+              <div id="fc-escopos-lista"></div>
+              <div class="small text-muted mt-1">Deixe o domínio vazio para controlar o produto inteiro.</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card shadow-sm">
+          <div class="card-header"><i class="bi bi-unlock me-2"></i>Liberar competência (dar o OK)</div>
+          <div class="card-body">
+            <div class="row g-2 align-items-end mb-3">
+              <div class="col-md-2"><label class="form-label form-label-sm">Mês</label><select id="fc-lib-mes" class="form-select form-select-sm"></select></div>
+              <div class="col-md-2"><label class="form-label form-label-sm">Ano</label><input type="number" id="fc-lib-ano" class="form-control form-control-sm" min="2000" max="2100"></div>
+              <div class="col-md-3"><label class="form-label form-label-sm">Produto <small class="text-muted">(vazio = todos)</small></label><select id="fc-lib-produto" class="form-select form-select-sm"></select></div>
+              <div class="col-md-3"><label class="form-label form-label-sm">Domínio <small class="text-muted">(vazio = todos)</small></label><select id="fc-lib-dominio" class="form-select form-select-sm"></select></div>
+              <div class="col-md-2"><button class="btn btn-primary btn-sm w-100" onclick="fcLiberar()"><i class="bi bi-unlock me-1"></i>Liberar</button></div>
+            </div>
+            <div id="fc-liberacoes-lista" class="text-muted">Carregando…</div>
+          </div>
+        </div>
       </div>
 
       <!-- ==================== SOBRE (passo a passo) ==================== -->
@@ -772,7 +821,7 @@
             <p class="mb-2 small">Arquivo <code>posicao_ndf_20261013.csv</code> — uma operação (boleto <code>70001</code>) do produto NDF, veículo NASSAU, valendo 1.500 USD em 13/10/2026:</p>
             <pre class="bg-body-secondary border rounded p-2 small mb-0"><code>data_posicao_carteira;produto;dominio;codigo_identificador_boleto;veiculo_operacao;valor_mtm;moeda
 2026-10-13;NDF;Posição;70001;NASSAU;1500;USD</code></pre>
-            <div class="small text-muted mt-2"><i class="bi bi-lightbulb me-1"></i>Os nomes das colunas são “normalizados”: viram minúsculas, sem acento, e espaços viram <code>_</code>. Por isso usamos nomes já nesse formato.</div>
+            <div class="small text-muted mt-2"><i class="bi bi-lightbulb me-1"></i>Os nomes das colunas são “normalizados”: viram minúsculas, sem acento, e espaços viram <code>_</code>. As regras e condições também são normalizadas ao cadastrar/testar, então os nomes casam automaticamente.</div>
           </div>
         </div>
 
@@ -910,7 +959,7 @@
               <li>A <strong>Coluna do Veículo</strong> é obrigatória no padrão — o arquivo precisa ter essa coluna.</li>
               <li><strong>Toda condição</strong> precisa configurar a moeda base (“Converter na geração” ou “Vem da posição”).</li>
               <li>Se a moeda do lançamento for <strong>diferente</strong> da moeda base do veículo, é preciso ter a <strong>Cotação</strong> da data — senão vira inconsistência.</li>
-              <li>Nomes de coluna são normalizados (minúsculas, sem acento, espaço → <code>_</code>). Use os nomes já normalizados nas regras.</li>
+              <li>Nomes de coluna são normalizados (minúsculas, sem acento, espaço → <code>_</code>). O sistema normaliza automaticamente os campos ao cadastrar/testar regras e condições, então pode usar maiúsculas/acentos que casam na posição.</li>
               <li>Reprocessou e o resultado não mudou? Cada processamento cria uma nova <strong>versão</strong>; a consulta mostra a <strong>vigente</strong> (a mais recente).</li>
             </ul>
           </div>
@@ -1145,6 +1194,34 @@
               </div>
             </div>
           </div>
+
+          <!-- Geração automática do contábil -->
+          <div class="col-12">
+            <div class="card shadow-sm">
+              <div class="card-header"><i class="bi bi-calendar-check me-2"></i>Geração automática do contábil</div>
+              <div class="card-body">
+                <p class="text-muted small mb-3">Enfileira a geração do contábil, em segundo plano, <strong>todo dia no horário abaixo</strong>, para a <strong>última data com posição importada</strong> do escopo. Não regera uma data já processada. Deixe o <strong>horário vazio</strong> para <strong>desativar</strong>.</p>
+                <div class="row g-2">
+                  <div class="col-md-4">
+                    <label class="form-label form-label-sm">Horário diário (HH:MM)</label>
+                    <input type="time" id="cfg-geracao-horario" class="form-control form-control-sm" placeholder="vazio = desativado">
+                  </div>
+                  <div class="col-md-4">
+                    <label class="form-label form-label-sm">Produto</label>
+                    <select id="cfg-geracao-produto" class="form-select form-select-sm"></select>
+                  </div>
+                  <div class="col-md-4">
+                    <label class="form-label form-label-sm">Domínio</label>
+                    <select id="cfg-geracao-dominio" class="form-select form-select-sm"></select>
+                  </div>
+                </div>
+                <div class="mt-3">
+                  <button class="btn btn-primary btn-sm" onclick="salvarGeracao()"><i class="bi bi-save me-1"></i>Salvar</button>
+                  <span class="text-muted small ms-2">A geração roda como job (acompanhe em <strong>Jobs</strong>). Produto e domínio são obrigatórios para ativar.</span>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -1323,6 +1400,40 @@ NOVA-1;Minha Regra;NDF;Posição;;;Sim;reverte;;valor_mtm &lt; 0;3333333333;4444
   </div>
 </div>
 
+<!-- ==================== MODAL: Diff de versões (RF-124) ==================== -->
+<div class="modal fade" id="modalDiff" tabindex="-1">
+  <div class="modal-dialog modal-xl modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="bi bi-arrow-left-right me-2"></i>Comparar versões do movimento</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="d-flex flex-wrap align-items-end gap-3 mb-3">
+          <div class="small text-muted" id="diff-escopo"></div>
+          <div><label class="form-label form-label-sm mb-0">Versão A</label><select id="diff-va" class="form-select form-select-sm" onchange="carregarDiff()"></select></div>
+          <div><label class="form-label form-label-sm mb-0">Versão B</label><select id="diff-vb" class="form-select form-select-sm" onchange="carregarDiff()"></select></div>
+          <div class="small text-muted">A = base · B = comparada</div>
+        </div>
+        <div id="diff-corpo"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== MODAL: Lint de regras (RF-129) ==================== -->
+<div class="modal fade" id="modalLint" tabindex="-1">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="bi bi-shield-check me-2"></i>Verificação de regras</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body" id="lint-corpo"></div>
+    </div>
+  </div>
+</div>
+
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <script>
@@ -1368,6 +1479,15 @@ function showPage(name) {
   if (name === 'dashboard') { initDashboard(); }
   if (name === 'jobs') { initJobs(); }
   if (name === 'whatif') { initWhatif(); }
+  if (name === 'fechamento') {
+    preencherSelectOpcoes('fc-esc-produto', 'produto', { incluirVazio: true });
+    preencherSelectOpcoes('fc-esc-dominio', 'dominio', { incluirVazio: true });
+    preencherSelectOpcoes('fc-lib-produto', 'produto', { incluirVazio: true });
+    preencherSelectOpcoes('fc-lib-dominio', 'dominio', { incluirVazio: true });
+    fcInitMesAno();
+    carregarFechamento();
+  }
+  if (name === 'conciliacao') { initConciliacao(); }
   if (name === 'operacao') {
     preencherSelectOpcoes('op-produto', 'produto', { incluirVazio: true });
     preencherSelectOpcoes('op-dominio', 'dominio', { incluirVazio: true });
@@ -1588,6 +1708,15 @@ async function carregarPastas() {
   const ri = document.getElementById('cfg-retencao-intervalo');
   if (rd) rd.value = r.retencao_dias_movimento || '';
   if (ri) ri.value = r.retencao_intervalo_horas || '';
+  // Geração automática: intervalo + escopo (produto/domínio das parametrizações).
+  const gh = document.getElementById('cfg-geracao-horario');
+  if (gh) {
+    gh.value = r.geracao_horario || '';
+    await preencherSelectOpcoes('cfg-geracao-produto', 'produto', { incluirVazio: true });
+    await preencherSelectOpcoes('cfg-geracao-dominio', 'dominio', { incluirVazio: true });
+    document.getElementById('cfg-geracao-produto').value = r.geracao_produto || '';
+    document.getElementById('cfg-geracao-dominio').value = r.geracao_dominio || '';
+  }
 }
 
 async function salvarPastasCotacao() {
@@ -1621,6 +1750,20 @@ async function salvarPastas() {
   const r3 = await api('PUT', '/v1/configuracoes', { chave: 'intervalo_scan_minutos', valor: intervalo });
   if (r1?.mensagem && r2?.mensagem && r3?.mensagem) toast('Configurações salvas!');
   else toast((r1?.erro || r2?.erro || r3?.erro || 'Erro ao salvar'), 'danger');
+}
+
+// ── GERAÇÃO AUTOMÁTICA DO CONTÁBIL ─────────────────────────
+async function salvarGeracao() {
+  const horario = document.getElementById('cfg-geracao-horario').value.trim();
+  const produto = document.getElementById('cfg-geracao-produto').value;
+  const dominio = document.getElementById('cfg-geracao-dominio').value;
+  if (horario && (!produto || !dominio)) { toast('Para ativar, selecione Produto e Domínio.', 'warning'); return; }
+  const r1 = await api('PUT', '/v1/configuracoes', { chave: 'geracao_horario', valor: horario });
+  const r2 = await api('PUT', '/v1/configuracoes', { chave: 'geracao_produto', valor: produto });
+  const r3 = await api('PUT', '/v1/configuracoes', { chave: 'geracao_dominio', valor: dominio });
+  if (r1?.mensagem && r2?.mensagem && r3?.mensagem) {
+    toast(!horario ? 'Geração automática salva (desativada).' : `Geração automática todo dia às ${horario} para ${produto}/${dominio}.`);
+  } else toast((r1?.erro || r2?.erro || r3?.erro || 'Erro ao salvar'), 'danger');
 }
 
 // ── RETENÇÃO / EXPURGO DE MOVIMENTOS ───────────────────────
@@ -1752,7 +1895,38 @@ function initDashboard() {
     df.value = hoje.toISOString().slice(0, 10);
     di.value = ini.toISOString().slice(0, 10);
   }
+  preencherSelectOpcoes('serie-produto', 'produto', { incluirVazio: true });
   carregarDashboard();
+}
+
+// carregarSerieSaldo plota a evolução do saldo de uma conta no período do dashboard (RF-130).
+async function carregarSerieSaldo() {
+  const conta = document.getElementById('serie-conta').value.trim();
+  if (!conta) { toast('Informe a conta', 'warning'); return; }
+  const p = new URLSearchParams({
+    conta,
+    data_inicio: document.getElementById('dash-data-inicio').value,
+    data_fim: document.getElementById('dash-data-fim').value,
+    produto: document.getElementById('serie-produto').value,
+  });
+  const r = await api('GET', '/v1/serie-saldo?' + p.toString());
+  const vazio = document.getElementById('serie-vazio');
+  dashDestroy('serie');
+  if (!r || r.erro) { toast(r?.erro || 'erro', 'danger'); return; }
+  const pts = r.pontos || [];
+  vazio.classList.toggle('d-none', pts.length > 0);
+  if (typeof Chart === 'undefined' || !pts.length) return;
+  dashCharts['serie'] = new Chart(document.getElementById('dash-chart-serie'), {
+    type: 'line',
+    data: {
+      labels: pts.map(x => x.data),
+      datasets: [
+        { label: 'Saldo acumulado', data: pts.map(x => x.acumulado), borderColor: DASH_CORES[0], backgroundColor: DASH_CORES[0], tension: .2, fill: false },
+        { label: 'Net do dia', data: pts.map(x => x.net), borderColor: DASH_CORES[2], backgroundColor: DASH_CORES[2], tension: .2, fill: false },
+      ],
+    },
+    options: { responsive: true, plugins: { legend: { position: 'bottom' } } },
+  });
 }
 async function carregarDashboard() {
   const di = document.getElementById('dash-data-inicio').value;
@@ -2012,8 +2186,8 @@ function wiRenderResultado(r) {
 
 // Cria uma regra real a partir da regra candidata da simulação. O escopo produto/domínio
 // vira o produto/domínio da regra; cada condição leva a configuração de moeda base do
-// veículo informada no form (igual ao cadastro de condição). O sistema não tem rascunho:
-// a regra nasce ATIVA — o usuário confirma e depois revisa em Regras.
+// veículo informada no form. Por padrão cria como RASCUNHO (não vale na geração até ativar);
+// desmarcar o checkbox cria já ATIVA.
 async function criarRegraDoWhatif() {
   const descricao = document.getElementById('wi-descricao').value.trim();
   if (!descricao) { toast('Informe a descrição da regra para criar', 'warning'); return; }
@@ -2033,7 +2207,12 @@ async function criarRegraDoWhatif() {
   }
   const produto = document.getElementById('wi-produto').value;
   const dominio = document.getElementById('wi-dominio').value;
-  if (!confirm(`Criar a regra "${descricao}" com ${condicoes.length} condição(ões)?\n\nEla será criada ATIVA e passará a valer nas próximas gerações de movimento.`)) return;
+  const comoRascunho = document.getElementById('wi-rascunho').checked;
+  const status = comoRascunho ? 'rascunho' : 'ativa';
+  const aviso = comoRascunho
+    ? 'Ela será criada como RASCUNHO (não vale na geração até você ativá-la em Regras).'
+    : 'Ela será criada ATIVA e passará a valer nas próximas gerações de movimento.';
+  if (!confirm(`Criar a regra "${descricao}" com ${condicoes.length} condição(ões)?\n\n${aviso}`)) return;
   spin(true);
   const reg = await api('POST', '/v1/regras', {
     descricao,
@@ -2042,7 +2221,7 @@ async function criarRegraDoWhatif() {
     campo_produto: '',
     pre_condicao: document.getElementById('wi-precond').value.trim(),
     tipo_lancamento: document.getElementById('wi-tipo').value,
-    ativo: true,
+    status,
   });
   if (!reg || reg.erro) { spin(false); toast(reg?.erro || 'falha ao criar regra', 'danger'); return; }
   const id = reg.id;
@@ -2052,7 +2231,7 @@ async function criarRegraDoWhatif() {
     const rc = await api('POST', `/v1/regras/${id}/condicoes`, {
       condicao: c.condicao, conta_debito: c.conta_debito, conta_credito: c.conta_credito,
       campo_valor: c.campo_valor, campo_moeda: c.campo_moeda, campo_boleto: c.campo_boleto,
-      ativo: true,
+      status,
       base_na_posicao: c.base_na_posicao,
       campo_valor_moeda_base: c.campo_valor_moeda_base,
       campo_moeda_base: c.campo_moeda_base,
@@ -2061,8 +2240,9 @@ async function criarRegraDoWhatif() {
     if (rc && rc.id) okCond++; else falhas.push(`${i + 1}: ${rc?.erro || 'erro'}`);
   }
   spin(false);
-  if (falhas.length) toast(`Regra #${id} criada, mas ${falhas.length} condição(ões) falharam — ${falhas.join('; ')}`, 'warning');
-  else toast(`Regra #${id} criada (ativa) com ${okCond} condição(ões). Revise em Regras.`, 'success');
+  const rotulo = comoRascunho ? 'rascunho' : 'ativa';
+  if (falhas.length) toast(`Regra #${id} criada (${rotulo}), mas ${falhas.length} condição(ões) falharam — ${falhas.join('; ')}`, 'warning');
+  else toast(`Regra #${id} criada (${rotulo}) com ${okCond} condição(ões). Veja em Regras.`, 'success');
 }
 
 // ── OPERAÇÃO ───────────────────────────────────────────────
@@ -2257,6 +2437,183 @@ async function gerarEstorno() {
   const el = document.getElementById('op-msg-estorno');
   if (r?.mensagem) { el.innerHTML = `<div class="alert alert-success">${r.mensagem}</div>`; }
   else if (r?.erro) { el.innerHTML = `<div class="alert alert-danger">${r.erro}</div>`; }
+}
+
+// ── DIFF DE VERSÕES (RF-124) ───────────────────────────────
+let diffCtx = { data: '', produto: '', dominio: '' };
+async function abrirDiffVersoes() {
+  const data = document.getElementById('c-data-inicio').value;
+  const produto = document.getElementById('c-produto').value;
+  const dominio = document.getElementById('c-dominio').value;
+  if (!data) { toast('Informe a data (início) para comparar versões', 'warning'); return; }
+  if (!produto || !dominio) { toast('Selecione Produto e Domínio — a versão é por combinação', 'warning'); return; }
+  diffCtx = { data, produto, dominio };
+  document.getElementById('diff-escopo').innerHTML = `Data <strong>${esc(data)}</strong> · Produto <strong>${esc(produto)}</strong> · Domínio <strong>${esc(dominio)}</strong>`;
+  document.getElementById('diff-va').innerHTML = '';
+  document.getElementById('diff-vb').innerHTML = '';
+  document.getElementById('diff-corpo').innerHTML = '';
+  bootstrap.Modal.getOrCreateInstance(document.getElementById('modalDiff')).show();
+  await carregarDiff(true);
+}
+async function carregarDiff(inicial) {
+  const p = new URLSearchParams({ data: diffCtx.data, produto: diffCtx.produto, dominio: diffCtx.dominio });
+  if (inicial !== true) {
+    p.set('versao_a', document.getElementById('diff-va').value);
+    p.set('versao_b', document.getElementById('diff-vb').value);
+  }
+  const r = await api('GET', '/v1/movimento-contabil/diff?' + p.toString());
+  const corpo = document.getElementById('diff-corpo');
+  if (!r || r.erro) { corpo.innerHTML = `<div class="alert alert-danger">${esc(r?.erro || 'erro')}</div>`; return; }
+  const vs = r.versoes_disponiveis || [];
+  const va = document.getElementById('diff-va'), vb = document.getElementById('diff-vb');
+  if (inicial === true || !va.options.length) {
+    const opts = vs.map(v => `<option value="${v}">v${v}</option>`).join('');
+    va.innerHTML = opts; vb.innerHTML = opts;
+    if (r.versao_a) va.value = r.versao_a;
+    if (r.versao_b) vb.value = r.versao_b;
+  }
+  diffRender(r, corpo);
+}
+function diffFmt(n) { return (n ?? 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+function diffRender(r, corpo) {
+  if (r.aviso) { corpo.innerHTML = `<div class="alert alert-info py-2"><i class="bi bi-info-circle me-2"></i>${esc(r.aviso)}</div>`; return; }
+  let html = `<div class="row g-2 mb-3">
+    <div class="col-4"><div class="card text-center"><div class="card-body py-2"><div class="small text-muted">Adicionados</div><div class="fs-5 fw-bold text-success">${r.tot_adicionados}</div></div></div></div>
+    <div class="col-4"><div class="card text-center"><div class="card-body py-2"><div class="small text-muted">Removidos</div><div class="fs-5 fw-bold text-danger">${r.tot_removidos}</div></div></div></div>
+    <div class="col-4"><div class="card text-center"><div class="card-body py-2"><div class="small text-muted">Alterados</div><div class="fs-5 fw-bold text-warning">${r.tot_alterados}</div></div></div></div>
+  </div>`;
+  html += diffTabela(`Adicionados (só na v${r.versao_b})`, 'success', r.adicionados, 'add');
+  html += diffTabela(`Removidos (só na v${r.versao_a})`, 'danger', r.removidos, 'rem');
+  html += diffTabela('Alterados (A → B)', 'warning', r.alterados, 'alt');
+  corpo.innerHTML = html;
+}
+function diffTabela(titulo, cor, linhas, tipo) {
+  if (!linhas || !linhas.length) return `<div class="small text-muted mb-3">${titulo}: nenhum.</div>`;
+  let h = `<div class="card mb-3"><div class="card-header text-${cor}">${titulo} (${linhas.length})</div>
+    <div class="table-responsive" style="max-height:260px;overflow:auto"><table class="table table-sm mb-0">
+    <thead><tr><th>Boleto</th><th>Conta D</th><th>Conta C</th><th>Regra</th><th>Moeda</th>`;
+  h += (tipo === 'alt') ? `<th class="text-end">Valor A</th><th class="text-end">Valor B</th><th class="text-end">Δ</th>` : `<th class="text-end">Valor</th>`;
+  h += `</tr></thead><tbody>`;
+  for (const l of linhas) {
+    h += `<tr><td>${esc(l.boleto)}</td><td>${esc(l.conta_debito)}</td><td>${esc(l.conta_credito)}</td><td class="small">${esc(l.descricao_regra || '')}</td><td>${esc(l.moeda)}</td>`;
+    if (tipo === 'alt') h += `<td class="text-end">${diffFmt(l.valor_a)}</td><td class="text-end">${diffFmt(l.valor_b)}</td><td class="text-end">${diffFmt((l.valor_b || 0) - (l.valor_a || 0))}</td>`;
+    else h += `<td class="text-end">${diffFmt(tipo === 'add' ? l.valor_b : l.valor_a)}</td>`;
+    h += `</tr>`;
+  }
+  h += `</tbody></table></div></div>`;
+  return h;
+}
+
+// ── ANÁLISES: BALANCETE + COBERTURA (RF-127/128) ───────────
+function initAnalises() {
+  const hoje = new Date().toISOString().slice(0, 10);
+  for (const id of ['bal-ini', 'bal-fim', 'cob-data']) {
+    const e = document.getElementById(id);
+    if (e && !e.value) e.value = hoje;
+  }
+  preencherSelectOpcoes('bal-produto', 'produto', { incluirVazio: true });
+  preencherSelectOpcoes('bal-dominio', 'dominio', { incluirVazio: true });
+  preencherSelectOpcoes('cob-produto', 'produto', { incluirVazio: true });
+  preencherSelectOpcoes('cob-dominio', 'dominio', { incluirVazio: true });
+}
+function anFmt(n) { return (n ?? 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+
+async function carregarBalancete() {
+  const p = new URLSearchParams({
+    data_inicio: document.getElementById('bal-ini').value,
+    data_fim: document.getElementById('bal-fim').value,
+    produto: document.getElementById('bal-produto').value,
+    dominio: document.getElementById('bal-dominio').value,
+    versao_modo: 'vigente',
+  });
+  const r = await api('GET', '/v1/balancete?' + p.toString());
+  const el = document.getElementById('bal-resultado');
+  if (!r || r.erro) { el.innerHTML = `<div class="alert alert-danger">${esc(r?.erro || 'erro')}</div>`; return; }
+  const selo = r.balanceado
+    ? '<span class="badge bg-success">Partida dobrada OK</span>'
+    : `<span class="badge bg-danger">Desbalanceado (diferença ${anFmt(r.diferenca)})</span>`;
+  let html = `<div class="mb-2">${selo}</div>`;
+  html += `<div class="table-responsive" style="max-height:420px;overflow:auto"><table class="table table-sm table-hover mb-0">
+    <thead class="table-light"><tr><th>Conta</th><th class="text-end">Débito</th><th class="text-end">Crédito</th><th class="text-end">Saldo</th></tr></thead><tbody>`;
+  if (!r.contas || !r.contas.length) html += `<tr><td colspan="4" class="text-muted p-3">Sem lançamentos no período.</td></tr>`;
+  else for (const c of r.contas) html += `<tr><td>${esc(c.conta)}</td><td class="text-end">${anFmt(c.debito)}</td><td class="text-end">${anFmt(c.credito)}</td><td class="text-end ${c.saldo < 0 ? 'text-danger' : ''}">${anFmt(c.saldo)}</td></tr>`;
+  html += `</tbody><tfoot class="table-dark"><tr><th>TOTAL</th><th class="text-end">${anFmt(r.total_debito)}</th><th class="text-end">${anFmt(r.total_credito)}</th><th class="text-end">${anFmt(r.total_debito - r.total_credito)}</th></tr></tfoot></table></div>`;
+  el.innerHTML = html;
+}
+
+async function carregarCobertura() {
+  const data = document.getElementById('cob-data').value;
+  if (!data) { toast('Informe a data', 'warning'); return; }
+  const p = new URLSearchParams({ data, produto: document.getElementById('cob-produto').value, dominio: document.getElementById('cob-dominio').value });
+  const r = await api('GET', '/v1/cobertura?' + p.toString());
+  const el = document.getElementById('cob-resultado');
+  if (!r || r.erro) { el.innerHTML = `<div class="alert alert-danger">${esc(r?.erro || 'erro')}</div>`; return; }
+  let html = `<div class="row g-2 mb-3">
+    <div class="col-6 col-md-3"><div class="card text-center"><div class="card-body py-2"><div class="small text-muted">Posições</div><div class="fs-5 fw-bold">${r.total_posicoes}</div></div></div></div>
+    <div class="col-6 col-md-3"><div class="card text-center"><div class="card-body py-2"><div class="small text-muted">Cobertas</div><div class="fs-5 fw-bold text-success">${r.cobertos}</div></div></div></div>
+    <div class="col-6 col-md-3"><div class="card text-center"><div class="card-body py-2"><div class="small text-muted">Órfãs</div><div class="fs-5 fw-bold text-danger">${r.orfaos}</div></div></div></div>
+    <div class="col-6 col-md-3"><div class="card text-center"><div class="card-body py-2"><div class="small text-muted">Inconsistentes</div><div class="fs-5 fw-bold text-warning">${r.inconsistentes}</div></div></div></div>
+  </div>`;
+  html += cobTabela('Órfãs (nenhuma regra cobriu)', 'danger', r.boletos_orfaos);
+  html += cobTabela('Inconsistentes', 'warning', r.boletos_inconsistentes);
+  if (r.truncado) html += `<div class="alert alert-warning py-2"><i class="bi bi-exclamation-triangle me-2"></i>Listas truncadas por limite (as contagens são completas).</div>`;
+  el.innerHTML = html;
+}
+function cobTabela(titulo, cor, linhas) {
+  if (!linhas || !linhas.length) return `<div class="small text-muted mb-2">${titulo}: nenhuma.</div>`;
+  let h = `<div class="card mb-3"><div class="card-header text-${cor}">${titulo} (${linhas.length})</div>
+    <div class="table-responsive" style="max-height:260px;overflow:auto"><table class="table table-sm mb-0">
+    <thead><tr><th>Boleto</th><th>Produto</th><th>Domínio</th><th>Detalhe</th></tr></thead><tbody>`;
+  for (const b of linhas) h += `<tr><td>${esc(b.boleto)}</td><td>${esc(b.produto)}</td><td>${esc(b.dominio)}</td><td class="small">${esc(b.detalhe || '')}</td></tr>`;
+  h += `</tbody></table></div></div>`;
+  return h;
+}
+
+// ── CONCILIAÇÃO (Saldo × Posição + órfãos) (RF-131) ────────
+function initConciliacao() {
+  const e = document.getElementById('cc-data'); if (e && !e.value) e.value = new Date().toISOString().slice(0, 10);
+  preencherSelectOpcoes('cc-produto', 'produto', { incluirVazio: true });
+  preencherSelectOpcoes('cc-dominio', 'dominio', { incluirVazio: true });
+}
+function concFmt(n) { return (n ?? 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+
+async function carregarConciliacao() {
+  const data = document.getElementById('cc-data').value;
+  if (!data) { toast('Informe a data', 'warning'); return; }
+  const p = new URLSearchParams({ data, produto: document.getElementById('cc-produto').value, dominio: document.getElementById('cc-dominio').value });
+  const r = await api('GET', '/v1/conciliacao?' + p.toString());
+  const el = document.getElementById('cc-resultado');
+  if (!r || r.erro) { el.innerHTML = `<div class="alert alert-danger">${esc(r?.erro || 'erro')}</div>`; return; }
+  let html = `<div class="row g-2 mb-3">
+    <div class="col-6 col-md-3"><div class="card text-center"><div class="card-body py-2"><div class="small text-muted">Saldo OK</div><div class="fs-5 fw-bold text-success">${r.tot_valor_ok}</div></div></div></div>
+    <div class="col-6 col-md-3"><div class="card text-center"><div class="card-body py-2"><div class="small text-muted">Divergentes</div><div class="fs-5 fw-bold text-warning">${r.tot_divergentes}</div></div></div></div>
+    <div class="col-6 col-md-3"><div class="card text-center"><div class="card-body py-2"><div class="small text-muted">Sem posição</div><div class="fs-5 fw-bold text-secondary">${r.tot_sem_posicao}</div></div></div></div>
+    <div class="col-6 col-md-3"><div class="card text-center"><div class="card-body py-2"><div class="small text-muted">Órfãos</div><div class="fs-5 fw-bold text-danger">${r.tot_orfaos}</div></div></div></div>
+  </div>`;
+  if (r.saldo_desativado) html += `<div class="alert alert-warning py-2"><i class="bi bi-exclamation-triangle me-2"></i>Projeção de saldo desativada — a parte "Saldo × Posição" fica indisponível.</div>`;
+  const ds = r.divergencias || [];
+  html += `<div class="card mb-3"><div class="card-header">Saldo × Posição ${ds.length ? '' : '<span class="text-muted small">(sem divergências)</span>'}</div>`;
+  if (ds.length) {
+    html += `<div class="table-responsive" style="max-height:320px;overflow:auto"><table class="table table-sm table-hover mb-0">
+      <thead class="table-light"><tr><th>Status</th><th>Boleto</th><th>Regra</th><th>Coluna</th><th class="text-end">Saldo</th><th class="text-end">Posição</th></tr></thead><tbody>`;
+    for (const l of ds) {
+      const cor = l.status === 'divergente' ? 'warning' : 'secondary';
+      html += `<tr><td><span class="badge bg-${cor}">${esc(l.status)}</span></td><td>${esc(l.boleto)}</td><td class="small">#${l.id_regra} ${esc(l.regra || '')}</td><td class="small"><code>${esc(l.campo_valor || '')}</code></td><td class="text-end">${concFmt(l.saldo)}</td><td class="text-end">${l.status === 'sem_posicao' ? '—' : concFmt(l.valor_posicao)}</td></tr>`;
+    }
+    html += `</tbody></table></div>`;
+  } else html += `<div class="card-body py-2 text-muted small">Todos os saldos batem com a posição.</div>`;
+  html += `</div>`;
+  const os = r.orfaos || [];
+  html += `<div class="card mb-3"><div class="card-header text-danger">Na posição, sem contábil (${r.tot_orfaos})</div>`;
+  if (os.length) {
+    html += `<div class="table-responsive" style="max-height:320px;overflow:auto"><table class="table table-sm table-hover mb-0">
+      <thead class="table-light"><tr><th>Boleto</th><th>Produto</th><th>Domínio</th><th class="text-end">Valor esperado</th></tr></thead><tbody>`;
+    for (const o of os) html += `<tr><td>${esc(o.boleto)}</td><td>${esc(o.produto)}</td><td>${esc(o.dominio)}</td><td class="text-end">${concFmt(o.valor_esperado)}</td></tr>`;
+    html += `</tbody></table></div>`;
+  } else html += `<div class="card-body py-2 text-muted small">Nenhum boleto órfão.</div>`;
+  html += `</div>`;
+  if (r.truncado) html += `<div class="alert alert-warning py-2"><i class="bi bi-exclamation-triangle me-2"></i>Listas truncadas (as contagens são completas).</div>`;
+  el.innerHTML = html;
 }
 
 // ── CONSULTA ───────────────────────────────────────────────
@@ -2502,37 +2859,39 @@ async function consultarRazonete() {
   el.innerHTML = r.map(razoneteCard).join('');
 }
 
-function linhaRz(l, valor) {
-  const estorno = l.reversao ? ' <span class="badge bg-warning text-dark">estorno</span>' : '';
-  return `<tr>
-    <td class="small">${esc(l.data)}</td>
-    <td class="small text-muted">${esc(l.boleto)} · ${esc(l.historico || '')}${estorno}</td>
-    <td class="small text-end">${fmtRz(valor)}</td>
-  </tr>`;
-}
-
+// razoneteCard monta o grid por CONTA com UMA LINHA POR DATA (colunas Débito/Crédito),
+// agregando os lançamentos da conta por data, com saldo acumulado e totais.
 function razoneteCard(c) {
-  const deb = (c.linhas || []).filter(l => l.debito > 0).map(l => linhaRz(l, l.debito)).join('');
-  const cred = (c.linhas || []).filter(l => l.credito > 0).map(l => linhaRz(l, l.credito)).join('');
+  const porData = {};
+  for (const l of (c.linhas || [])) {
+    const d = l.data || '';
+    if (!porData[d]) porData[d] = { debito: 0, credito: 0 };
+    porData[d].debito += l.debito || 0;
+    porData[d].credito += l.credito || 0;
+  }
+  const datas = Object.keys(porData).sort();
+  let acum = 0, rows = '';
+  for (const d of datas) {
+    const x = porData[d];
+    acum += x.debito - x.credito;
+    rows += `<tr>
+      <td class="small">${esc(d)}</td>
+      <td class="small text-end">${x.debito ? fmtRz(x.debito) : '—'}</td>
+      <td class="small text-end">${x.credito ? fmtRz(x.credito) : '—'}</td>
+      <td class="small text-end ${acum < 0 ? 'text-danger' : ''}">${fmtRz(acum)}</td>
+    </tr>`;
+  }
+  if (!rows) rows = '<tr><td colspan="4" class="text-muted small p-2">—</td></tr>';
   return `<div class="card shadow-sm mb-3">
     <div class="card-header d-flex justify-content-between align-items-center">
       <span><i class="bi bi-bank me-2"></i>Conta <strong>${esc(c.conta)}</strong> <span class="badge bg-secondary ms-1">${esc(c.moeda || '—')}</span></span>
       <span class="small">Saldo: <strong>${fmtRz(Math.abs(c.saldo))} ${c.natureza}</strong></span>
     </div>
-    <div class="card-body p-0"><div class="row g-0">
-      <div class="col-6 border-end">
-        <div class="px-3 py-1 fw-semibold bg-body-secondary small">Débito</div>
-        <div class="table-responsive"><table class="table table-sm table-hover mb-0"><tbody>${deb || '<tr><td class="text-muted small p-2">—</td></tr>'}</tbody></table></div>
-      </div>
-      <div class="col-6">
-        <div class="px-3 py-1 fw-semibold bg-body-secondary small">Crédito</div>
-        <div class="table-responsive"><table class="table table-sm table-hover mb-0"><tbody>${cred || '<tr><td class="text-muted small p-2">—</td></tr>'}</tbody></table></div>
-      </div>
-    </div>
-    <div class="d-flex justify-content-between px-3 py-2 border-top small">
-      <span>Σ Débito: <strong>${fmtRz(c.total_debito)}</strong></span>
-      <span>Σ Crédito: <strong>${fmtRz(c.total_credito)}</strong></span>
-    </div></div>
+    <div class="table-responsive"><table class="table table-sm table-hover mb-0">
+      <thead class="table-light"><tr><th>Data</th><th class="text-end">Débito</th><th class="text-end">Crédito</th><th class="text-end">Saldo acum.</th></tr></thead>
+      <tbody>${rows}</tbody>
+      <tfoot class="table-light"><tr><th>Σ Total</th><th class="text-end">${fmtRz(c.total_debito)}</th><th class="text-end">${fmtRz(c.total_credito)}</th><th class="text-end">${fmtRz(c.total_debito - c.total_credito)}</th></tr></tfoot>
+    </table></div>
   </div>`;
 }
 
@@ -2836,6 +3195,26 @@ async function carregarRegras() {
   renderizarRegras(todasRegras);
 }
 
+// lintRegras verifica as regras ativas e mostra os achados (RF-129).
+async function lintRegras() {
+  const r = await api('GET', '/v1/regras/lint');
+  const el = document.getElementById('lint-corpo');
+  bootstrap.Modal.getOrCreateInstance(document.getElementById('modalLint')).show();
+  if (!r || r.erro) { el.innerHTML = `<div class="alert alert-danger">${esc(r?.erro || 'erro')}</div>`; return; }
+  if (!r.achados || !r.achados.length) { el.innerHTML = `<div class="alert alert-success"><i class="bi bi-check-circle me-2"></i>Nenhum achado — as regras ativas estão OK.</div>`; return; }
+  const erros = r.achados.filter(a => a.severidade === 'erro').length;
+  const avisos = r.achados.length - erros;
+  let html = `<div class="mb-2"><span class="badge bg-danger me-1">${erros} erro(s)</span><span class="badge bg-warning text-dark">${avisos} aviso(s)</span></div>`;
+  html += `<div class="table-responsive"><table class="table table-sm mb-0"><thead class="table-light"><tr><th>Sev.</th><th>Tipo</th><th>Regra</th><th>Detalhe</th></tr></thead><tbody>`;
+  for (const a of r.achados) {
+    const badge = a.severidade === 'erro' ? '<span class="badge bg-danger">erro</span>' : '<span class="badge bg-warning text-dark">aviso</span>';
+    const regra = `#${a.id_regra} ${esc(a.regra)}` + (a.id_condicao ? ` · cond #${a.id_condicao}` : '');
+    html += `<tr><td>${badge}</td><td class="small"><code>${esc(a.tipo)}</code></td><td class="small">${regra}</td><td class="small">${esc(a.detalhe)}</td></tr>`;
+  }
+  html += `</tbody></table></div>`;
+  el.innerHTML = html;
+}
+
 // ── Lançamento Manual (RF-033) ────────────────────────────
 let lmRegras = [];
 let lmPendentes = [];
@@ -2882,6 +3261,8 @@ function lmAdd() {
     veiculo: document.getElementById('lm-veiculo').value.trim(),
     valor: parseFloat(document.getElementById('lm-valor').value),
     moeda: document.getElementById('lm-moeda').value.trim(),
+    valor_moeda_base_veiculo: parseFloat(document.getElementById('lm-valor-base').value) || 0,
+    moeda_base_veiculo: document.getElementById('lm-moeda-base').value.trim(),
     indicador_reversao: document.getElementById('lm-estorno').checked,
     _regra: reg ? reg.descricao : '', _contas: cond ? (cond.conta_debito + '/' + cond.conta_credito) : ''
   };
@@ -2892,6 +3273,8 @@ function lmAdd() {
   document.getElementById('lm-boleto').value = '';
   document.getElementById('lm-veiculo').value = '';
   document.getElementById('lm-valor').value = '';
+  document.getElementById('lm-valor-base').value = '';
+  document.getElementById('lm-moeda-base').value = '';
   lmRender();
 }
 
@@ -3115,10 +3498,19 @@ function rotuloTipoLancamento(tipo) {
   }
 }
 
+// statusBadge devolve o selo visual do status de uma regra/condição (RF-125).
+function statusBadge(status) {
+  switch (status) {
+    case 'rascunho': return '<span class="badge bg-warning text-dark">Rascunho</span>';
+    case 'excluida': return '<span class="badge bg-secondary">Excluída</span>';
+    default: return '<span class="badge bg-success">Ativa</span>';
+  }
+}
+
 function renderizarRegras(regras) {
   const el = document.getElementById('r-lista');
   if (!regras.length) { el.innerHTML = '<div class="p-3 text-muted">Nenhuma regra encontrada.</div>'; return; }
-  const rows = regras.map(reg => `<tr>
+  const rows = regras.map(reg => `<tr${reg.status === 'rascunho' ? ' class="table-warning"' : ''}>
     <td>${reg.id}</td>
     <td><strong>${rotuloRegra(reg)}</strong></td>
     <td>${reg.descricao}</td>
@@ -3126,7 +3518,11 @@ function renderizarRegras(regras) {
     <td>${reg.dominio ? reg.dominio.split(',').map(d => `<span class="badge bg-info text-dark me-1">${d.trim()}</span>`).join('') : '<span class="text-muted">Todos</span>'}</td>
     <td>${reg.pre_condicao ? `<code>${reg.pre_condicao}</code>` : '<span class="text-muted">—</span>'}</td>
     <td>${rotuloTipoLancamento(reg.tipo_lancamento)}</td>
+    <td>${statusBadge(reg.status)}</td>
     <td class="text-nowrap">
+      ${reg.status === 'rascunho'
+        ? `<button class="btn btn-sm btn-success" onclick="alternarStatusRegra(${reg.id}, 'ativa')" title="Ativar regra (passa a valer na geração)"><i class="bi bi-play-fill"></i></button>`
+        : `<button class="btn btn-sm btn-outline-warning" onclick="alternarStatusRegra(${reg.id}, 'rascunho')" title="Tornar rascunho (sai da geração)"><i class="bi bi-pause-fill"></i></button>`}
       <button class="btn btn-sm btn-outline-primary" onclick="selecionarRegra(${reg.id}, '${reg.descricao.replace(/'/g,"\\'")}')">
         <i class="bi bi-list-check me-1"></i>Condições
       </button>
@@ -3136,9 +3532,27 @@ function renderizarRegras(regras) {
     </td>
   </tr>`).join('');
   el.innerHTML = `<div class="table-responsive"><table class="table table-sm table-hover mb-0">
-    <thead class="table-dark"><tr><th>ID</th><th>Regra</th><th>Descrição</th><th>Produtos</th><th>Domínios</th><th>Pré Condição</th><th>Tipo</th><th></th></tr></thead>
+    <thead class="table-dark"><tr><th>ID</th><th>Regra</th><th>Descrição</th><th>Produtos</th><th>Domínios</th><th>Pré Condição</th><th>Tipo</th><th>Status</th><th></th></tr></thead>
     <tbody>${rows}</tbody>
   </table></div>`;
+}
+
+// alternarStatusRegra muda o status (ativa⇄rascunho) via EditarRegra, reenviando o objeto
+// completo da regra (do cache todasRegras) para não perder os demais campos.
+async function alternarStatusRegra(id, novoStatus) {
+  const reg = (todasRegras || []).find(r => r.id === id);
+  if (!reg) return;
+  const r = await api('PUT', `/v1/regras/${id}`, {
+    descricao: reg.descricao,
+    codigo_produto_corporativo: reg.codigo_produto_corporativo || '',
+    dominio: reg.dominio || '',
+    campo_produto: reg.campo_produto || '',
+    pre_condicao: reg.pre_condicao || '',
+    tipo_lancamento: reg.tipo_lancamento || 'reverte',
+    status: novoStatus,
+  });
+  if (r && (r.mensagem || r.id)) { toast(novoStatus === 'ativa' ? 'Regra ativada!' : 'Regra movida para rascunho.'); carregarRegras(); }
+  else toast(r?.erro || 'Erro ao alterar status', 'danger');
 }
 
 async function selecionarRegra(id, nome) {
@@ -3152,26 +3566,49 @@ async function selecionarRegra(id, nome) {
   if (!r || r.erro || !r.length) {
     el.innerHTML = `<div class="alert alert-info">Nenhuma condição cadastrada para esta regra.</div>`;
   } else {
-    const rows = r.map(c => `<tr>
+    const rows = r.map(c => `<tr${c.status === 'rascunho' ? ' class="table-warning"' : ''}>
       <td><code>${c.condicao}</code></td>
       <td>${c.conta_debito}</td>
       <td>${c.conta_credito}</td>
       <td><code>${c.campo_valor}</code></td>
       <td>${c.campo_moeda}</td>
       <td>${c.campo_boleto || '<span class="text-muted">padrão</span>'}</td>
+      <td>${statusBadge(c.status)}</td>
       <td class="text-nowrap">
+        ${c.status === 'rascunho'
+          ? `<button class="btn btn-success btn-sm py-0 px-1" onclick="alternarStatusCondicao(${c.id}, 'ativa')" title="Ativar condição"><i class="bi bi-play-fill"></i></button>`
+          : `<button class="btn btn-outline-warning btn-sm py-0 px-1" onclick="alternarStatusCondicao(${c.id}, 'rascunho')" title="Tornar rascunho (sai da geração)"><i class="bi bi-pause-fill"></i></button>`}
         <button class="btn btn-outline-secondary btn-sm py-0 px-1" onclick="abrirEdicaoCondicao(${c.id})" title="Editar"><i class="bi bi-pencil"></i></button>
         <button class="btn btn-outline-success btn-sm py-0 px-1" onclick="clonarCondicao(${c.id}, '${nome.replace(/'/g,"\\'")}')" title="Clonar condição"><i class="bi bi-copy"></i></button>
         <button class="btn btn-outline-danger btn-sm py-0 px-1" onclick="excluirCondicao(${c.id}, '${nome.replace(/'/g,"\\'")}')" title="Excluir"><i class="bi bi-trash"></i></button>
       </td>
     </tr>`).join('');
     el.innerHTML = `<div class="table-responsive"><table class="table table-sm table-hover mb-0">
-      <thead class="table-light"><tr><th>Condição</th><th>Débito</th><th>Crédito</th><th>Campo Valor</th><th>Campo Moeda</th><th>Campo Boleto</th><th></th></tr></thead>
+      <thead class="table-light"><tr><th>Condição</th><th>Débito</th><th>Crédito</th><th>Campo Valor</th><th>Campo Moeda</th><th>Campo Boleto</th><th>Status</th><th></th></tr></thead>
       <tbody>${rows}</tbody>
     </table></div>`;
   }
 
   bootstrap.Modal.getOrCreateInstance(document.getElementById('modalCondicoes')).show();
+}
+
+// alternarStatusCondicao muda o status (ativa⇄rascunho) via EditarCondicao, reenviando a
+// condição completa (de condicoesAtuais) para preservar os demais campos e a config de moeda base.
+async function alternarStatusCondicao(id, novoStatus) {
+  const c = (condicoesAtuais || []).find(x => x.id === id);
+  if (!c) return;
+  const r = await api('PUT', `/v1/condicoes/${id}`, {
+    condicao: c.condicao, conta_debito: c.conta_debito, conta_credito: c.conta_credito,
+    campo_valor: c.campo_valor, campo_moeda: c.campo_moeda, campo_boleto: c.campo_boleto,
+    base_na_posicao: c.base_na_posicao, campo_valor_moeda_base: c.campo_valor_moeda_base,
+    campo_moeda_base: c.campo_moeda_base, campo_data_conversao: c.campo_data_conversao,
+    status: novoStatus,
+  });
+  if (r && (r.mensagem || r.id)) {
+    toast(novoStatus === 'ativa' ? 'Condição ativada!' : 'Condição movida para rascunho.');
+    selecionarRegra(regraAtualId, document.getElementById('modal-cond-titulo').textContent);
+    carregarRegras();
+  } else toast(r?.erro || 'Erro ao alterar status', 'danger');
 }
 
 // ── VALIDAÇÃO DE EXPRESSÃO ─────────────────────────────────
@@ -3189,7 +3626,12 @@ function validarCondicao(valor, tipo, elId) {
     }).then(res => res.json()).catch(() => null);
     if (!r) { el.innerHTML = ''; return; }
     if (r.valido) {
-      el.innerHTML = '<small class="text-success"><i class="bi bi-check-circle me-1"></i>Expressão válida</small>';
+      if (r.alterada && r.normalizada) {
+        el.innerHTML = `<small class="text-success"><i class="bi bi-check-circle me-1"></i>Expressão válida</small>
+          <br><small class="text-muted">Será salva normalizada como <code>${esc(r.normalizada)}</code> (para casar com as colunas da posição).</small>`;
+      } else {
+        el.innerHTML = '<small class="text-success"><i class="bi bi-check-circle me-1"></i>Expressão válida</small>';
+      }
     } else {
       el.innerHTML = `<div class="alert alert-warning py-1 px-2 mt-1 mb-0">
         <small><strong><i class="bi bi-exclamation-triangle me-1"></i>Sintaxe inválida:</strong> ${r.erro}</small>
@@ -3448,6 +3890,115 @@ function toggleNotificacoes() {
 async function marcarNotificacoesLidas() {
   await api('POST', '/v1/notificacoes', null, true); // silencioso
   atualizarNotificacoes();
+}
+
+// ── FECHAMENTO DE COMPETÊNCIA (RF-132) ─────────────────────
+const FC_MESES = ['', 'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
+
+function fcInitMesAno() {
+  const mes = document.getElementById('fc-lib-mes');
+  if (mes && !mes.dataset.init) {
+    mes.innerHTML = FC_MESES.map((m, i) => i === 0 ? '' : `<option value="${i}">${m}</option>`).join('');
+    mes.value = String(new Date().getMonth() + 1);
+    mes.dataset.init = '1';
+  }
+  const ano = document.getElementById('fc-lib-ano');
+  if (ano && !ano.value) ano.value = String(new Date().getFullYear());
+}
+
+function fcEscopoLabel(produto, dominio) {
+  if (!produto && !dominio) return '<strong>Todos</strong>';
+  return `${esc(produto || '—')} <span class="text-muted">/</span> ${esc(dominio || '—')}`;
+}
+
+async function carregarFechamento() {
+  const r = await api('GET', '/v1/fechamento', null, true);
+  const boxLib = document.getElementById('fc-liberacoes-lista');
+  const boxEsc = document.getElementById('fc-escopos-lista');
+  if (!r || r.erro) {
+    const msg = esc((r && r.erro) || 'Controle de fechamento indisponível neste backend.');
+    if (boxLib) boxLib.innerHTML = `<div class="text-muted">${msg}</div>`;
+    if (boxEsc) boxEsc.innerHTML = '';
+    return;
+  }
+  document.getElementById('fc-modo').value = r.modo || 'off';
+  document.getElementById('fc-escopos-box').style.display = (r.modo === 'selecionados') ? 'block' : 'none';
+  renderFcEscopos(r.escopos || []);
+  renderFcLiberacoes(r.liberacoes || []);
+}
+
+function renderFcEscopos(escopos) {
+  const el = document.getElementById('fc-escopos-lista');
+  if (!el) return;
+  if (escopos.length === 0) {
+    el.innerHTML = '<div class="small text-muted">Nenhum produto/domínio selecionado ainda.</div>';
+    return;
+  }
+  el.innerHTML = '<div class="d-flex flex-wrap gap-2">' + escopos.map(e =>
+    `<span class="badge bg-secondary d-inline-flex align-items-center">${fcEscopoLabel(e.produto, e.dominio)}
+      <i class="bi bi-x-lg ms-2" role="button" title="Remover" onclick="fcRemoverEscopo(${e.id})"></i></span>`
+  ).join('') + '</div>';
+}
+
+function renderFcLiberacoes(libs) {
+  const el = document.getElementById('fc-liberacoes-lista');
+  if (!el) return;
+  if (libs.length === 0) {
+    el.innerHTML = '<div class="text-muted"><i class="bi bi-info-circle me-1"></i>Nenhuma competência liberada.</div>';
+    return;
+  }
+  let html = '<div class="table-responsive"><table class="table table-sm table-hover mb-0 align-middle"><thead><tr>' +
+    '<th>Competência</th><th>Escopo</th><th class="text-end">Ação</th></tr></thead><tbody>';
+  for (const l of libs) {
+    html += `<tr>
+      <td>${FC_MESES[l.mes] || l.mes}/${l.ano}</td>
+      <td>${fcEscopoLabel(l.produto, l.dominio)}</td>
+      <td class="text-end"><button class="btn btn-outline-danger btn-sm" onclick="fcRemoverLiberacao(${l.id})" title="Remover liberação"><i class="bi bi-trash"></i></button></td>
+    </tr>`;
+  }
+  html += '</tbody></table></div>';
+  el.innerHTML = html;
+}
+
+async function fcSalvarModo() {
+  const modo = document.getElementById('fc-modo').value;
+  const r = await api('POST', '/v1/fechamento/modo', { modo });
+  if (r?.erro) { toast(r.erro, 'danger'); return; }
+  toast('Modo salvo');
+  carregarFechamento();
+}
+
+async function fcAdicionarEscopo() {
+  const produto = document.getElementById('fc-esc-produto').value;
+  const dominio = document.getElementById('fc-esc-dominio').value;
+  const r = await api('POST', '/v1/fechamento/escopo', { produto, dominio });
+  if (r?.erro) { toast(r.erro, 'danger'); return; }
+  carregarFechamento();
+}
+
+async function fcRemoverEscopo(id) {
+  const r = await api('DELETE', `/v1/fechamento/escopo/${id}`);
+  if (r?.erro) { toast(r.erro, 'danger'); return; }
+  carregarFechamento();
+}
+
+async function fcLiberar() {
+  const ano = parseInt(document.getElementById('fc-lib-ano').value, 10);
+  const mes = parseInt(document.getElementById('fc-lib-mes').value, 10);
+  const produto = document.getElementById('fc-lib-produto').value;
+  const dominio = document.getElementById('fc-lib-dominio').value;
+  if (!ano || !mes) { toast('Informe mês e ano', 'warning'); return; }
+  const r = await api('POST', '/v1/fechamento/liberar', { ano, mes, produto, dominio });
+  if (r?.erro) { toast(r.erro, 'danger'); return; }
+  toast(`Competência ${FC_MESES[mes]}/${ano} liberada`);
+  carregarFechamento();
+}
+
+async function fcRemoverLiberacao(id) {
+  if (!confirm('Remover esta liberação? A competência volta a exigir OK.')) return;
+  const r = await api('DELETE', `/v1/fechamento/liberar/${id}`);
+  if (r?.erro) { toast(r.erro, 'danger'); return; }
+  carregarFechamento();
 }
 
 // Atualiza o contador periodicamente e na carga inicial.

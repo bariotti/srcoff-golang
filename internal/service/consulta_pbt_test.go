@@ -82,6 +82,10 @@ func (f *fakeMovimentoRepoPaginado) ExcluirPorDataEVersao(ctx context.Context, d
 	return nil
 }
 
+func (f *fakeMovimentoRepoPaginado) VersoesMovimento(ctx context.Context, data time.Time, produto, dominio string) ([]int, error) {
+	return nil, nil
+}
+
 // ---------------------------------------------------------------------------
 // Property 8: Lote consolidado contém exatamente todos os lançamentos e estornos da data
 // ---------------------------------------------------------------------------

@@ -62,6 +62,10 @@ func (f *fakeMovimentoRepoEstorno) ExcluirPorDataEVersao(ctx context.Context, da
 	return nil
 }
 
+func (f *fakeMovimentoRepoEstorno) VersoesMovimento(ctx context.Context, data time.Time, produto, dominio string) ([]int, error) {
+	return nil, nil
+}
+
 // ---------------------------------------------------------------------------
 // Property 6: Invariantes do estorno — inversão de contas e indicador de reversão
 // ---------------------------------------------------------------------------

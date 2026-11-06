@@ -60,6 +60,22 @@ func (r *RegraContabilRepo) ListarRegrasAtivas(_ context.Context) ([]model.Regra
 	return result, nil
 }
 
+// ListarRegras (UI): neste backend não há rascunho — delega para as ativas e preenche o
+// status derivado (RF-125 é sqlite-first).
+func (r *RegraContabilRepo) ListarRegras(ctx context.Context) ([]model.RegraContabil, error) {
+	regras, err := r.ListarRegrasAtivas(ctx)
+	if err != nil {
+		return nil, err
+	}
+	for i := range regras {
+		regras[i].Status = model.NormalizaStatus(regras[i].Status, regras[i].Ativo)
+		for j := range regras[i].Condicoes {
+			regras[i].Condicoes[j].Status = model.NormalizaStatus(regras[i].Condicoes[j].Status, regras[i].Condicoes[j].Ativo)
+		}
+	}
+	return regras, nil
+}
+
 func (r *RegraContabilRepo) CriarRegra(_ context.Context, regra model.RegraContabil) (int64, error) {
 	s, err := r.load()
 	if err != nil {
@@ -120,6 +136,18 @@ func (r *RegraContabilRepo) ListarCondicoes(_ context.Context, idRegra int64) ([
 		}
 	}
 	return result, nil
+}
+
+// ListarCondicoesVisiveis (UI): delega para as ativas e preenche o status derivado.
+func (r *RegraContabilRepo) ListarCondicoesVisiveis(ctx context.Context, idRegra int64) ([]model.CondicaoRegra, error) {
+	conds, err := r.ListarCondicoes(ctx, idRegra)
+	if err != nil {
+		return nil, err
+	}
+	for i := range conds {
+		conds[i].Status = model.NormalizaStatus(conds[i].Status, conds[i].Ativo)
+	}
+	return conds, nil
 }
 
 func (r *RegraContabilRepo) CriarCondicao(_ context.Context, condicao model.CondicaoRegra) (int64, error) {

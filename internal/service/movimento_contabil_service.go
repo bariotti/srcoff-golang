@@ -31,6 +31,8 @@ type movimentoContabilRepo interface {
 	ConsultarPaginadoFiltrado(ctx context.Context, f model.FiltroMovimento) (*model.PaginaLancamentos, error)
 	ConsultarPaginadoFiltradoSemCancelados(ctx context.Context, f model.FiltroMovimento) (*model.PaginaLancamentos, error)
 	ExcluirPorDataEVersao(ctx context.Context, data time.Time, versao int) error
+	// VersoesMovimento lista as versões existentes (ordenadas) de um (data, produto, domínio).
+	VersoesMovimento(ctx context.Context, data time.Time, produto, dominio string) ([]int, error)
 }
 
 // inconsistenciaRepoWriter persiste as inconsistências detectadas no processamento.
@@ -76,6 +78,14 @@ type MovimentoContabilService struct {
 	saldoRepo          saldoContaWriter
 	moedaBaseRepo      moedaBaseLookup
 	cotacaoRepo        cotacaoLookup
+	fechamentoRepo     controleFechamentoReader
+}
+
+// controleFechamentoReader lê a configuração do controle de fechamento (RF-132) para bloquear
+// a geração de uma competência posterior a outra já processada enquanto não liberada.
+// Opcional: ausente (ex.: backends sem a feature) = sem trava.
+type controleFechamentoReader interface {
+	Carregar(ctx context.Context) (model.FechamentoConfig, error)
 }
 
 // saldoContaWriter mantém e consulta a projeção materializada de saldo (RN-170).
@@ -141,6 +151,14 @@ func (s *MovimentoContabilService) ComCotacaoRepo(r cotacaoLookup) *MovimentoCon
 // do incremental_reverte lê o saldo materializado e o serviço o mantém a cada geração.
 func (s *MovimentoContabilService) ComSaldoRepo(r saldoContaWriter) *MovimentoContabilService {
 	s.saldoRepo = r
+	return s
+}
+
+// ComFechamentoRepo injeta o controle de fechamento de competência (opcional, RF-132).
+// Quando presente, a geração pula as combinações cuja competência está fechada e ainda não
+// foi liberada (OK), para datas posteriores ao fechamento.
+func (s *MovimentoContabilService) ComFechamentoRepo(r controleFechamentoReader) *MovimentoContabilService {
+	s.fechamentoRepo = r
 	return s
 }
 
@@ -528,7 +546,41 @@ func (s *MovimentoContabilService) GerarMovimentoEscopo(ctx context.Context, dat
 			// Só bloqueia quando já há contábil anterior e falta o D-1 útil.
 			if temAnterior && !temD1 {
 				bloqueados[c.Produto+"\x00"+c.Dominio] = true
+				c.Motivo = "d1"
 				bloqueios = append(bloqueios, c)
+			}
+		}
+	}
+	// Trava de competência (RF-132): para uma combinação sob controle, bloqueia a geração de uma
+	// competência (mês/ano) que ainda não foi liberada E que é POSTERIOR a outra já processada
+	// (ou seja, há "fechamento" anterior). A primeira competência de cada combinação passa livre.
+	if s.fechamentoRepo != nil && s.execucaoRepo != nil {
+		if cfg, err := s.fechamentoRepo.Carregar(ctx); err == nil && cfg.Modo != model.FechamentoOff {
+			ano, mes := data.Year(), int(data.Month())
+			ymAtual := ano*12 + (mes - 1)
+			for _, c := range combosSet {
+				if bloqueados[c.Produto+"\x00"+c.Dominio] {
+					continue
+				}
+				if !cfg.Controla(c.Produto, c.Dominio) || cfg.Liberado(ano, mes, c.Produto, c.Dominio) {
+					continue
+				}
+				// Só bloqueia se já existe contábil numa competência (mês) ANTERIOR — o fechamento.
+				temCompetenciaAnterior := false
+				if datas, err := s.execucaoRepo.DatasComMovimento(ctx, c.Produto, c.Dominio); err == nil {
+					for _, d := range datas {
+						if d.Year()*12+(int(d.Month())-1) < ymAtual {
+							temCompetenciaAnterior = true
+							break
+						}
+					}
+				}
+				if temCompetenciaAnterior {
+					bloqueados[c.Produto+"\x00"+c.Dominio] = true
+					c.Motivo = "fechamento"
+					bloqueios = append(bloqueios, c)
+					log.Printf("[movimento] bloqueio fechamento: %s/%s não processado em %s (competência %04d-%02d não liberada)", c.Produto, c.Dominio, data.Format("2006-01-02"), ano, mes)
+				}
 			}
 		}
 	}
@@ -552,6 +604,9 @@ func (s *MovimentoContabilService) GerarMovimentoEscopo(ctx context.Context, dat
 		}
 		inconsistencias = incFiltradas
 		for _, b := range bloqueios {
+			if b.Motivo == "fechamento" {
+				continue // já registrado no bloco de fechamento
+			}
 			log.Printf("[movimento] bloqueio D-1: %s/%s não processado em %s (falta movimento do dia útil anterior)", b.Produto, b.Dominio, data.Format("2006-01-02"))
 		}
 	}
@@ -976,6 +1031,10 @@ func (s *MovimentoContabilService) PreviewExpressao(ctx context.Context, data ti
 	if err != nil {
 		return nil, err
 	}
+	// Normaliza a expressão e o campo do boleto igual ao cadastro/importação, para casar com
+	// as colunas normalizadas da posição.
+	expressao = evaluator.NormalizarExpressao(expressao)
+	campoBoleto = evaluator.NormalizarNome(campoBoleto)
 	// O identificador do boleto é lido do campo informado na condição (campo_boleto), caindo
 	// no padrão do sistema quando vazio — assim o filtro e o boleto exibido batem com a regra.
 	campoBol := campoBoletoOuPadrao(campoBoleto)
@@ -1077,6 +1136,9 @@ func (s *MovimentoContabilService) SimularRegra(ctx context.Context, in model.Si
 		})
 	}
 	regra.Condicoes = condicoes
+	// Normaliza nomes de coluna/expressões da regra candidata igual ao cadastro e à importação,
+	// para que a simulação case com as colunas normalizadas da posição.
+	normalizarCamposRegra(&regra)
 
 	posicoes, err := s.posicaoRepo.BuscarPorDataEVersaoMaxima(ctx, data)
 	if err != nil {
@@ -1230,6 +1292,549 @@ func (s *MovimentoContabilService) SimularRegra(ctx context.Context, in model.Si
 	}
 
 	res.Truncado = res.TotalLancamentos > len(res.Lancamentos) || res.TotalInconsistencias > len(res.Inconsistencias)
+	return res, nil
+}
+
+// chaveDiff identifica um lançamento entre versões (independe do valor).
+type chaveDiff struct {
+	boleto, cd, cc string
+	idRegra        int64
+	reversao       bool
+}
+
+// diffAgg acumula o valor (soma) de uma chave numa versão, guardando moeda/regra p/ exibição.
+type diffAgg struct {
+	valor float64
+	moeda string
+	regra string
+}
+
+func linhaDiff(k chaveDiff, meta diffAgg, valorA, valorB float64) model.DiffLinha {
+	return model.DiffLinha{
+		Boleto: k.boleto, ContaDebito: k.cd, ContaCredito: k.cc, IDRegra: k.idRegra, Reversao: k.reversao,
+		DescricaoRegra: meta.regra, Moeda: meta.moeda, ValorA: valorA, ValorB: valorB,
+	}
+}
+
+// somaPorChaveVersao lê os lançamentos de UMA versão (data, produto, domínio) e soma o
+// valor por chave — reusa a consulta "especifica" já existente (funciona nos 3 backends).
+func (s *MovimentoContabilService) somaPorChaveVersao(ctx context.Context, data time.Time, produto, dominio string, versao int) (map[chaveDiff]diffAgg, error) {
+	pag, err := s.movimentoRepo.ConsultarPaginadoFiltrado(ctx, model.FiltroMovimento{
+		DataInicio: data, DataFim: data, Produto: produto, Dominio: dominio,
+		VersaoModo: "especifica", Versao: versao, Pagina: 1, Tamanho: 1 << 30,
+	})
+	if err != nil {
+		return nil, err
+	}
+	m := map[chaveDiff]diffAgg{}
+	for _, l := range pag.Lancamentos {
+		k := chaveDiff{boleto: l.CodigoIdentificadorBoleto, cd: l.ContaDebito, cc: l.ContaCredito, idRegra: l.IDRegraContabil, reversao: l.IndicadorReversao}
+		agg := m[k]
+		agg.valor += l.ValorLancamentoContabil
+		if agg.moeda == "" {
+			agg.moeda = l.MoedaLancamentoContabil
+		}
+		if agg.regra == "" {
+			agg.regra = l.DescricaoRegraContabil
+		}
+		m[k] = agg
+	}
+	return m, nil
+}
+
+// DiffVersoes compara duas versões do movimento de um (data, produto, domínio) e devolve
+// os lançamentos adicionados (só em B), removidos (só em A) e alterados (mesma chave, valor/
+// moeda diferente). Sem versões informadas, usa o padrão "vigente × anterior". Spec: RF-124.
+func (s *MovimentoContabilService) DiffVersoes(ctx context.Context, in model.DiffVersoesInput) (*model.DiffVersoes, error) {
+	data, err := time.Parse("2006-01-02", strings.TrimSpace(in.Data))
+	if err != nil {
+		return nil, fmt.Errorf("data inválida (use AAAA-MM-DD)")
+	}
+	produto := strings.TrimSpace(in.Produto)
+	dominio := strings.TrimSpace(in.Dominio)
+	if produto == "" || dominio == "" {
+		return nil, fmt.Errorf("informe produto e domínio (a versão é por combinação)")
+	}
+	versoes, err := s.movimentoRepo.VersoesMovimento(ctx, data, produto, dominio)
+	if err != nil {
+		return nil, err
+	}
+	res := &model.DiffVersoes{
+		Data: in.Data, Produto: produto, Dominio: dominio, VersoesDisponiveis: versoes,
+		Adicionados: []model.DiffLinha{}, Removidos: []model.DiffLinha{}, Alterados: []model.DiffLinha{},
+	}
+	if len(versoes) == 0 {
+		res.Aviso = "Nenhum movimento para este produto/domínio na data."
+		return res, nil
+	}
+
+	// B padrão = vigente (maior versão). A padrão = versão imediatamente anterior na lista.
+	vb := in.VersaoB
+	if vb <= 0 {
+		vb = versoes[len(versoes)-1]
+	}
+	va := in.VersaoA
+	if va <= 0 {
+		for i, v := range versoes {
+			if v == vb && i > 0 {
+				va = versoes[i-1]
+				break
+			}
+		}
+	}
+	res.VersaoA, res.VersaoB = va, vb
+	if va == 0 {
+		res.Aviso = "Só existe uma versão para este produto/domínio: nada a comparar."
+		return res, nil
+	}
+	if va == vb {
+		res.Aviso = "As versões A e B são iguais."
+		return res, nil
+	}
+
+	mapA, err := s.somaPorChaveVersao(ctx, data, produto, dominio, va)
+	if err != nil {
+		return nil, err
+	}
+	mapB, err := s.somaPorChaveVersao(ctx, data, produto, dominio, vb)
+	if err != nil {
+		return nil, err
+	}
+
+	for k, a := range mapA {
+		if b, ok := mapB[k]; ok {
+			if math.Abs(a.valor-b.valor) > 1e-9 || !strings.EqualFold(a.moeda, b.moeda) {
+				res.Alterados = append(res.Alterados, linhaDiff(k, a, a.valor, b.valor))
+			}
+		} else {
+			res.Removidos = append(res.Removidos, linhaDiff(k, a, a.valor, 0))
+		}
+	}
+	for k, b := range mapB {
+		if _, ok := mapA[k]; !ok {
+			res.Adicionados = append(res.Adicionados, linhaDiff(k, b, 0, b.valor))
+		}
+	}
+	res.TotAdicionados = len(res.Adicionados)
+	res.TotRemovidos = len(res.Removidos)
+	res.TotAlterados = len(res.Alterados)
+	return res, nil
+}
+
+// esperadoBoleto acumula, por boleto, o valor que as regras ATIVAS lançariam sobre a posição
+// e o produto/domínio da posição.
+type esperadoBoleto struct {
+	valor   float64
+	produto string
+	dominio string
+}
+
+// valorEsperadoPorBoleto faz um dry-run das regras ativas sobre a posição vigente da data
+// (filtrada pelo escopo) e devolve, por boleto, o valor esperado (soma do campo_valor das
+// condições que disparariam). Cria uma entrada para TODO boleto da posição (valor 0 quando
+// nenhuma regra gera) — útil como "presença na posição". Spec: RF-131/RF-132.
+func (s *MovimentoContabilService) valorEsperadoPorBoleto(ctx context.Context, data time.Time, prodF, domF string) (map[string]*esperadoBoleto, error) {
+	regras, err := s.regraRepo.ListarRegrasAtivas(ctx)
+	if err != nil {
+		return nil, err
+	}
+	posicoes, err := s.posicaoRepo.BuscarPorDataEVersaoMaxima(ctx, data)
+	if err != nil {
+		return nil, err
+	}
+	var todasCond []model.CondicaoRegra
+	for _, r := range regras {
+		todasCond = append(todasCond, r.Condicoes...)
+	}
+	out := map[string]*esperadoBoleto{}
+	for _, pos := range posicoes {
+		env := evaluator.PosicaoToEnv(pos)
+		pprod := evaluator.CampoString(env, "produto")
+		pdom := evaluator.CampoString(env, "dominio")
+		if prodF != "" && pprod != prodF {
+			continue
+		}
+		if domF != "" && pdom != domF {
+			continue
+		}
+		boleto := boletoDaPosicao(env, todasCond)
+		if boleto == "" {
+			boleto = fmt.Sprintf("pos#%d", pos.ID)
+		}
+		eb := out[boleto]
+		if eb == nil {
+			eb = &esperadoBoleto{produto: pprod, dominio: pdom}
+			out[boleto] = eb
+		}
+		for _, regra := range regras {
+			if !regraAplicaAPosicao(regra, env) {
+				continue
+			}
+			if pc := strings.TrimSpace(regra.PreCondicao); pc != "" {
+				if len(camposFaltantes(env, pc)) > 0 {
+					continue
+				}
+				if ok, err := s.evaluator.EvaluateCondition(pc, env); err != nil || !ok {
+					continue
+				}
+			}
+			for _, c := range regra.Condicoes {
+				if len(camposFaltantes(env, c.Condicao)) > 0 {
+					continue
+				}
+				if strings.TrimSpace(c.Condicao) != "" {
+					if ok, err := s.evaluator.EvaluateCondition(c.Condicao, env); err != nil || !ok {
+						continue
+					}
+				}
+				if len(camposFaltantes(env, c.CampoValor)) > 0 {
+					continue
+				}
+				if v, err := s.evaluator.EvaluateValue(c.CampoValor, env); err == nil {
+					eb.valor += v
+				}
+			}
+		}
+	}
+	return out, nil
+}
+
+// Conciliar faz, em UMA execução, a conciliação posição × movimento da data/escopo (RF-131):
+//  (1) Saldo × Posição: compara cada saldo projetado (saldo_conta) com o valor da posição na
+//      COLUNA que alimenta a regra (campo_valor da condição daquele saldo, achada pelas contas).
+//  (2) Na posição, sem contábil: boletos na posição que uma regra deveria gerar (esperado>0)
+//      mas sem lançamento no movimento vigente (órfãos).
+func (s *MovimentoContabilService) Conciliar(ctx context.Context, data time.Time, produto, dominio string) (*model.Conciliacao, error) {
+	prodF, domF := strings.TrimSpace(produto), strings.TrimSpace(dominio)
+	const tol = 0.005
+	const limite = 3000
+	res := &model.Conciliacao{Data: data.Format("2006-01-02"), Divergencias: []model.ConciliacaoSaldoLinha{}, Orfaos: []model.ConciliacaoOrfao{}}
+
+	regras, err := s.regraRepo.ListarRegrasAtivas(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("erro ao carregar regras: %w", err)
+	}
+	regraByID := map[int64]model.RegraContabil{}
+	for _, r := range regras {
+		regraByID[r.ID] = r
+	}
+	posicoes, err := s.posicaoRepo.BuscarPorDataEVersaoMaxima(ctx, data)
+	if err != nil {
+		return nil, fmt.Errorf("erro ao buscar posição: %w", err)
+	}
+	var todasCond []model.CondicaoRegra
+	for _, r := range regras {
+		todasCond = append(todasCond, r.Condicoes...)
+	}
+	envPorBoleto := map[string]map[string]interface{}{}
+	for _, pos := range posicoes {
+		env := evaluator.PosicaoToEnv(pos)
+		pprod := evaluator.CampoString(env, "produto")
+		pdom := evaluator.CampoString(env, "dominio")
+		if prodF != "" && pprod != prodF {
+			continue
+		}
+		if domF != "" && pdom != domF {
+			continue
+		}
+		b := boletoDaPosicao(env, todasCond)
+		if b == "" {
+			b = fmt.Sprintf("pos#%d", pos.ID)
+		}
+		if _, ok := envPorBoleto[b]; !ok {
+			envPorBoleto[b] = env
+		}
+	}
+
+	// (1) Saldo × Posição — precisa da projeção de saldo (RN-170).
+	if s.saldoRepo == nil {
+		res.SaldoDesativado = true
+	} else {
+		// IncluiZero=false: só saldos com valor, alinhado à tela Saldos (que oculta zero).
+		saldos, err := s.saldoRepo.Listar(ctx, model.SaldoFiltro{Produto: prodF, Dominio: domF})
+		if err != nil {
+			return nil, fmt.Errorf("erro ao listar saldos: %w", err)
+		}
+		for _, sc := range saldos {
+			// Localiza a regra e a condição do saldo (pelas contas; fallback: 1ª condição).
+			var regra model.RegraContabil
+			var cond *model.CondicaoRegra
+			if reg, ok := regraByID[sc.IDRegraContabil]; ok {
+				regra = reg
+				for i := range reg.Condicoes {
+					if reg.Condicoes[i].ContaDebito == sc.ContaDebito && reg.Condicoes[i].ContaCredito == sc.ContaCredito {
+						cond = &reg.Condicoes[i]
+						break
+					}
+				}
+				if cond == nil && len(reg.Condicoes) > 0 {
+					cond = &reg.Condicoes[0]
+				}
+			}
+			campoValor := ""
+			if cond != nil {
+				campoValor = cond.CampoValor
+			}
+			linha := model.ConciliacaoSaldoLinha{
+				Boleto: sc.CodigoIdentificadorBoleto, Produto: sc.Produto, Dominio: sc.Dominio,
+				IDRegra: sc.IDRegraContabil, Regra: sc.DescricaoRegra, ContaDebito: sc.ContaDebito,
+				ContaCredito: sc.ContaCredito, CampoValor: campoValor, Saldo: sc.Saldo,
+			}
+			env, temPos := envPorBoleto[sc.CodigoIdentificadorBoleto]
+			// Valor que a regra lançaria na posição HOJE, honrando escopo, PRÉ-CONDIÇÃO e condição.
+			// Se a pré-condição/condição não dispara, o esperado é 0 (nada a lançar) — então um
+			// saldo zerado está CORRETO e não é divergência.
+			esperado := 0.0
+			if temPos && cond != nil && regraAplicaAPosicao(regra, env) {
+				dispara := true
+				if pc := strings.TrimSpace(regra.PreCondicao); pc != "" {
+					if len(camposFaltantes(env, pc)) > 0 {
+						dispara = false
+					} else if ok, err := s.evaluator.EvaluateCondition(pc, env); err != nil || !ok {
+						dispara = false
+					}
+				}
+				if dispara && strings.TrimSpace(cond.Condicao) != "" {
+					if len(camposFaltantes(env, cond.Condicao)) > 0 {
+						dispara = false
+					} else if ok, err := s.evaluator.EvaluateCondition(cond.Condicao, env); err != nil || !ok {
+						dispara = false
+					}
+				}
+				if dispara && cond.CampoValor != "" && len(camposFaltantes(env, cond.CampoValor)) == 0 {
+					if v, err := s.evaluator.EvaluateValue(cond.CampoValor, env); err == nil {
+						esperado = v
+					}
+				}
+			}
+			linha.ValorPosicao = esperado
+			if math.Abs(sc.Saldo-esperado) <= tol {
+				res.TotValorOk++
+				continue // saldo bate com o esperado → ok, não entra na lista
+			}
+			if !temPos {
+				linha.Status = "sem_posicao"
+				res.TotSemPosicao++
+			} else {
+				linha.Status = "divergente"
+				res.TotDivergentes++
+			}
+			if len(res.Divergencias) < limite {
+				res.Divergencias = append(res.Divergencias, linha)
+			}
+		}
+		sort.Slice(res.Divergencias, func(i, j int) bool {
+			if res.Divergencias[i].Status != res.Divergencias[j].Status {
+				return res.Divergencias[i].Status < res.Divergencias[j].Status
+			}
+			return res.Divergencias[i].Boleto < res.Divergencias[j].Boleto
+		})
+	}
+
+	// (2) Na posição, sem contábil (órfãos).
+	esperado, err := s.valorEsperadoPorBoleto(ctx, data, prodF, domF)
+	if err != nil {
+		return nil, err
+	}
+	pag, err := s.movimentoRepo.ConsultarPaginadoFiltrado(ctx, model.FiltroMovimento{
+		DataInicio: data, DataFim: data, Produto: prodF, Dominio: domF, VersaoModo: "vigente", Pagina: 1, Tamanho: 1 << 30,
+	})
+	if err != nil {
+		return nil, err
+	}
+	temMov := map[string]bool{}
+	for _, l := range pag.Lancamentos {
+		temMov[l.CodigoIdentificadorBoleto] = true
+	}
+	for b, eb := range esperado {
+		if eb.valor > tol && !temMov[b] {
+			res.TotOrfaos++
+			if len(res.Orfaos) < limite {
+				res.Orfaos = append(res.Orfaos, model.ConciliacaoOrfao{Boleto: b, Produto: eb.produto, Dominio: eb.dominio, ValorEsperado: eb.valor})
+			}
+		}
+	}
+	sort.Slice(res.Orfaos, func(i, j int) bool { return res.Orfaos[i].Boleto < res.Orfaos[j].Boleto })
+
+	res.Truncado = (res.TotDivergentes+res.TotSemPosicao) > len(res.Divergencias) || res.TotOrfaos > len(res.Orfaos)
+	return res, nil
+}
+
+
+// Balancete de verificação (RF-127): Σ débitos × Σ créditos por conta no período, a partir
+// dos lançamentos do período/escopo. Cada lançamento debita sua conta_debito e credita sua
+// conta_credito (estornos já vêm com as contas invertidas). Por construção Σdéb==Σcréd.
+func (s *MovimentoContabilService) Balancete(ctx context.Context, dataInicio, dataFim time.Time, produto, dominio, versaoModo string) (*model.Balancete, error) {
+	if versaoModo == "" {
+		versaoModo = "vigente"
+	}
+	pag, err := s.movimentoRepo.ConsultarPaginadoFiltrado(ctx, model.FiltroMovimento{
+		DataInicio: dataInicio, DataFim: dataFim, Produto: produto, Dominio: dominio,
+		VersaoModo: versaoModo, Pagina: 1, Tamanho: 1 << 30,
+	})
+	if err != nil {
+		return nil, err
+	}
+	deb := map[string]float64{}
+	cred := map[string]float64{}
+	contas := map[string]bool{}
+	for _, l := range pag.Lancamentos {
+		deb[l.ContaDebito] += l.ValorLancamentoContabil
+		cred[l.ContaCredito] += l.ValorLancamentoContabil
+		contas[l.ContaDebito] = true
+		contas[l.ContaCredito] = true
+	}
+	lista := make([]model.BalanceteConta, 0, len(contas))
+	var td, tc float64
+	for c := range contas {
+		lista = append(lista, model.BalanceteConta{Conta: c, Debito: deb[c], Credito: cred[c], Saldo: deb[c] - cred[c]})
+		td += deb[c]
+		tc += cred[c]
+	}
+	sort.Slice(lista, func(i, j int) bool { return lista[i].Conta < lista[j].Conta })
+	dif := td - tc
+	return &model.Balancete{
+		DataInicio: dataInicio.Format("2006-01-02"), DataFim: dataFim.Format("2006-01-02"),
+		Contas: lista, TotalDebito: td, TotalCredito: tc, Diferenca: dif, Balanceado: math.Abs(dif) < 0.005,
+	}, nil
+}
+
+// SerieSaldoConta (RF-130): evolução do movimento líquido (débito−crédito) de UMA conta ao
+// longo das datas do período (vigente), com o saldo acumulado.
+func (s *MovimentoContabilService) SerieSaldoConta(ctx context.Context, dataInicio, dataFim time.Time, conta, produto, dominio string) (*model.SerieSaldo, error) {
+	conta = strings.TrimSpace(conta)
+	if conta == "" {
+		return nil, fmt.Errorf("informe a conta")
+	}
+	pag, err := s.movimentoRepo.ConsultarPaginadoFiltrado(ctx, model.FiltroMovimento{
+		DataInicio: dataInicio, DataFim: dataFim, Produto: produto, Dominio: dominio,
+		VersaoModo: "vigente", Pagina: 1, Tamanho: 1 << 30,
+	})
+	if err != nil {
+		return nil, err
+	}
+	debData := map[string]float64{}
+	credData := map[string]float64{}
+	datas := map[string]bool{}
+	for _, l := range pag.Lancamentos {
+		d := l.DataLoteContabil.Format("2006-01-02")
+		if l.ContaDebito == conta {
+			debData[d] += l.ValorLancamentoContabil
+			datas[d] = true
+		}
+		if l.ContaCredito == conta {
+			credData[d] += l.ValorLancamentoContabil
+			datas[d] = true
+		}
+	}
+	ds := make([]string, 0, len(datas))
+	for d := range datas {
+		ds = append(ds, d)
+	}
+	sort.Strings(ds)
+	res := &model.SerieSaldo{Conta: conta, Pontos: []model.PontoSerieSaldo{}}
+	var acum float64
+	for _, d := range ds {
+		net := debData[d] - credData[d]
+		acum += net
+		res.Pontos = append(res.Pontos, model.PontoSerieSaldo{Data: d, Debito: debData[d], Credito: credData[d], Net: net, Acumulado: acum})
+	}
+	return res, nil
+}
+
+// CoberturaPosicoes (RF-128): classifica cada posição vigente da data/escopo em coberta
+// (≥1 regra ativa geraria lançamento), inconsistente (campo ausente/erro) ou órfã (nenhuma
+// regra casou). Reaproveita a mesma avaliação da geração.
+func (s *MovimentoContabilService) CoberturaPosicoes(ctx context.Context, data time.Time, produto, dominio string) (*model.Cobertura, error) {
+	regras, err := s.regraRepo.ListarRegrasAtivas(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("erro ao carregar regras: %w", err)
+	}
+	posicoes, err := s.posicaoRepo.BuscarPorDataEVersaoMaxima(ctx, data)
+	if err != nil {
+		return nil, fmt.Errorf("erro ao buscar posição: %w", err)
+	}
+	var todasCond []model.CondicaoRegra
+	for _, r := range regras {
+		todasCond = append(todasCond, r.Condicoes...)
+	}
+	const limite = 2000
+	res := &model.Cobertura{Data: data.Format("2006-01-02"), BoletosOrfaos: []model.CoberturaBoleto{}, BoletosInconsistentes: []model.CoberturaBoleto{}}
+	prodF, domF := strings.TrimSpace(produto), strings.TrimSpace(dominio)
+	for _, pos := range posicoes {
+		env := evaluator.PosicaoToEnv(pos)
+		pprod := evaluator.CampoString(env, "produto")
+		pdom := evaluator.CampoString(env, "dominio")
+		if prodF != "" && pprod != prodF {
+			continue
+		}
+		if domF != "" && pdom != domF {
+			continue
+		}
+		res.TotalPosicoes++
+		gerou, inconsistente := false, false
+		for _, regra := range regras {
+			if !regraAplicaAPosicao(regra, env) {
+				continue
+			}
+			if pc := strings.TrimSpace(regra.PreCondicao); pc != "" {
+				if len(camposFaltantes(env, pc)) > 0 {
+					inconsistente = true
+					continue
+				}
+				ok, err := s.evaluator.EvaluateCondition(pc, env)
+				if err != nil {
+					inconsistente = true
+					continue
+				}
+				if !ok {
+					continue
+				}
+			}
+			for _, c := range regra.Condicoes {
+				if len(camposFaltantes(env, c.Condicao)) > 0 {
+					inconsistente = true
+					continue
+				}
+				if strings.TrimSpace(c.Condicao) != "" {
+					ok, err := s.evaluator.EvaluateCondition(c.Condicao, env)
+					if err != nil {
+						inconsistente = true
+						continue
+					}
+					if !ok {
+						continue
+					}
+				}
+				if len(camposFaltantes(env, c.CampoValor)) > 0 {
+					inconsistente = true
+					continue
+				}
+				gerou = true
+			}
+		}
+		boleto := boletoDaPosicao(env, todasCond)
+		if boleto == "" {
+			boleto = fmt.Sprintf("pos#%d", pos.ID)
+		}
+		cb := model.CoberturaBoleto{Boleto: boleto, Produto: pprod, Dominio: pdom}
+		switch {
+		case gerou:
+			res.Cobertos++
+		case inconsistente:
+			res.Inconsistentes++
+			if len(res.BoletosInconsistentes) < limite {
+				cb.Detalhe = "campo(s) ausente(s) ou condição com erro"
+				res.BoletosInconsistentes = append(res.BoletosInconsistentes, cb)
+			}
+		default:
+			res.Orfaos++
+			if len(res.BoletosOrfaos) < limite {
+				res.BoletosOrfaos = append(res.BoletosOrfaos, cb)
+			}
+		}
+	}
+	res.Truncado = res.Orfaos > len(res.BoletosOrfaos) || res.Inconsistentes > len(res.BoletosInconsistentes)
 	return res, nil
 }
 
@@ -1833,6 +2438,8 @@ func (s *MovimentoContabilService) InserirLancamentosManuais(ctx context.Context
 			IDRegraContabil:           reg.ID,
 			Origem:                    model.OrigemManual,
 			Veiculo:                   strings.TrimSpace(it.Veiculo),
+			ValorMoedaBaseVeiculo:     it.ValorMoedaBaseVeiculo,
+			MoedaBaseVeiculo:          strings.TrimSpace(it.MoedaBaseVeiculo),
 		})
 	}
 

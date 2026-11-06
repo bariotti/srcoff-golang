@@ -13,6 +13,10 @@ const (
 	// Importação automática de cotações (reusa o mesmo intervalo de varredura).
 	ConfigPastaCotacaoMonitorada  = "pasta_cotacao_monitorada"
 	ConfigPastaCotacaoProcessados = "pasta_cotacao_processados"
+	// Geração agendada do contábil (RF-126): horário diário HH:MM (vazio = desativado) e escopo.
+	ConfigGeracaoHorario = "geracao_horario"
+	ConfigGeracaoProduto = "geracao_produto"
+	ConfigGeracaoDominio = "geracao_dominio"
 )
 
 type configuracaoRepo interface {

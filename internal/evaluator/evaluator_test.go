@@ -9,6 +9,33 @@ import (
 	"time"
 )
 
+func TestNormalizarExpressao(t *testing.T) {
+	casos := []struct{ in, want string }{
+		// Identificadores com maiúsculas/acento são normalizados para casar com a coluna da posição.
+		{"VALOR_MTM > 0", "valor_mtm > 0"},
+		{"posição == \"X\"", "posicao == \"X\""},
+		// Literais de texto NÃO são tocados, mesmo com acento/maiúscula dentro.
+		{"tipo == \"Valor ALTO\"", "tipo == \"Valor ALTO\""},
+		// Nome de função (callee) preservado; só o argumento-coluna é normalizado.
+		{"len(Lista) > 0", "len(lista) > 0"},
+		// Já normalizada → devolvida intacta (sem reformatar).
+		{"valor_mtm > 0 and tipo == \"x\"", "valor_mtm > 0 and tipo == \"x\""},
+		// Nome de coluna com ESPAÇO (caso do usuário): palavras ligadas viram um identificador.
+		{"valor MTM > 0", "valor_mtm > 0"},
+		{"valor mtm", "valor_mtm"},
+		{"valor MTM > 0 and MOEDA == \"USD\"", "valor_mtm > 0 and moeda == \"USD\""},
+		// Números não são tocados.
+		{"valor_mtm * 1.5", "valor_mtm * 1.5"},
+		// Vazio/espaços → vazio.
+		{"   ", ""},
+	}
+	for _, c := range casos {
+		if got := NormalizarExpressao(c.in); got != c.want {
+			t.Errorf("NormalizarExpressao(%q) = %q, esperado %q", c.in, got, c.want)
+		}
+	}
+}
+
 func TestLogEvalError_FormatAndContext(t *testing.T) {
 	var buf bytes.Buffer
 	log.SetOutput(&buf)

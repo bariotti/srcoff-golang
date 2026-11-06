@@ -72,4 +72,8 @@ type LancamentoManualInput struct {
 	IDCondicao        int64   `json:"id_condicao"`
 	Valor             float64 `json:"valor"`
 	IndicadorReversao bool    `json:"indicador_reversao"`
+	// Valor e moeda na moeda base do veículo, DIGITADOS pelo usuário (sem confronto com o
+	// cadastro de veículo / De/Para) no lançamento manual.
+	ValorMoedaBaseVeiculo float64 `json:"valor_moeda_base_veiculo"`
+	MoedaBaseVeiculo      string  `json:"moeda_base_veiculo"`
 }

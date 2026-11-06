@@ -6,6 +6,10 @@ import "time"
 type ProdutoDominio struct {
 	Produto string `json:"produto"`
 	Dominio string `json:"dominio"`
+	// Motivo (opcional) explica por que a combinação foi bloqueada na geração, p.ex.
+	// "d1" (falta o movimento do dia útil anterior) ou "fechamento" (competência fechada,
+	// aguardando liberação). Vazio quando não se aplica.
+	Motivo string `json:"motivo,omitempty"`
 }
 
 // MovimentoExecucao registra que o contábil foi executado para uma combinação

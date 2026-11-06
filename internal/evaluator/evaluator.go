@@ -6,6 +6,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode"
 
 	"github.com/expr-lang/expr"
 	"github.com/expr-lang/expr/ast"
@@ -186,6 +187,104 @@ func CamposReferenciados(expression string) ([]string, error) {
 	}
 	camposRefCache.Store(expression, campos)
 	return campos, nil
+}
+
+// NormalizarExpressao normaliza os nomes de coluna referenciados numa expressão para o mesmo
+// formato snake_case sem acento usado na importação da posição, preservando literais de texto,
+// números, operadores e nomes de função. Trabalha em nível de texto (não pelo parser), porque
+// o usuário costuma digitar a coluna como ela aparece — com maiúsculas, acento OU ESPAÇO
+// ("valor MTM"). Como na gramática do expr dois identificadores separados só por espaço nunca
+// formam expressão válida, uma sequência de palavras ligadas por espaço é tratada como UM nome
+// de coluna e vira snake_case. Exemplos: "valor MTM > 0" → "valor_mtm > 0"; "VALOR_MTM" →
+// "valor_mtm"; 'tipo == "Valor ALTO"' fica igual (literal preservado); "len(Lista)" →
+// "len(lista)" (nome de função antes de "(" é preservado).
+func NormalizarExpressao(expression string) string {
+	if strings.TrimSpace(expression) == "" {
+		return ""
+	}
+	runes := []rune(expression)
+	n := len(runes)
+	var out strings.Builder
+	ehTokenChar := func(r rune) bool {
+		return r == '_' || unicode.IsLetter(r) || unicode.IsDigit(r)
+	}
+	// Lê a palavra (sequência de token-chars) que começa em p; devolve o fim (exclusivo).
+	fimPalavra := func(p int) int {
+		for p < n && ehTokenChar(runes[p]) {
+			p++
+		}
+		return p
+	}
+	// Palavras-chave/operadores do expr: separam operandos, nunca fazem parte de uma coluna.
+	reservadas := map[string]bool{
+		"and": true, "or": true, "not": true, "in": true, "matches": true,
+		"contains": true, "startswith": true, "endswith": true,
+		"true": true, "false": true, "nil": true, "let": true, "if": true, "else": true,
+	}
+	for i := 0; i < n; {
+		r := runes[i]
+		// Literal de texto: copia verbatim até a aspa de fechamento (respeitando escape).
+		if r == '"' || r == '\'' {
+			aspa := r
+			out.WriteRune(r)
+			i++
+			for i < n {
+				if runes[i] == '\\' && i+1 < n {
+					out.WriteRune(runes[i])
+					out.WriteRune(runes[i+1])
+					i += 2
+					continue
+				}
+				out.WriteRune(runes[i])
+				if runes[i] == aspa {
+					i++
+					break
+				}
+				i++
+			}
+			continue
+		}
+		if ehTokenChar(r) {
+			inicio := i
+			fim := fimPalavra(i)
+			// Palavra-chave isolada (and/or/not/...): emite em minúsculas, não é coluna.
+			if reservadas[strings.ToLower(string(runes[inicio:fim]))] {
+				out.WriteString(strings.ToLower(string(runes[inicio:fim])))
+				i = fim
+				continue
+			}
+			// Junta palavras seguintes ligadas só por espaço (ex.: "valor MTM") na mesma coluna,
+			// parando antes de uma palavra-chave reservada.
+			for {
+				p := fim
+				for p < n && (runes[p] == ' ' || runes[p] == '\t') {
+					p++
+				}
+				if p >= n || !ehTokenChar(runes[p]) {
+					break
+				}
+				q := fimPalavra(p)
+				if reservadas[strings.ToLower(string(runes[p:q]))] {
+					break
+				}
+				fim = q
+			}
+			run := string(runes[inicio:fim])
+			i = fim
+			switch {
+			case i < n && runes[i] == '(': // nome de função: preserva
+				out.WriteString(run)
+			case strings.IndexFunc(run, unicode.IsLetter) >= 0: // tem letra → é coluna
+				out.WriteString(NormalizarNome(run))
+			default: // número/sem letra: não mexe
+				out.WriteString(run)
+			}
+			continue
+		}
+		out.WriteRune(r)
+		i++
+	}
+	return out.String()
 }
 
 // LogEvalError registra um erro de avaliação de expressão com contexto completo:

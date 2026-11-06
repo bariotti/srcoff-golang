@@ -106,42 +106,51 @@ func (h *ExportHandler) ExportMovimentoCSV(w http.ResponseWriter, r *http.Reques
 	writer := csv.NewWriter(&buf)
 	writer.Comma = ';'
 
-	// Cabeçalho
+	// Valor com separador decimal "." e SEM separador de milhar (2 casas).
+	fmtValor := func(v float64) string {
+		return strconv.FormatFloat(v, 'f', 2, 64)
+	}
+
+	// Cabeçalho (layout de integração) — datas em MM/DD/YYYY.
 	writer.Write([]string{
-		"Data Lote",
-		"Versão",
-		"Boleto",
-		"Veículo",
-		"Conta Débito",
-		"Conta Crédito",
-		"Valor",
-		"Moeda",
-		"Valor Moeda Base Veículo",
-		"Moeda Base Veículo",
-		"Reversão",
-		"Regra",
-		"Condição",
+		"PRODUTO",
+		"DATA_MOVIMENTO",
+		"VEICULO",
+		"CONTRATO",
+		"ID_REGRA",
+		"REGRA",
+		"VALOR",
+		"CONTA_DEBITO",
+		"CONTA_CREDITO",
+		"MOEDA",
+		"REVERSAO",
+		"DATA_CONVERSAO",
+		"VALOR_CONVERTIDO",
+		"VALOR_COTACAO",
+		"ENTRY_DATE",
 	})
 
 	for _, l := range resultado.Lancamentos {
-		reversao := "Não"
+		reversao := "N"
 		if l.IndicadorReversao {
-			reversao = "Sim"
+			reversao = "Y"
 		}
 		writer.Write([]string{
-			l.DataLoteContabil.Format("2006-01-02"),
-			strconv.Itoa(l.CodigoVersaoConteudo),
-			l.CodigoIdentificadorBoleto,
-			veiculoSaida(l.Veiculo),
-			l.ContaDebito,
-			l.ContaCredito,
-			fmt.Sprintf("%.6f", l.ValorLancamentoContabil),
-			l.MoedaLancamentoContabil,
-			fmt.Sprintf("%.6f", l.ValorMoedaBaseVeiculo),
-			l.MoedaBaseVeiculo,
-			reversao,
-			l.DescricaoRegraContabil,
-			l.DescricaoCondicaoContabil,
+			l.Produto,                                // PRODUTO
+			l.DataLoteContabil.Format("01/02/2006"),  // DATA_MOVIMENTO (MM/DD/YYYY)
+			veiculoSaida(l.Veiculo),                  // VEICULO (código do De/Para)
+			l.CodigoIdentificadorBoleto,              // CONTRATO (boleto)
+			strconv.FormatInt(l.IDRegraContabil, 10), // ID_REGRA
+			l.DescricaoRegraContabil,                 // REGRA
+			fmtValor(l.ValorLancamentoContabil),      // VALOR
+			l.ContaDebito,                            // CONTA_DEBITO
+			l.ContaCredito,                           // CONTA_CREDITO
+			l.MoedaLancamentoContabil,                // MOEDA
+			reversao,                                 // REVERSAO (Y/N)
+			"",                                       // DATA_CONVERSAO (em branco)
+			fmtValor(l.ValorMoedaBaseVeiculo),        // VALOR_CONVERTIDO (moeda base do veículo)
+			"",                                       // VALOR_COTACAO (em branco)
+			"",                                       // ENTRY_DATE (em branco)
 		})
 	}
 	writer.Flush()

@@ -3,8 +3,11 @@ package handler
 import (
 	"encoding/json"
 	"net/http"
+	"strings"
 
 	"github.com/expr-lang/expr"
+
+	"srcoff/internal/evaluator"
 )
 
 // ValidarExpressaoHandler valida a sintaxe de uma expressão antes de persistir.
@@ -26,28 +29,38 @@ func (h *ValidarExpressaoHandler) Validar(w http.ResponseWriter, r *http.Request
 		return
 	}
 
+	// Normaliza igual ao cadastro ANTES de validar, para que o usuário veja o mesmo
+	// resultado que será gravado (ex.: "valor MTM > 0" → "valor_mtm > 0"). Assim a
+	// tela não acusa "inválida" numa expressão que o salvar aceitaria.
+	normalizada := evaluator.NormalizarExpressao(req.Expressao)
+
 	// Validação apenas de SINTAXE (compilação). Não executamos contra um env de
 	// exemplo fixo, pois a posição é dinâmica: qualquer campo importado pode ser
 	// referenciado e não deve ser rejeitado como "campo desconhecido".
 	var compileErr error
 	if req.Tipo == "valor" {
-		_, compileErr = expr.Compile(req.Expressao)
+		_, compileErr = expr.Compile(normalizada)
 	} else {
-		_, compileErr = expr.Compile(req.Expressao, expr.AsBool())
+		_, compileErr = expr.Compile(normalizada, expr.AsBool())
 	}
 
 	if compileErr != nil {
-		sugestao := gerarSugestao(req.Expressao, compileErr.Error())
+		sugestao := gerarSugestao(normalizada, compileErr.Error())
 		writeJSON(w, http.StatusOK, map[string]interface{}{
-			"valido":   false,
-			"erro":     compileErr.Error(),
-			"sugestao": sugestao,
+			"valido":      false,
+			"erro":        compileErr.Error(),
+			"sugestao":    sugestao,
+			"normalizada": normalizada,
 		})
 		return
 	}
 
+	// Sinaliza quando a forma normalizada difere do que foi digitado, para a UI mostrar
+	// ao usuário como a expressão será efetivamente salva.
 	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"valido": true,
+		"valido":      true,
+		"normalizada": normalizada,
+		"alterada":    strings.TrimSpace(req.Expressao) != normalizada,
 	})
 }
 

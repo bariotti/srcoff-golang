@@ -300,6 +300,27 @@ func (r *MovimentoContabilRepo) consultarFiltrado(ctx context.Context, f model.F
 	return &model.PaginaLancamentos{Total: total, Pagina: f.Pagina, Tamanho: f.Tamanho, Lancamentos: lancamentos}, nil
 }
 
+// VersoesMovimento lista as versões existentes (ordenadas) de um (data, produto, domínio).
+// Usado pelo diff de versões (RF-124). produto/domínio são colunas NOT NULL.
+func (r *MovimentoContabilRepo) VersoesMovimento(ctx context.Context, data time.Time, produto, dominio string) ([]int, error) {
+	rows, err := r.db.QueryContext(ctx,
+		"SELECT DISTINCT codigo_versao_conteudo FROM movimento_contabil WHERE data_lote_contabil = ? AND produto = ? AND dominio = ? ORDER BY codigo_versao_conteudo",
+		fmtData(data), produto, dominio)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var vs []int
+	for rows.Next() {
+		var v int
+		if err := rows.Scan(&v); err != nil {
+			return nil, err
+		}
+		vs = append(vs, v)
+	}
+	return vs, rows.Err()
+}
+
 // ExpurgarAteData apaga os lançamentos cuja data de lote é <= corte (retenção).
 // Retorna quantas linhas foram removidas. Usado pelo job de expurgo (RF-123).
 func (r *MovimentoContabilRepo) ExpurgarAteData(ctx context.Context, corte time.Time) (int64, error) {

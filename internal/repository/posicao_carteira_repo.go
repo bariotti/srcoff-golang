@@ -21,6 +21,31 @@ func NewPosicaoCarteiraRepo(db *sql.DB) *PosicaoCarteiraRepo {
 	return &PosicaoCarteiraRepo{db: db}
 }
 
+// UltimaDataPosicao devolve a data mais recente com posição importada (RF-126).
+func (r *PosicaoCarteiraRepo) UltimaDataPosicao(ctx context.Context) (time.Time, bool, error) {
+	var v interface{}
+	if err := r.db.QueryRowContext(ctx, "SELECT MAX(data_posicao_carteira) FROM posicao_carteira").Scan(&v); err != nil {
+		return time.Time{}, false, err
+	}
+	switch t := v.(type) {
+	case time.Time:
+		return t, true, nil
+	case string:
+		if len(t) >= 10 {
+			if pt, err := time.Parse("2006-01-02", t[:10]); err == nil {
+				return pt, true, nil
+			}
+		}
+	case []byte:
+		if s := string(t); len(s) >= 10 {
+			if pt, err := time.Parse("2006-01-02", s[:10]); err == nil {
+				return pt, true, nil
+			}
+		}
+	}
+	return time.Time{}, false, nil
+}
+
 func (r *PosicaoCarteiraRepo) BuscarPorDataEVersaoMaxima(ctx context.Context, data time.Time) ([]model.PosicaoCarteira, error) {
 	dataStr := data.Format("2006-01-02")
 

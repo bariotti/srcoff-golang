@@ -46,6 +46,11 @@ func Open(path string) (*sql.DB, error) {
 	if err := migrarMovimentoProdutoDominioNotNull(context.Background(), db); err != nil {
 		return nil, err
 	}
+	// Status explícito (rascunho/ativa/excluida) em regra/condição; backfill a partir do
+	// booleano `ativo` em bancos antigos (RF-125).
+	if err := migrarStatusRegraCondicao(context.Background(), db); err != nil {
+		return nil, err
+	}
 	// Sem seed de opções padrão: os combos (Produto/Domínio) nascem vazios e são
 	// cadastrados pelo usuário via Parametrizações (ADR-009, docs/especificacao.md §8.4).
 	return db, nil
@@ -172,6 +177,37 @@ func migrarMovimentoProdutoDominioNotNull(ctx context.Context, db *sql.DB) error
 	return tx.Commit()
 }
 
+// migrarStatusRegraCondicao adiciona a coluna `status` a regra_contabil/condicao_regra em
+// bancos antigos e faz o backfill a partir de `ativo` (ativo=1→'ativa', 0→'excluida'). Roda
+// uma única vez por tabela (guardada por colunaExiste) — depois o status é a fonte de verdade.
+func migrarStatusRegraCondicao(ctx context.Context, db *sql.DB) error {
+	for _, tabela := range []string{"regra_contabil", "condicao_regra"} {
+		existe, err := colunaExiste(ctx, db, tabela, "status")
+		if err != nil {
+			return err
+		}
+		if existe {
+			continue
+		}
+		tx, err := db.BeginTx(ctx, nil)
+		if err != nil {
+			return err
+		}
+		if _, err := tx.ExecContext(ctx, "ALTER TABLE "+tabela+" ADD COLUMN status TEXT NOT NULL DEFAULT 'ativa'"); err != nil {
+			tx.Rollback()
+			return err
+		}
+		if _, err := tx.ExecContext(ctx, "UPDATE "+tabela+" SET status = 'excluida' WHERE ativo = 0"); err != nil {
+			tx.Rollback()
+			return err
+		}
+		if err := tx.Commit(); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // colunaExiste consulta o PRAGMA table_info para saber se a coluna já existe na tabela.
 func colunaExiste(ctx context.Context, db *sql.DB, tabela, coluna string) (bool, error) {
 	rows, err := db.QueryContext(ctx, "PRAGMA table_info("+tabela+")")
@@ -217,6 +253,7 @@ CREATE TABLE IF NOT EXISTS regra_contabil (
   campo_produto TEXT,
   pre_condicao TEXT,
   ativo INTEGER NOT NULL DEFAULT 1,
+  status TEXT NOT NULL DEFAULT 'ativa',
   tipo_lancamento TEXT NOT NULL DEFAULT 'reverte'
 );
 CREATE TABLE IF NOT EXISTS condicao_regra (
@@ -229,6 +266,7 @@ CREATE TABLE IF NOT EXISTS condicao_regra (
   campo_moeda TEXT NOT NULL,
   campo_boleto TEXT,
   ativo INTEGER NOT NULL DEFAULT 1,
+  status TEXT NOT NULL DEFAULT 'ativa',
   base_na_posicao INTEGER NOT NULL DEFAULT 0,
   campo_valor_moeda_base TEXT,
   campo_moeda_base TEXT,
@@ -366,6 +404,28 @@ CREATE TABLE IF NOT EXISTS job (
   atualizado_em TEXT
 );
 CREATE INDEX IF NOT EXISTS IX_job_status ON job (status, id);
+-- Controle de fechamento de competência (RF-132). Remove o desenho antigo (por data) e usa
+-- modo + escopos selecionados + liberações por mês/ano.
+DROP TABLE IF EXISTS controle_fechamento;
+CREATE TABLE IF NOT EXISTS fechamento_config (
+  id INTEGER PRIMARY KEY CHECK (id = 1),
+  modo TEXT NOT NULL DEFAULT 'off'
+);
+CREATE TABLE IF NOT EXISTS fechamento_escopo (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  produto TEXT NOT NULL DEFAULT '',
+  dominio TEXT NOT NULL DEFAULT ''
+);
+CREATE UNIQUE INDEX IF NOT EXISTS UX_fechamento_escopo ON fechamento_escopo (produto, dominio);
+CREATE TABLE IF NOT EXISTS fechamento_liberacao (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  ano INTEGER NOT NULL,
+  mes INTEGER NOT NULL,
+  produto TEXT NOT NULL DEFAULT '',
+  dominio TEXT NOT NULL DEFAULT '',
+  criado_em TEXT
+);
+CREATE UNIQUE INDEX IF NOT EXISTS UX_fechamento_liberacao ON fechamento_liberacao (ano, mes, produto, dominio);
 `
 
 // ── Helpers de data/hora (SQLite guarda como TEXT) ──────────────────────────

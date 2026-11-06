@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"runtime"
+	"strconv"
 	"strings"
 	"time"
 
@@ -49,6 +50,9 @@ func main() {
 	)
 
 	var rawSQLDB *sql.DB
+	// Controle de fechamento de competência (RF-132): apenas SQLite por ora (tipo concreto;
+	// nil nos demais backends → feature indisponível).
+	var fechamentoRepo *sqliterepo.ControleFechamentoRepo
 
 	switch backend {
 	case "file":
@@ -94,6 +98,7 @@ func main() {
 		veiculoDeParaRepo = sqliterepo.NewVeiculoDeParaRepo(sdb)
 		cotacaoRepo = sqliterepo.NewCotacaoRepo(sdb)
 		jobRepo = sqliterepo.NewJobRepo(sdb)
+		fechamentoRepo = sqliterepo.NewControleFechamentoRepo(sdb)
 
 	default: // sqlserver
 		rawSQLDB = db.Connect()
@@ -150,7 +155,6 @@ func main() {
 		ComInconsistenciaRepo(inconsistenciaRepo)
 	notificacaoSvc := service.NewNotificacaoService(notificacaoRepo)
 	regraSvc := service.NewRegraContabilService(regraRepo)
-	conciliacaoSvc := service.NewConciliacaoService(posicaoRepo, movimentoRepo)
 	posicaoSvc := service.NewPosicaoCarteiraService(posicaoRepo)
 	parametrizacaoSvc := service.NewParametrizacaoService(parametrizacaoRepo)
 	padraoArquivoSvc := service.NewPadraoArquivoService(padraoArquivoRepo)
@@ -164,12 +168,16 @@ func main() {
 	dashboardSvc := service.NewDashboardService(execucaoRepo, inconsistenciaRepo, dashboardSaldoRepo, cotacaoRepo)
 	// Conversão para a moeda base do veículo na geração (RF-036/RF-037).
 	movimentoSvc = movimentoSvc.ComMoedaBaseRepo(veiculoDeParaSvc).ComCotacaoRepo(cotacaoSvc)
+	// Trava de competência (RF-132): quando disponível (SQLite), a geração pula combinações
+	// cuja competência está fechada e ainda não liberada.
+	if fechamentoRepo != nil {
+		movimentoSvc = movimentoSvc.ComFechamentoRepo(fechamentoRepo)
+	}
 	configuracaoSvc := service.NewConfiguracaoService(configuracaoRepo)
 
 	// 4. Instanciar handlers
 	movimentoHandler := handler.NewMovimentoContabilHandler(movimentoSvc)
 	regraHandler := handler.NewRegraContabilHandler(regraSvc)
-	conciliacaoHandler := handler.NewConciliacaoHandler(conciliacaoSvc)
 	conciliacaoIAHandler := handler.NewConciliacaoIAHandler(movimentoSvc, posicaoSvc)
 	posicaoHandler := handler.NewPosicaoCarteiraHandler(posicaoSvc, padraoArquivoSvc)
 	parametrizacaoHandler := handler.NewParametrizacaoHandler(parametrizacaoSvc)
@@ -184,6 +192,13 @@ func main() {
 	notificacaoHandler := handler.NewNotificacaoHandler(notificacaoSvc)
 	exportHandler := handler.NewExportHandler(movimentoSvc).ComVeiculoDePara(veiculoDeParaSvc)
 	nlQueryHandler := handler.NewNLQueryHandler(rawSQLDB)
+	// Controle de fechamento de competência (RF-132). nil quando o backend não suporta → 501.
+	var fechamentoHandler *handler.FechamentoHandler
+	if fechamentoRepo != nil {
+		fechamentoHandler = handler.NewFechamentoHandler(service.NewFechamentoService(fechamentoRepo))
+	} else {
+		fechamentoHandler = handler.NewFechamentoHandler(nil)
+	}
 
 	// Watcher de pasta monitorada (varredura periódica em segundo plano).
 	// O intervalo (em minutos) é parametrizável; sem parametrização, não varre.
@@ -240,6 +255,9 @@ func main() {
 		}
 
 		jobService.Start(context.Background())
+		// Geração agendada do contábil (RF-126): enfileira a geração do escopo configurado
+		// para a última data com posição, no intervalo configurado.
+		go agendarGeracao(context.Background(), jobService, configuracaoSvc, posicaoRepo, execucaoRepo)
 		jobHandler = handler.NewJobHandler(jobService)
 		log.Printf("[job] fila de jobs HABILITADA")
 	} else {
@@ -302,7 +320,13 @@ func main() {
 			regraHandler.EditarCondicao(w, r)
 		}
 	})
-	http.HandleFunc("/api/v1/conciliacao", conciliacaoHandler.Conciliar)
+	// Fechamento de competência (RF-132).
+	http.HandleFunc("/api/v1/fechamento", fechamentoHandler.Raiz)
+	http.HandleFunc("/api/v1/fechamento/modo", fechamentoHandler.Modo)
+	http.HandleFunc("/api/v1/fechamento/escopo", fechamentoHandler.Escopo)
+	http.HandleFunc("/api/v1/fechamento/escopo/", fechamentoHandler.Escopo)
+	http.HandleFunc("/api/v1/fechamento/liberar", fechamentoHandler.Liberar)
+	http.HandleFunc("/api/v1/fechamento/liberar/", fechamentoHandler.Liberar)
 	http.HandleFunc("/api/v1/conciliacao-ia", conciliacaoIAHandler.Analisar)
 	http.HandleFunc("/api/v1/conciliacao-ia/ajuste", conciliacaoIAHandler.AplicarAjuste)
 	validarHandler := handler.NewValidarExpressaoHandler()
@@ -314,6 +338,15 @@ func main() {
 	http.HandleFunc("/api/v1/nlquery", nlQueryHandler.Query)
 	http.HandleFunc("/api/v1/movimento-contabil/export", exportHandler.ExportMovimentoCSV)
 	http.HandleFunc("/api/v1/movimento-contabil/export-txt", exportHandler.ExportMovimentoTXT)
+	diffVersoesHandler := handler.NewDiffVersoesHandler(movimentoSvc)
+	http.HandleFunc("/api/v1/movimento-contabil/diff", diffVersoesHandler.Diff)
+	// Análises contábeis: balancete (RF-127), cobertura (RF-128), lint (RF-129), série (RF-130).
+	analisesHandler := handler.NewAnalisesHandler(movimentoSvc, regraSvc)
+	http.HandleFunc("/api/v1/balancete", analisesHandler.Balancete)
+	http.HandleFunc("/api/v1/cobertura", analisesHandler.Cobertura)
+	http.HandleFunc("/api/v1/serie-saldo", analisesHandler.Serie)
+	http.HandleFunc("/api/v1/regras/lint", analisesHandler.Lint)
+	http.HandleFunc("/api/v1/conciliacao", analisesHandler.Conciliacao)
 	http.HandleFunc("/api/v1/posicao", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodGet {
 			posicaoHandler.Listar(w, r)
@@ -401,6 +434,106 @@ func abrirNavegador(url string) {
 		cmd = exec.Command("xdg-open", url)
 	}
 	_ = cmd.Start()
+}
+
+// duracaoAteProximoHorario devolve quanto falta até a próxima ocorrência de "HH:MM" a partir
+// de `agora` (hoje se ainda no futuro, senão amanhã). ok=false quando o horário é vazio/inválido
+// (geração agendada desativada).
+func duracaoAteProximoHorario(horario string, agora time.Time) (time.Duration, bool) {
+	partes := strings.SplitN(strings.TrimSpace(horario), ":", 2)
+	if len(partes) != 2 {
+		return 0, false
+	}
+	h, err1 := strconv.Atoi(strings.TrimSpace(partes[0]))
+	m, err2 := strconv.Atoi(strings.TrimSpace(partes[1]))
+	if err1 != nil || err2 != nil || h < 0 || h > 23 || m < 0 || m > 59 {
+		return 0, false
+	}
+	prox := time.Date(agora.Year(), agora.Month(), agora.Day(), h, m, 0, 0, agora.Location())
+	if !prox.After(agora) {
+		prox = prox.AddDate(0, 0, 1)
+	}
+	return prox.Sub(agora), true
+}
+
+// agendarGeracao enfileira a geração do contábil (RF-126) 1×/dia no HORÁRIO configurado
+// (HH:MM, independente de quando a API subiu), para o escopo (produto+domínio), na ÚLTIMA
+// data com posição importada. Pula se desativado (horário vazio/inválido ou escopo vazio),
+// se a data já foi executada para o escopo (evita empilhar versões) ou se já há geração igual na fila.
+func agendarGeracao(ctx context.Context, js *service.JobService, cfg *service.ConfiguracaoService, posRepo repository.PosicaoCarteiraRepository, execRepo repository.ExecucaoRepository) {
+	horarioCfg := func() string {
+		v, _ := cfg.Obter(ctx, service.ConfigGeracaoHorario)
+		return strings.TrimSpace(v)
+	}
+	for {
+		dur, ok := duracaoAteProximoHorario(horarioCfg(), time.Now())
+		if !ok {
+			// Desativado/ inválido: re-checa a cada hora (o usuário pode configurar depois).
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(time.Hour):
+			}
+			continue
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(dur):
+		}
+		if _, ok := duracaoAteProximoHorario(horarioCfg(), time.Now()); !ok {
+			continue // desativado durante a espera
+		}
+		produto, _ := cfg.Obter(ctx, service.ConfigGeracaoProduto)
+		dominio, _ := cfg.Obter(ctx, service.ConfigGeracaoDominio)
+		produto, dominio = strings.TrimSpace(produto), strings.TrimSpace(dominio)
+		if produto == "" || dominio == "" {
+			continue // escopo não configurado
+		}
+		data, ok, err := posRepo.UltimaDataPosicao(ctx)
+		if err != nil || !ok {
+			continue // sem posição importada
+		}
+		dataStr := data.Format("2006-01-02")
+		// Não regerar: se o escopo já foi executado nessa data, pula (evita nova versão a cada ciclo).
+		if datas, err := execRepo.DatasExecutadas(ctx, produto, dominio); err == nil {
+			for _, d := range datas {
+				if d.Format("2006-01-02") == dataStr {
+					dataStr = "" // marca como já executada
+					break
+				}
+			}
+		}
+		if dataStr == "" || geracaoPendente(ctx, js, data.Format("2006-01-02"), produto, dominio) {
+			continue
+		}
+		payload, _ := json.Marshal(map[string]string{"data": dataStr, "produto": produto, "dominio": dominio})
+		desc := fmt.Sprintf("Geração agendada %s (%s/%s)", dataStr, produto, dominio)
+		if _, err := js.Enfileirar(ctx, "geracao_movimento", desc, string(payload), 3); err != nil {
+			log.Printf("[geracao-agendada] erro ao enfileirar: %v", err)
+		}
+	}
+}
+
+// geracaoPendente informa se já existe um job de geração pendente/executando para o mesmo
+// (data, produto, domínio) — evita enfileirar duplicado.
+func geracaoPendente(ctx context.Context, js *service.JobService, data, produto, dominio string) bool {
+	for _, st := range []string{model.JobPendente, model.JobExecutando} {
+		pag, err := js.Listar(ctx, st, 1, 200)
+		if err != nil || pag == nil {
+			continue
+		}
+		for _, j := range pag.Jobs {
+			if j.Tipo != "geracao_movimento" {
+				continue
+			}
+			var p struct{ Data, Produto, Dominio string }
+			if json.Unmarshal([]byte(j.Payload), &p) == nil && p.Data == data && p.Produto == produto && p.Dominio == dominio {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // agendarExpurgo enfileira periodicamente o job de expurgo (RF-123), respeitando o

@@ -71,12 +71,23 @@ func (h *MovimentoContabilHandler) GerarMovimento(w http.ResponseWriter, r *http
 	}
 
 	if len(bloqueios) > 0 {
-		var combos []string
+		var d1, fech []string
 		for _, b := range bloqueios {
-			combos = append(combos, b.Produto+"/"+b.Dominio)
+			combo := b.Produto + "/" + b.Dominio
+			if b.Motivo == "fechamento" {
+				fech = append(fech, combo)
+			} else {
+				d1 = append(d1, combo)
+			}
 		}
-		msg := "O contábil de " + strings.Join(combos, ", ") + " deve ser executado para datas anteriores (falta o movimento do dia útil anterior)."
-		writeJSON(w, http.StatusOK, map[string]string{"mensagem": msg})
+		var partes []string
+		if len(d1) > 0 {
+			partes = append(partes, "O contábil de "+strings.Join(d1, ", ")+" deve ser executado para datas anteriores (falta o movimento do dia útil anterior).")
+		}
+		if len(fech) > 0 {
+			partes = append(partes, "Competência não liberada para "+strings.Join(fech, ", ")+": libere o mês/ano no menu Fechamento para processar.")
+		}
+		writeJSON(w, http.StatusOK, map[string]string{"mensagem": strings.Join(partes, " ")})
 		return
 	}
 

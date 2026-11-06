@@ -25,6 +25,18 @@ func (r *PosicaoCarteiraRepo) ExpurgarAteData(ctx context.Context, corte time.Ti
 	return res.RowsAffected()
 }
 
+// UltimaDataPosicao devolve a data mais recente com posição importada (RF-126).
+func (r *PosicaoCarteiraRepo) UltimaDataPosicao(ctx context.Context) (time.Time, bool, error) {
+	var s sql.NullString
+	if err := r.db.QueryRowContext(ctx, "SELECT MAX(data_posicao_carteira) FROM posicao_carteira").Scan(&s); err != nil {
+		return time.Time{}, false, err
+	}
+	if !s.Valid || s.String == "" {
+		return time.Time{}, false, nil
+	}
+	return parseData(s.String), true, nil
+}
+
 func (r *PosicaoCarteiraRepo) BuscarPorDataEVersaoMaxima(ctx context.Context, data time.Time) ([]model.PosicaoCarteira, error) {
 	rows, err := r.db.QueryContext(ctx,
 		"SELECT id, data_posicao_carteira, codigo_versao_conteudo, campos FROM posicao_carteira WHERE data_posicao_carteira = ? ORDER BY id",

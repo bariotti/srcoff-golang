@@ -130,6 +130,29 @@ func (r *MovimentoContabilRepo) ObterVersaoAtual(ctx context.Context, data time.
 	return versao, err
 }
 
+// VersoesMovimento lista as versões existentes (ordenadas) de um (data, produto, domínio).
+// Usado pelo diff de versões (RF-124).
+func (r *MovimentoContabilRepo) VersoesMovimento(ctx context.Context, data time.Time, produto, dominio string) ([]int, error) {
+	dataStr := data.Format("2006-01-02")
+	esc := func(s string) string { return strings.ReplaceAll(s, "'", "''") }
+	rows, err := r.db.QueryContext(ctx,
+		"SELECT DISTINCT codigo_versao_conteudo FROM movimento_contabil WHERE data_lote_contabil = '"+dataStr+
+			"' AND ISNULL(produto,'') = '"+esc(produto)+"' AND ISNULL(dominio,'') = '"+esc(dominio)+"' ORDER BY codigo_versao_conteudo")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var vs []int
+	for rows.Next() {
+		var v int
+		if err := rows.Scan(&v); err != nil {
+			return nil, err
+		}
+		vs = append(vs, v)
+	}
+	return vs, rows.Err()
+}
+
 func (r *MovimentoContabilRepo) ConsultarPaginado(ctx context.Context, data time.Time, pagina, tamanho int) (*model.PaginaLancamentos, error) {
 	dataStr := data.Format("2006-01-02")
 

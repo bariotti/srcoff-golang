@@ -18,6 +18,34 @@ const (
 	TipoIncrementalReverte = "incremental_reverte"
 )
 
+// Status de uma regra/condição (RF-125). O estado explícito substitui o booleano `ativo`
+// como fonte de verdade — `ativo` fica derivado (ativa⟺1) para a geração continuar usando
+// só o que está ATIVO, sem alterar o motor nem os demais backends:
+//   - StatusRascunho: existe e é editável, mas NÃO vale na geração (novo estado);
+//   - StatusAtiva:    vale na geração;
+//   - StatusExcluida: removido logicamente, oculto por padrão.
+const (
+	StatusRascunho = "rascunho"
+	StatusAtiva    = "ativa"
+	StatusExcluida = "excluida"
+)
+
+// NormalizaStatus devolve um status válido. Quando `status` é desconhecido/vazio (ex.: backend
+// sem a coluna, ou registro antigo), deriva do booleano `ativo` (ativo→ativa, senão excluida).
+func NormalizaStatus(status string, ativo bool) string {
+	switch status {
+	case StatusRascunho, StatusAtiva, StatusExcluida:
+		return status
+	}
+	if ativo {
+		return StatusAtiva
+	}
+	return StatusExcluida
+}
+
+// AtivoDoStatus mapeia o status para o booleano `ativo` (porta da geração): só "ativa" vale.
+func AtivoDoStatus(status string) bool { return status == StatusAtiva }
+
 type RegraContabil struct {
 	ID                       int64           `json:"id"`
 	Descricao                string          `json:"descricao"`
@@ -26,6 +54,7 @@ type RegraContabil struct {
 	CampoProduto             string          `json:"campo_produto"`              // nome do campo da posição comparado com o código do produto
 	PreCondicao              string          `json:"pre_condicao"`               // expressão opcional combinada com E a cada condição da regra
 	Ativo                    bool            `json:"ativo"`
+	Status                   string          `json:"status"`          // rascunho | ativa | excluida (RF-125)
 	TipoLancamento           string          `json:"tipo_lancamento"` // reverte | nao_reverte | incremental
 	Condicoes                []CondicaoRegra `json:"condicoes"`
 }
@@ -82,6 +111,7 @@ type CondicaoRegra struct {
 	CampoMoeda   string `json:"campo_moeda"`
 	CampoBoleto  string `json:"campo_boleto"` // nome do campo da posição usado como identificador do boleto no lançamento
 	Ativo        bool   `json:"ativo"`
+	Status       string `json:"status"` // rascunho | ativa | excluida (RF-125)
 	// Moeda base do veículo (RF-036/RN-182). BaseNaPosicao define a origem dos dois dados:
 	//   - true  → valor e moeda base vêm da posição (CampoValorMoedaBase + CampoMoedaBase);
 	//             CampoDataConversao é ignorado.

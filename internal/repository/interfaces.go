@@ -13,15 +13,24 @@ type PosicaoCarteiraRepository interface {
 	ListarPorData(ctx context.Context, data time.Time) ([]model.PosicaoCarteira, error)
 	ListarPorPeriodo(ctx context.Context, dataInicio, dataFim time.Time) ([]model.PosicaoCarteira, error)
 	ImportarLote(ctx context.Context, data time.Time, versao int, registros []map[string]interface{}) error
+	// UltimaDataPosicao devolve a data mais recente com posição importada (e ok=false quando
+	// não há nenhuma). Usado pela geração agendada (RF-126).
+	UltimaDataPosicao(ctx context.Context) (time.Time, bool, error)
 }
 
 // RegraContabilRepository define o contrato de acesso às regras contábeis.
 type RegraContabilRepository interface {
+	// ListarRegrasAtivas devolve apenas as regras ATIVAS (porta da geração — ativo=1).
 	ListarRegrasAtivas(ctx context.Context) ([]model.RegraContabil, error)
+	// ListarRegras devolve as regras VISÍVEIS na UI (ativa + rascunho; sem excluídas) — RF-125.
+	ListarRegras(ctx context.Context) ([]model.RegraContabil, error)
 	CriarRegra(ctx context.Context, regra model.RegraContabil) (int64, error)
 	EditarRegra(ctx context.Context, regra model.RegraContabil) error
 	ExcluirRegra(ctx context.Context, id int64) error
+	// ListarCondicoes devolve apenas as condições ATIVAS (usada pela geração — ativo=1).
 	ListarCondicoes(ctx context.Context, idRegra int64) ([]model.CondicaoRegra, error)
+	// ListarCondicoesVisiveis devolve as condições VISÍVEIS na UI (ativa + rascunho) — RF-125.
+	ListarCondicoesVisiveis(ctx context.Context, idRegra int64) ([]model.CondicaoRegra, error)
 	CriarCondicao(ctx context.Context, condicao model.CondicaoRegra) (int64, error)
 	EditarCondicao(ctx context.Context, condicao model.CondicaoRegra) error
 	ExcluirCondicao(ctx context.Context, id int64) error
@@ -128,4 +137,5 @@ type MovimentoContabilRepository interface {
 	ConsultarPaginadoFiltrado(ctx context.Context, f model.FiltroMovimento) (*model.PaginaLancamentos, error)
 	ConsultarPaginadoFiltradoSemCancelados(ctx context.Context, f model.FiltroMovimento) (*model.PaginaLancamentos, error)
 	ExcluirPorDataEVersao(ctx context.Context, data time.Time, versao int) error
+	VersoesMovimento(ctx context.Context, data time.Time, produto, dominio string) ([]int, error)
 }

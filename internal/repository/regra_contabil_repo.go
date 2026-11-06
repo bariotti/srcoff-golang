@@ -83,6 +83,34 @@ func (r *RegraContabilRepo) ExcluirRegra(ctx context.Context, id int64) error {
 	return err
 }
 
+// ListarRegras (UI): neste backend não há rascunho — delega para as ativas e preenche o
+// status derivado (RF-125 é sqlite-first).
+func (r *RegraContabilRepo) ListarRegras(ctx context.Context) ([]model.RegraContabil, error) {
+	regras, err := r.ListarRegrasAtivas(ctx)
+	if err != nil {
+		return nil, err
+	}
+	for i := range regras {
+		regras[i].Status = model.NormalizaStatus(regras[i].Status, regras[i].Ativo)
+		for j := range regras[i].Condicoes {
+			regras[i].Condicoes[j].Status = model.NormalizaStatus(regras[i].Condicoes[j].Status, regras[i].Condicoes[j].Ativo)
+		}
+	}
+	return regras, nil
+}
+
+// ListarCondicoesVisiveis (UI): delega para as ativas e preenche o status derivado.
+func (r *RegraContabilRepo) ListarCondicoesVisiveis(ctx context.Context, idRegra int64) ([]model.CondicaoRegra, error) {
+	conds, err := r.ListarCondicoes(ctx, idRegra)
+	if err != nil {
+		return nil, err
+	}
+	for i := range conds {
+		conds[i].Status = model.NormalizaStatus(conds[i].Status, conds[i].Ativo)
+	}
+	return conds, nil
+}
+
 func (r *RegraContabilRepo) ListarCondicoes(ctx context.Context, idRegra int64) ([]model.CondicaoRegra, error) {
 	rows, err := r.db.QueryContext(ctx,
 		fmt.Sprintf("SELECT id, id_regra, condicao, conta_debito, conta_credito, campo_valor, campo_moeda, ISNULL(campo_boleto, ''), ativo, ISNULL(base_na_posicao,0), ISNULL(campo_valor_moeda_base,''), ISNULL(campo_moeda_base,''), ISNULL(campo_data_conversao,'') FROM condicao_regra WHERE id_regra = %d AND ativo = 1", idRegra),

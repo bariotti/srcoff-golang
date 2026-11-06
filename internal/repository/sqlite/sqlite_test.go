@@ -326,3 +326,71 @@ func TestExpurgarAteData(t *testing.T) {
 		t.Fatalf("posição 05/01 deveria ter sido apagada, obteve %d", len(ps))
 	}
 }
+
+// TestStatusRegraCondicao valida os estados rascunho/ativa/excluida (RF-125): rascunho
+// existe mas NAO entra na geracao (ListarRegrasAtivas); aparece na UI (ListarRegras).
+func TestStatusRegraCondicao(t *testing.T) {
+	ctx := context.Background()
+	s := abrirTeste(t)
+
+	// Regra criada como rascunho: fora da geracao, visivel na UI.
+	id, err := s.regra.CriarRegra(ctx, model.RegraContabil{Descricao: "R", CodigoProdutoCorporativo: "NDF", Dominio: "Posicao", TipoLancamento: model.TipoReverte, Status: model.StatusRascunho})
+	if err != nil || id == 0 {
+		t.Fatalf("CriarRegra: id=%d err=%v", id, err)
+	}
+	if ativas, _ := s.regra.ListarRegrasAtivas(ctx); len(ativas) != 0 {
+		t.Fatalf("rascunho nao deveria estar entre as ativas, obteve %d", len(ativas))
+	}
+	vis, _ := s.regra.ListarRegras(ctx)
+	if len(vis) != 1 || vis[0].Status != model.StatusRascunho {
+		t.Fatalf("ListarRegras deveria ter 1 rascunho, obteve %+v", vis)
+	}
+
+	// Ativar (via EditarRegra com status=ativa) -> entra na geracao.
+	if err := s.regra.EditarRegra(ctx, model.RegraContabil{ID: id, Descricao: "R", CodigoProdutoCorporativo: "NDF", Dominio: "Posicao", TipoLancamento: model.TipoReverte, Status: model.StatusAtiva}); err != nil {
+		t.Fatalf("EditarRegra ativar: %v", err)
+	}
+	if ativas, _ := s.regra.ListarRegrasAtivas(ctx); len(ativas) != 1 {
+		t.Fatalf("apos ativar, deveria haver 1 ativa, obteve %d", len(ativas))
+	}
+
+	// Condicao rascunho: fora da geracao (ListarCondicoes), visivel na UI (ListarCondicoesVisiveis).
+	cid, err := s.regra.CriarCondicao(ctx, model.CondicaoRegra{IDRegra: id, Condicao: "valor_mtm > 0", ContaDebito: "1001", ContaCredito: "2001", CampoValor: "valor_mtm", CampoMoeda: "moeda", CampoBoleto: "numero_boleto", Status: model.StatusRascunho})
+	if err != nil || cid == 0 {
+		t.Fatalf("CriarCondicao rascunho: %v", err)
+	}
+	if ger, _ := s.regra.ListarCondicoes(ctx, id); len(ger) != 0 {
+		t.Fatalf("condicao rascunho nao deveria entrar na geracao, obteve %d", len(ger))
+	}
+	if ui, _ := s.regra.ListarCondicoesVisiveis(ctx, id); len(ui) != 1 || ui[0].Status != model.StatusRascunho {
+		t.Fatalf("ListarCondicoesVisiveis deveria ter 1 rascunho, obteve %+v", ui)
+	}
+
+	// Excluir a regra -> some da UI.
+	if err := s.regra.ExcluirRegra(ctx, id); err != nil {
+		t.Fatalf("ExcluirRegra: %v", err)
+	}
+	if vis, _ := s.regra.ListarRegras(ctx); len(vis) != 0 {
+		t.Fatalf("regra excluida nao deveria aparecer na UI, obteve %d", len(vis))
+	}
+}
+
+// TestUltimaDataPosicao valida a data mais recente com posicao (RF-126, geracao agendada).
+func TestUltimaDataPosicao(t *testing.T) {
+	ctx := context.Background()
+	s := abrirTeste(t)
+	d := func(x string) time.Time { tt, _ := time.Parse("2006-01-02", x); return tt }
+
+	if _, ok, err := s.pos.UltimaDataPosicao(ctx); err != nil || ok {
+		t.Fatalf("base vazia deveria ok=false, obteve ok=%v err=%v", ok, err)
+	}
+	for _, dia := range []string{"2026-01-05", "2026-01-12", "2026-01-08"} {
+		if err := s.pos.ImportarLote(ctx, d(dia), 1, []map[string]interface{}{{"produto": "NDF", "dominio": "Posicao", "numero_boleto": "B"}}); err != nil {
+			t.Fatalf("ImportarLote %s: %v", dia, err)
+		}
+	}
+	dt, ok, err := s.pos.UltimaDataPosicao(ctx)
+	if err != nil || !ok || dt.Format("2006-01-02") != "2026-01-12" {
+		t.Fatalf("esperava 2026-01-12, obteve %s ok=%v err=%v", dt.Format("2006-01-02"), ok, err)
+	}
+}

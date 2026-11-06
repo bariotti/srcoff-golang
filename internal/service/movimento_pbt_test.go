@@ -83,6 +83,10 @@ func (f *fakeMovimentoRepo) ExcluirPorDataEVersao(ctx context.Context, data time
 	return nil
 }
 
+func (f *fakeMovimentoRepo) VersoesMovimento(ctx context.Context, data time.Time, produto, dominio string) ([]int, error) {
+	return nil, nil
+}
+
 // fakeMovimentoRepoTracked records the versao assigned to each BulkInsert call.
 type fakeMovimentoRepoTracked struct {
 	versaoAtual   int
@@ -146,6 +150,10 @@ func (f *fakeMovimentoRepoTracked) ConsultarPaginadoFiltradoSemCancelados(ctx co
 
 func (f *fakeMovimentoRepoTracked) ExcluirPorDataEVersao(ctx context.Context, data time.Time, versao int) error {
 	return nil
+}
+
+func (f *fakeMovimentoRepoTracked) VersoesMovimento(ctx context.Context, data time.Time, produto, dominio string) ([]int, error) {
+	return nil, nil
 }
 
 // ---------------------------------------------------------------------------
