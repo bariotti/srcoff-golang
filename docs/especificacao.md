@@ -5,11 +5,13 @@
 
 | | |
 |---|---|
-| **Versão da spec** | 1.0.0 |
-| **Data** | 2026-10-09 |
+| **Versão da spec** | 1.1.0 |
+| **Data** | 2026-11-11 |
 | **Status** | Vigente |
 | **Escopo** | POC funcional (backends file / sqlite / sqlserver) |
 | **Idioma** | Português (BR) — alinhado ao código |
+
+> **Changelog 1.1.0 (2026-11-11).** Documentadas as funcionalidades implementadas após a 1.0.0 e ausentes da spec: cadastro/governança de regras (RF-071 clonar, RF-125 status rascunho/ativa/excluída, RF-129 lint, RF-133 histórico de versões, RF-134 catálogo), simulação e análise (RF-072 preview, RF-120 dashboard, RF-122 what-if, RF-124 diff de versões, RF-127 balancete, RF-128 cobertura, RF-130 série de saldo, RF-131 conciliação posição×movimento, RF-135 backtesting, RF-070 razonete), operação e processamento (RF-121 jobs, RF-123 expurgo/retenção, RF-126 geração agendada, RF-132 fechamento de competência, RF-137 reprocessamento seletivo) e auditoria/IA (RF-136 trilha de auditoria, RF-138 copiloto conversacional, RF-139 diagnóstico de dupla contabilização e RF-140 linhagem de lançamento). Todo o detalhamento SDD está na **§15**; os endpoints correspondentes, na **§15** junto de cada RF (a §11 permanece como contrato das funcionalidades do núcleo RF-010..RF-092). Novas decisões: ADR-017..ADR-022.
 
 ---
 
@@ -423,7 +425,7 @@ Compara posição × movimento e aponta inconsistências:
 
 ## 11. Contrato de API REST (completo)
 
-Base: `/api/v1`. Rotas registradas em `cmd/api/main.go`. Convenções gerais:
+Base: `/api/v1`. Rotas registradas em `cmd/api/main.go`. Esta seção cobre o **núcleo (RF-010..RF-092)**; os endpoints das funcionalidades RF-070..RF-140 (análise, governança, fechamento, auditoria e IA) estão documentados junto de cada requisito na **§15**. Convenções gerais:
 
 - **Datas**: sempre `YYYY-MM-DD`.
 - **Erro**: corpo `{"erro": "<mensagem>"}`. Observação: alguns fluxos de negócio (gerar movimento/estorno) respondem **HTTP 200** com `{"mensagem": "..."}` mesmo quando a operação não produz efeito (ex.: data não útil, bloqueio D-1). O 4xx é reservado a entrada malformada.
@@ -618,6 +620,12 @@ Base: `/api/v1`. Rotas registradas em `cmd/api/main.go`. Convenções gerais:
 | **ADR-013** | Lançamento manual **anexa à versão vigente** do combo/data (ou v1). Reprocesso posterior supersede. | Mostrar o manual junto do movimento existente sem esconder o gerado. | Implementado |
 | **ADR-011** | A baixa do `incremental_reverte` passa a **ler** o `saldo_conta` quando presente (resultado idêntico à varredura); mantém o caminho de varredura como fallback. Nenhum outro tipo de regra é afetado. | Atende "nada do que funciona hoje muda, exceto o estorno do incremental com reversão". | Implementado |
 | **ADR-009** | Remoção do seed de opções de combos (Produto NDF/SWAP/FXO, Domínio Posição/Liquidação) na criação do banco/instalação, nos 3 backends. Para bases SQL Server já existentes, a `migration 015` remove explicitamente esses 5 pares (robusta a code page; não toca opções cadastradas pelo usuário). | Pedido do usuário (2026-10-11): instalação nova deve nascer sem combos padrão. | Implementado |
+| **ADR-017** | Integração de IA (copiloto RF-138, conciliação-IA RF-081, NL Query RF-073) feita por **HTTP cru** (`net/http`), **não** por SDK de fornecedor; provedores plugáveis (Claude/Gemini/Ollama) atrás de uma interface única; **chaves sempre em variável de ambiente**, nunca no código ou no banco. | Preservar o build _vendored_ offline (`go mod vendor`) e não acoplar o produto a um fornecedor; segurança (não versionar segredos). Pedido do usuário (2026-11): chave em env, e IA utilizável de graça (Gemini free / Ollama local). | Implementado |
+| **ADR-018** | Modelo Gemini padrão = `gemini-3.5-flash` (sobreponível por `GEMINI_MODEL`). `gemini-2.0-flash` foi descontinuado; `gemini-3.8-flash`/`gemini-flash-latest` **não respondem** pelo endpoint `v1beta/generateContent` (direcionados à nova Interactions API). | Erro em produção do usuário (2026-11): modelo antigo removido; os "mais novos" travam no generateContent. `3.5-flash` responde normalmente. | Implementado |
+| **ADR-019** | Histórico de versões do cadastro (RF-133) é **append-only** e no **nível da regra** (uma alteração só de condição aparece na linha do tempo da regra). Restaurar uma versão antiga **cria uma nova versão** com o conteúdo restaurado (não apaga o histórico). sqlite-first. | Rastreabilidade/auditoria: nunca perder histórico; unificar a visão no objeto que o usuário enxerga (a regra). | Implementado |
+| **ADR-020** | Trilha de auditoria (RF-136) **sempre** emite a linha de log JSON estruturada (`[auditoria] {...}`); a **persistência/consulta** só liga quando há repositório (sqlite-first). O serviço é nil-safe (nunca quebra a operação de negócio por falha de auditoria). | Garantir trilha mesmo em backends sem persistência; não acoplar o sucesso da operação à gravação do log. | Implementado |
+| **ADR-021** | Controle de fechamento de competência (RF-132) por **MODO** (off / todos / selecionados), **não por data**: sob controle, uma competência (mês/ano) posterior a outra já processada só gera após **liberação manual** do mês/ano. sqlite-first (tipo concreto; nil nos demais backends = sem trava). | Pedido do usuário: travar a virada de competência sem exigir cadastro de datas; degradar com segurança nos backends sem a feature. | Implementado |
+| **ADR-022** | Features **[LAB]** experimentais (RF-139 diagnóstico de dupla contabilização, RF-140 linhagem) atrás da flag de ambiente **`FEATURES_LAB`** (ligada por padrão; `0/false/off/nao` desliga sem recompilar → menu some, endpoints 501). Isoladas em arquivos próprios (`*lab*`), reusando helpers do motor sem alterá-lo; removíveis por `grep "[LAB]"`. | Pedido do usuário (2026-11): implementar para testar e poder **desabilitar/remover** depois do teste com baixo custo. | Vigente |
 
 ---
 
@@ -639,3 +647,194 @@ Base: `/api/v1`. Rotas registradas em `cmd/api/main.go`. Convenções gerais:
 - `README.md` — guia de uso, passo a passo, telas, execução e proposta AWS.
 - `internal/service/*_test.go` — critérios de aceitação executáveis (PBT incluído: `*_pbt_test.go`).
 - `migrations/*.sql` — evolução do schema (SQL Server); `internal/repository/sqlite/db.go` — DDL do SQLite.
+
+---
+
+## 15. Funcionalidades adicionais — detalhamento SDD (RF-070..RF-140)
+
+Requisitos implementados após a spec 1.0.0. Cada entrada traz **Descrição**, **Regras (RN)**, **Endpoint(s)**, **Critérios de aceitação** e **Rastreabilidade** (código/teste). Convenção de disponibilidade por backend (**sqlite-first**): várias features só persistem/consultam no backend `sqlite` (tipo concreto no `main`; `nil` nos demais → a feature degrada para *off*, retornando **501** ou ocultando-se na UI). A UI é servida embutida (`internal/webui/app.html`, `go:embed`).
+
+### 15.1 Cadastro e governança de regras
+
+#### RF-071 — Clonar regra / condição
+**Descrição.** Duplica uma regra inteira (com suas condições) ou uma condição dentro da mesma regra; a cópia recebe a descrição sufixada com " (cópia)".
+**Regras.** RN-071.1: a regra clonada nasce como **rascunho** (RF-125), não entra na geração até ser ativada. RN-071.2: a condição clonada é anexada à mesma regra.
+**Endpoint.** `POST /api/v1/regras/{id}/clonar` · `POST /api/v1/condicoes/{id}/clonar`.
+**Rastreabilidade.** Código: `internal/service/regra_contabil_service.go` (`ClonarRegra`, `ClonarCondicao`), `internal/handler/regra_contabil_handler.go`.
+
+#### RF-125 — Status rascunho / ativa / excluída
+**Descrição.** O ciclo de vida de regras e condições passa a ter estado explícito (`status`), substituindo o booleano `ativo` como fonte da verdade (derivado: `ativo ⟺ status==ativa`).
+**Regras.**
+- RN-125.1: estados — **`rascunho`** (existe e é editável, mas NÃO vale na geração), **`ativa`** (vale na geração), **`excluida`** (removido logicamente, oculto por padrão).
+- RN-125.2: a **geração** usa apenas o que está `ativa` (`ListarRegrasAtivas`); a **UI** lista `ativa + rascunho` (`ListarRegras`/`ListarCondicoesVisiveis`), nunca `excluida`.
+- RN-125.3 (compat.): `NormalizaStatus(status, ativo)` deriva o estado em bancos antigos (sem a coluna) a partir do booleano `ativo` (ativo→ativa, senão excluida). sqlite-first; nos demais backends o status é derivado.
+**Critérios de aceitação.** Dado uma condição em `rascunho`, Quando o contábil é gerado, Então ela **não** produz lançamento; Quando ativada, Então passa a produzir. (`internal/repository/sqlite/sqlite_test.go` → `TestStatusRegraCondicao`.)
+**Rastreabilidade.** Código: `internal/model/regra_contabil.go` (`StatusRascunho|Ativa|Excluida`, `NormalizaStatus`, `AtivoDoStatus`), `internal/repository/sqlite/*`, `internal/repository/interfaces.go`.
+
+#### RF-129 — Lint (verificação estática) de regras
+**Descrição.** Analisa **estaticamente** as regras/condições ativas e devolve achados (erro/aviso) sem executar contra posições.
+**Regras.** RN-129.1: detecta — regra ativa **sem condição**; expressão (pré-condição/condição/`campo_valor`) que **não compila**; **conta débito == crédito**; **condições duplicadas** no mesmo escopo (mesmo produto/domínio + expressão + contas). Severidade `erro`/`aviso`.
+**Endpoint.** `GET /api/v1/regras/lint` → `LintResultado { total, achados[] }`.
+**Rastreabilidade.** Código: `internal/service/regra_contabil_service.go` (`Lint`), `internal/handler/analises_handler.go`, `internal/model/analises.go`. Teste: `internal/service/analises_test.go`.
+> **Complemento data-driven:** o lint estático **não** detecta sobreposição entre expressões **diferentes** que casam o mesmo boleto — isso é o RF-139 (§15.4).
+
+#### RF-133 — Histórico de versões do cadastro de regras
+**Descrição.** Ao alterar uma regra **ou** uma de suas condições, registra-se um snapshot versionado da regra (com condições). Permite consultar a linha do tempo, **comparar** duas versões (diff) e **restaurar** uma versão antiga como vigente. A unidade de versão é a **regra** (uma mudança só de condição aparece na linha do tempo da regra).
+**Regras.**
+- RN-133.1 (Captura): cada mutação relevante (criar/editar/excluir regra ou condição) captura, _best-effort_, um snapshot com número incremental, resumo da alteração e origem; "Sem alterações" não gera versão.
+- RN-133.2 (Diff): compara campos da regra e condições (adicionada/removida/alterada) entre duas versões.
+- RN-133.3 (Restaurar — append-only, ADR-019): restaura campos e condições da versão escolhida criando **uma nova versão vigente**; condições excluídas são ressuscitadas e condições mais novas, excluídas, conforme o alvo; o histórico **nunca** é apagado.
+- RN-133.4: sqlite-first; sem o repositório de versões o cadastro funciona normalmente e a feature fica *off*.
+**Endpoints.** `GET /api/v1/regra-historico` (resumo quando sem `id`; linha do tempo quando `?id=<regra>`) · `GET /api/v1/regra-historico/diff?id=&a=&b=` · `POST /api/v1/regra-historico/restaurar`.
+**Critérios de aceitação.** Dado uma regra editada N vezes, Quando consulto o histórico, Então vejo N versões em ordem decrescente com a vigente marcada; Quando restauro a versão k, Então o estado vigente volta ao conteúdo de k numa versão nova. (`internal/service/regra_versao_service_test.go` → `TestHistoricoRegraFluxo`; `internal/model/regra_versao_test.go`.)
+**Rastreabilidade.** Código: `internal/model/regra_versao.go`, `internal/repository/sqlite/regra_versao.go`, `internal/service/regra_contabil_service.go` (`Historico`, `ResumoHistorico`, `DiffVersoes`, `RestaurarVersao`, `capturarVersao*`), `internal/handler/regra_historico_handler.go`. UI: modal "Histórico" + selo por regra em `app.html`.
+
+#### RF-134 — Catálogo de regras (documento imprimível)
+**Descrição.** Gera um documento **HTML imprimível** com as regras **ativas** e suas condições — relatório legível para contábil/auditoria.
+**Regras.** RN-134.1: lista apenas regras ativas; rótulos amigáveis para tipo de lançamento e moeda base; "todos" quando produto/domínio vazios.
+**Endpoint.** `GET /api/v1/catalogo-regras` → documento HTML (abre em nova aba).
+**Rastreabilidade.** Código: `internal/handler/catalogo_regras_handler.go` (`html/template`), `internal/service/regra_contabil_service.go` (`RegrasAtivas`). Teste: `internal/handler/catalogo_regras_test.go`.
+
+### 15.2 Simulação e análise
+
+#### RF-072 — Preview de expressão sobre a posição
+**Descrição.** Pré-visualiza o resultado de uma expressão (condição ou valor) avaliada sobre a posição real de uma data/escopo, antes de salvar a regra.
+**Endpoint.** `POST /api/v1/preview-expressao`.
+**Rastreabilidade.** Código: `internal/service/movimento_contabil_service.go` (`PreviewExpressao`), `internal/model/preview_expressao.go`, `internal/handler/validar_expressao_handler.go`/`simulacao_whatif_handler.go`.
+
+#### RF-120 — Dashboard
+**Descrição.** Visão consolidada (execuções, inconsistências, saldo/câmbio) no menu Dashboard.
+**Endpoint.** `GET /api/v1/dashboard`.
+**Rastreabilidade.** Código: `internal/model/dashboard.go`, `internal/service/dashboard_service.go`, `internal/handler/dashboard_handler.go`. O dashboard só lê a projeção de saldo (RN-170) quando ela está habilitada.
+
+#### RF-122 — Simulação What-if de regra candidata
+**Descrição.** Avalia uma regra **hipotética** (não persistida) sobre a posição vigente de uma data e projeta os lançamentos que ela geraria, sem gravar nada.
+**Regras.** RN-122.1: reusa a mesma avaliação da geração (`EvaluateCondition`/`EvaluateValue`, `boletoDaPosicao`); é uma projeção dos lançamentos **normais** (sem estorno nem conversão de moeda base).
+**Endpoint.** `POST /api/v1/simulacao-whatif`.
+**Critérios de aceitação.** Dado uma regra candidata e uma posição, Quando simulo, Então recebo os lançamentos projetados sem persistir. (`internal/service/simulacao_whatif_test.go` → `TestSimularRegra_CandidataSobrePosicao`.)
+**Rastreabilidade.** Código: `internal/service/movimento_contabil_service.go` (`SimularRegra`), `internal/model/simulacao_whatif.go`, `internal/handler/simulacao_whatif_handler.go`.
+
+#### RF-135 — Backtesting de regra
+**Descrição.** Roda uma regra candidata (What-if) sobre **N dias históricos** com posição, caminhando para trás a partir da última data com posição, e **agrega o impacto** (por dia e por conta).
+**Regras.** RN-135.1: percorre dias úteis para trás coletando N datas que tenham posição (com guarda de iteração máxima); RN-135.2: cada dia reusa o laço de avaliação do What-if e agrega totais.
+**Endpoint.** `POST /api/v1/backtest-regra` → `BacktestResultado { dias[], contas[] }`.
+**Critérios de aceitação.** Dado uma regra candidata e N dias, Quando rodo o backtest, Então recebo o impacto agregado por dia/conta das datas com posição. (`internal/service/backtest_service_test.go`.)
+**Rastreabilidade.** Código: `internal/model/backtest.go`, `internal/service/backtest_service.go` (`BacktestRegra`), `internal/handler/backtest_handler.go`. Dependência de repositório: `posicaoRepo.UltimaDataPosicao`.
+
+#### RF-124 — Diff de versões do movimento contábil
+**Descrição.** Compara **duas versões** de um mesmo (data, produto, domínio) de movimento e mostra lançamentos adicionados, removidos e alterados (inclusive mudança de valor/moeda). Sem versões informadas, usa "vigente × anterior".
+**Endpoint.** `GET /api/v1/movimento-contabil/diff`.
+**Critérios de aceitação.** `internal/service/diff_versoes_test.go` → `TestDiffVersoes_VigenteXAnterior`.
+**Rastreabilidade.** Código: `internal/service/movimento_contabil_service.go` (`DiffVersoes`, `somaPorChaveVersao`), `internal/model/diff_versoes.go`, `internal/handler` (diffVersoesHandler). Repo: `VersoesMovimento`.
+
+#### RF-127 — Balancete de verificação
+**Descrição.** Σ débitos × Σ créditos por conta no período (confere a partida dobrada).
+**Endpoint.** `GET /api/v1/balancete` (`data_inicio`, `data_fim`, `produto?`, `dominio?`, `versao_modo?`).
+**Rastreabilidade.** Código: `internal/service/movimento_contabil_service.go` (`Balancete`), `internal/model/analises.go`, `internal/handler/analises_handler.go`.
+
+#### RF-128 — Cobertura de posições
+**Descrição.** Para uma data/escopo, classifica cada posição em **coberta** (alguma regra gera), **órfã** (nenhuma regra gera) ou **inconsistente** (campo ausente/erro), com listas (truncadas por limite).
+**Endpoint.** `GET /api/v1/cobertura` (`data`, `produto?`, `dominio?`).
+**Rastreabilidade.** Código: `internal/service/movimento_contabil_service.go` (`CoberturaPosicoes`), `internal/model/analises.go`, `internal/handler/analises_handler.go`.
+
+#### RF-130 — Série temporal de saldo por conta
+**Descrição.** Evolução do saldo de uma conta ao longo do período (para gráfico/tendência).
+**Endpoint.** `GET /api/v1/serie-saldo` (`conta` obrigatória, `data_inicio`, `data_fim`, `produto?`, `dominio?`).
+**Rastreabilidade.** Código: `internal/service/movimento_contabil_service.go` (`SerieSaldoConta`), `internal/model/analises.go`, `internal/handler/analises_handler.go`.
+
+#### RF-131 — Conciliação posição × movimento (saldo×posição + órfãos)
+**Descrição.** Em uma execução, concilia a posição contra o movimento da data/escopo (presença na posição, órfãos, divergências de saldo).
+**Endpoint.** `GET /api/v1/conciliacao` (`data`, `produto?`, `dominio?`).
+**Rastreabilidade.** Código: `internal/service/movimento_contabil_service.go` (`Conciliar`, `valorEsperadoPorBoleto`), `internal/model/analises.go`, `internal/handler/analises_handler.go`.
+
+#### RF-070 — Razonete (livro razão em T)
+**Descrição.** Monta o razonete por conta a partir dos lançamentos vigentes do período (cada lançamento contribui com débito na `conta_debito` e crédito na `conta_credito`; estornos no lado oposto), com saldo acumulado e natureza (D/C). Filtros: boleto, conta, produto, domínio.
+**Endpoint.** `GET /api/v1/razonete`.
+**Rastreabilidade.** Código: `internal/service/movimento_contabil_service.go` (`Razonete`), `internal/model/razonete.go`, `internal/handler/razonete_handler.go`.
+> **Nota de rastreabilidade:** o código marca o razonete como `RF-070`, número que a spec 1.0.0 usara para o modelo `Notificacao` (§4.8) e `RF-071` para endpoints de notificação / clonar. Colisão herdada da 1.0.0; mantida como **dívida de documentação** (IDs imutáveis — §0.4) a ser reconciliada numa revisão futura, sem renumerar o que já está no código.
+
+### 15.3 Operação e processamento
+
+#### RF-132 — Controle de fechamento de competência
+**Descrição.** Trava a virada de competência: sob controle, uma competência (mês/ano) **posterior** a outra já processada só gera após **liberação manual** do mês/ano para o escopo.
+**Regras.**
+- RN-132.1 (Modo, ADR-021): `off` (sem controle), `todos` (todas as combinações, inclusive novas) ou `selecionados` (apenas os escopos cadastrados; campo vazio = curinga). `FechamentoConfig.Controla(produto,dominio)`.
+- RN-132.2 (Liberação): o OK é por (ano, mês, produto, domínio) — produto/domínio vazios = "todos". `Liberado(ano,mes,produto,dominio)`.
+- RN-132.3 (Trava na geração): para uma combinação sob controle e **não liberada**, a geração de uma competência posterior a outra já processada é **bloqueada** (HTTP 200 com mensagem orientando liberar no menu Fechamento).
+- RN-132.4: sqlite-first (tipo concreto; `nil` nos demais backends = sem trava).
+**Endpoints.** `GET /api/v1/fechamento` (estado) · `POST /fechamento/modo` · `POST /fechamento/escopo` + `DELETE /fechamento/escopo/{id}` · `POST /fechamento/liberar` `{ano,mes,produto,dominio}` + `DELETE /fechamento/liberar/{id}`.
+**Rastreabilidade.** Código: `internal/model/controle_fechamento.go`, `internal/repository/sqlite/controle_fechamento.go`, `internal/service/fechamento_service.go`, `internal/service/movimento_contabil_service.go` (trava na geração), `internal/handler` (FechamentoHandler).
+
+#### RF-137 — Reprocessamento seletivo
+**Descrição.** Reprocessa o contábil de um escopo restrito (produto e/ou domínio e, opcionalmente, um **boleto**) para a data, **sem refazer o dia inteiro**.
+**Regras.** RN-137.1: reusa `GerarMovimentoEscopo` por combinação. RN-137.2 (por boleto): como a versão é **por combo** (produto, domínio) e a identidade do boleto depende da regra, não há isolamento real "por boleto"; o serviço **resolve e reprocessa o(s) combo(s) que contêm o boleto** (match por `codigo_identificador_boleto`). RN-137.3: emite evento de auditoria `movimento.reprocessado` (RF-136).
+**Endpoint.** `POST /api/v1/reprocessar` `{data, produto?, dominio?, boleto?}`.
+**Critérios de aceitação.** Dado um boleto informado, Quando reprocesso, Então apenas o(s) combo(s) que o contêm são regerados. (`internal/service/reprocessamento_service_test.go` → `TestReprocessarSeletivo`.)
+**Rastreabilidade.** Código: `internal/model/reprocessamento.go`, `internal/service/reprocessamento_service.go`, `internal/handler/reprocessamento_handler.go`.
+
+#### RF-121 — Fila de jobs assíncronos
+**Descrição.** Fila de jobs em segundo plano (ex.: geração de movimento, expurgo), com worker, estados e log por job.
+**Endpoints.** `GET /api/v1/jobs` (listar/enfileirar) · `/api/v1/jobs/{id}` (item + log).
+**Regras.** RN-121.1: disponível quando há repositório de jobs (sqlite); o worker roda em segundo plano.
+**Rastreabilidade.** Código: `internal/model/job.go`, `internal/repository/sqlite/job.go`, `internal/service/job_service.go`, `internal/handler` (JobHandler); registro em `cmd/api/main.go`.
+
+#### RF-123 — Expurgo / retenção de movimentos
+**Descrição.** Job recorrente que remove movimentos (e inconsistências/execuções correspondentes) além da retenção configurada (N dias).
+**Regras.** RN-123.1: retenção N≤0 = desativado; RN-123.2: disponível quando os repositórios sabem expurgar por data (interface `ExpurgavelPorData`, sqlite).
+**Configuração.** Via `/api/v1/configuracoes` (dias de retenção, intervalo). Sem endpoint HTTP próprio (roda como job RF-121).
+**Critérios de aceitação.** `internal/repository/sqlite/sqlite_test.go` → `TestExpurgarAteData`.
+**Rastreabilidade.** Código: `internal/service` (`ExpurgoService`), `internal/repository/sqlite/*` (`ExpurgarAteData`), `cmd/api/main.go` (`agendarExpurgo`).
+
+#### RF-126 — Geração agendada do contábil
+**Descrição.** Enfileira a geração do contábil 1×/dia no horário configurado (HH:MM), para o escopo (produto+domínio) configurado, na **última data com posição** importada.
+**Regras.** RN-126.1: desativado se horário vazio/inválido ou escopo não configurado; RN-126.2: não regera data já executada para o escopo; RN-126.3: não enfileira duplicado (mesma data/produto/domínio pendente).
+**Configuração.** `/api/v1/configuracoes` (horário, produto, domínio). Roda como job (RF-121).
+**Critérios de aceitação.** `UltimaDataPosicao` validada em `internal/repository/sqlite/sqlite_test.go` → `TestUltimaDataPosicao`.
+**Rastreabilidade.** Código: `cmd/api/main.go` (`agendarGeracao`, `geracaoPendente`), `internal/repository/*/posicao*.go` (`UltimaDataPosicao`).
+
+### 15.4 Auditoria e IA
+
+#### RF-136 — Trilha de auditoria global
+**Descrição.** Log unificado e **estruturado (JSON)** de todas as ações do sistema (cadastro, geração, fechamento, liberação, conciliação, reprocessamento), com consulta filtrável e exportação.
+**Regras.**
+- RN-136.1 (Sempre-log, ADR-020): `Registrar` **sempre** emite `log.Printf("[auditoria] %s", json)`; é **nil-safe** (nunca quebra a operação de negócio).
+- RN-136.2 (Persistência sqlite-first): grava/consulta só quando há repositório (sqlite); `Disponivel()` reflete isso.
+- RN-136.3 (Evento): `categoria`, `ação`, `entidade`, `origem`, `detalhe`, `dados` (map serializado em JSON).
+- RN-136.4 (Hooks): emitido por cadastro de regras (regra/condição criada/editada/excluída, regra.restaurada), fechamento (modo/escopo, competência liberada), geração/conciliação/reprocessamento (movimento.gerado, conciliacao.executada, movimento.reprocessado).
+**Endpoints.** `GET /api/v1/auditoria` (filtrável) · `GET /api/v1/auditoria/export` (NDJSON default; `?formato=csv`). Backend sem repositório → **501**.
+**Critérios de aceitação.** `internal/service/auditoria_service_test.go`; `internal/repository/sqlite/auditoria_test.go`.
+**Rastreabilidade.** Código: `internal/model/auditoria.go`, `internal/repository/sqlite/auditoria.go`, `internal/service/auditoria_service.go`, `internal/handler/auditoria_handler.go`.
+
+#### RF-138 — Copiloto conversacional (chat IA)
+**Descrição.** Chat que responde sobre o sistema e, **com confirmação do usuário**, executa ações (criar regra como rascunho, reprocessar, liberar competência). Ferramentas de **leitura** rodam de imediato; ações de **escrita** exigem confirmação na UI.
+**Regras.**
+- RN-138.1 (Provedores plugáveis, ADR-017): Claude / Gemini / Ollama atrás de uma interface única; seleção por `AI_PROVIDER` ou auto (primeiro disponível). Chamada por **HTTP cru**; **chaves em variável de ambiente** (`ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, `OLLAMA_URL`), nunca no código.
+- RN-138.2 (Modelo Gemini, ADR-018): padrão `gemini-3.5-flash` (sobreponível por `GEMINI_MODEL`).
+- RN-138.3 (Habilitação): `GET /copilot/status` informa `{disponivel, modelo, provedor}`; sem chave, `disponivel=false` e a UI mostra aviso com as opções gratuitas (Gemini free / Ollama local).
+- RN-138.4 (Loop de agente): planejamento via JSON (`acao_tipo` responder/ferramenta/confirmar), máx. passos; resultados de ferramenta são dobrados no prompt (alternância robusta). Ações de escrita só executam via `POST /copilot/acao` após confirmação.
+- RN-138.5 (Segurança): criar_regra cria como **rascunho** (RF-125); nenhuma ação de escrita é executada sem passo de confirmação explícito.
+**Endpoints.** `POST /api/v1/copilot` (chat) · `GET /api/v1/copilot/status` · `POST /api/v1/copilot/acao` (executar ação confirmada).
+**Critérios de aceitação.** Indisponível sem IA; resposta direta; ferramenta→resposta; confirmação; executar reprocessar; executar criar_regra (como rascunho). (`internal/service/copilot_service_test.go`.)
+**Rastreabilidade.** Código: `internal/ai/{cliente,claude,gemini,ollama}.go`, `internal/model/copilot.go`, `internal/service/copilot_service.go`, `internal/handler/copilot_handler.go`. UI: menu "Assistente IA" em `app.html`.
+
+#### RF-139 — [LAB] Diagnóstico de dupla contabilização
+**Descrição.** Avalia as regras **ativas** contra a posição de uma data (igual à geração) e aponta **boletos atingidos por mais de uma regra distinta** — risco de lançamento em dobro que o lint estático (RF-129) **não** pega, porque as expressões são diferentes. Também lista condições que **não casaram nenhuma posição** (regra possivelmente morta na data) e condições que referenciam **campos ausentes**.
+**Regras.**
+- RN-139.1 (Data-driven): para cada posição, avalia pré-condição + condições reusando os helpers do motor (`regraAplicaAPosicao`, `camposFaltantes`, `boletoDaPosicao`, `campoBoletoOuPadrao`); registra os disparos por boleto.
+- RN-139.2 (Conflito): boleto com disparos de **≥2 regras distintas** (`id_regra` diferentes) = possível dupla contabilização.
+- RN-139.3 (Data default): sem `data`, usa a última data com posição (`UltimaDataPosicao`). Listas truncadas por limite (500).
+- RN-139.4 (Flag, ADR-022): atrás de `FEATURES_LAB` (default ligado); desligado → **501** e menu oculto.
+**Endpoints.** `GET /api/v1/lab/status` → `{ativo}` · `GET /api/v1/lab/diagnostico` (`data?`, `produto?`, `dominio?`) → `DiagnosticoRegras { conflitos[], sem_correspondencia[], campos_ausentes[] }`.
+**Critérios de aceitação.** Dado um boleto que satisfaz condições de duas regras ativas diferentes numa data, Quando diagnostico a data, Então o boleto aparece em `conflitos` com as duas regras. _(Verificado manualmente de ponta a ponta; **teste automatizado pendente** — dívida de §0.3.)_
+**Rastreabilidade.** Código: `internal/model/lab.go`, `internal/service/lab_service.go` (`Diagnosticar`), `internal/handler/lab_handler.go`. UI: menu "Diagnóstico" em `app.html`. Marcação de remoção: `grep "[LAB]"`.
+
+#### RF-140 — [LAB] Linhagem de lançamento ("por que esse lançamento?")
+**Descrição.** Para um lançamento gerado, reconstrói a **regra/condição** que o originou e os **campos da posição vigente** que casaram, reavaliando a condição e o `campo_valor`. É honesta quando a regra/posição **mudou desde a geração**.
+**Regras.**
+- RN-140.1 (Entrada): identificação pela própria linha da consulta de movimentos (`data`, `boleto`, `id_regra`, `descricao_condicao`, `produto`, `dominio`).
+- RN-140.2 (Reconstrução): localiza a regra ativa por `id_regra` e a condição pela expressão armazenada; acha a posição do boleto (versão vigente) por `campoBoletoOuPadrao`; lista os campos referenciados (pré-condição + condição + `campo_valor`) com seus valores; reavalia e sinaliza `condicao_ok`.
+- RN-140.3 (Honestidade): se a regra não está mais ativa, a posição não foi encontrada, ou a condição **não casa mais**, retorna observação explicativa (ex.: "a regra pode ter sido alterada após a geração").
+- RN-140.4 (Flag, ADR-022): atrás de `FEATURES_LAB`; na UI é um botão por linha na **Consulta** (só aparece quando ativo).
+**Endpoint.** `POST /api/v1/lab/linhagem` (corpo = `LinhagemInput`) → `Linhagem { encontrada, regra, condicao, condicao_ok, valor, campos[] , observacao }`.
+**Critérios de aceitação.** Dado um lançamento cuja regra ativa ainda casa a posição, Quando peço a linhagem, Então recebo a condição, o valor calculado e os campos usados; Dado que a regra mudou e não casa mais, Então recebo a observação de divergência. _(Verificado manualmente; **teste automatizado pendente**.)_
+**Rastreabilidade.** Código: `internal/model/lab.go`, `internal/service/lab_service.go` (`Linhagem`), `internal/handler/lab_handler.go`. UI: modal "Por que esse lançamento?" + botão na grade de Consulta (`app.html`).
