@@ -118,6 +118,8 @@
     <div class="col-auto sidebar d-flex flex-column" style="width:220px">
       <div class="sidebar-brand" title="Bariottex" style="cursor:default"><i class="bi bi-bank me-2"></i>SRCOff</div>
       <nav class="nav flex-column mt-2">
+        <div class="sidebar-section">Assistente</div>
+        <a class="nav-link" href="#" onclick="showPage('assistente')"><i class="bi bi-stars me-2"></i>Assistente IA</a>
         <div class="sidebar-section">Operação</div>
         <a class="nav-link active" href="#" onclick="showPage('operacao')"><i class="bi bi-play-circle me-2"></i>Operação</a>
         <a class="nav-link" href="#" onclick="showPage('fechamento')"><i class="bi bi-lock me-2"></i>Fechamento</a>
@@ -137,6 +139,9 @@
         <div class="sidebar-section">Análise</div>
         <a class="nav-link" href="#" onclick="showPage('conciliacao')"><i class="bi bi-check2-circle me-2"></i>Conciliação</a>
         <a class="nav-link" href="#" onclick="showPage('dashboard')"><i class="bi bi-speedometer2 me-2"></i>Dashboard</a>
+        <a class="nav-link" href="#" onclick="showPage('auditoria')"><i class="bi bi-clipboard-check me-2"></i>Auditoria</a>
+        <!-- [LAB] Diagnóstico de dupla contabilização (experimental): escondido até /lab/status confirmar ativo -->
+        <a class="nav-link" id="nav-diagnostico" href="#" onclick="showPage('diagnostico')" style="display:none"><i class="bi bi-diagram-3 me-2"></i>Diagnóstico</a>
 
         <div class="sidebar-section">Ajuda</div>
         <a class="nav-link" href="#" onclick="showPage('sobre')"><i class="bi bi-info-circle me-2"></i>Sobre</a>
@@ -148,6 +153,24 @@
 
     <!-- Main content -->
     <div class="col p-4">
+
+      <!-- ==================== ASSISTENTE IA (RF-138) ==================== -->
+      <div id="page-assistente" class="page">
+        <h4 class="mb-2"><i class="bi bi-stars me-2"></i>Assistente IA</h4>
+        <p class="text-muted small">Converse para consultar o sistema e, com confirmação, executar ações (criar regra, reprocessar, liberar competência). Powered by Claude.</p>
+        <div id="cp-aviso"></div>
+        <div class="card shadow-sm">
+          <div id="cp-mensagens" class="card-body" style="height:58vh;overflow:auto"></div>
+          <div class="card-footer">
+            <div class="input-group">
+              <input id="cp-input" class="form-control" placeholder="Pergunte algo ou peça uma ação…"
+                onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();cpEnviar();}">
+              <button class="btn btn-primary" id="cp-enviar" onclick="cpEnviar()"><i class="bi bi-send me-1"></i>Enviar</button>
+            </div>
+            <div class="form-text">Ex.: <em>"quantos lançamentos o NDF gerou em 2024-01-15?"</em> · <em>"crie uma regra que debita 1.1.2 e credita 4.1.9 quando valor_mtm &gt; 0 em NDF"</em> · <em>"reprocessa o boleto BOL-2 de 2024-01-15"</em>.</div>
+          </div>
+        </div>
+      </div>
 
       <!-- ==================== OPERAÇÃO ==================== -->
       <div id="page-operacao" class="page active">
@@ -196,6 +219,22 @@
                 <div id="op-status-resultado" class="mt-3"></div>
               </div>
             </div>
+          </div>
+        </div>
+
+        <!-- Reprocessamento seletivo (RF-137) -->
+        <div class="card shadow-sm mt-4">
+          <div class="card-header"><i class="bi bi-arrow-repeat me-2"></i>Reprocessamento seletivo</div>
+          <div class="card-body">
+            <p class="text-muted small mb-2">Reprocessa só o escopo informado, sem refazer o dia inteiro. Informe um <strong>boleto</strong> para reprocessar apenas a(s) combinação(ões) Produto/Domínio em que ele aparece na posição da data (o versionamento é por combinação). O estorno de D-1, incremental e a trava de fechamento são respeitados.</p>
+            <div class="row g-2 align-items-end">
+              <div class="col-md-2"><label class="form-label form-label-sm">Data</label><input type="date" id="rp-data" class="form-control form-control-sm"></div>
+              <div class="col-md-3"><label class="form-label form-label-sm">Produto <small class="text-muted">(opc.)</small></label><select id="rp-produto" class="form-select form-select-sm"></select></div>
+              <div class="col-md-3"><label class="form-label form-label-sm">Domínio <small class="text-muted">(opc.)</small></label><select id="rp-dominio" class="form-select form-select-sm"></select></div>
+              <div class="col-md-2"><label class="form-label form-label-sm">Boleto <small class="text-muted">(opc.)</small></label><input type="text" id="rp-boleto" class="form-control form-control-sm" placeholder="ex.: BOL-2"></div>
+              <div class="col-md-2"><button class="btn btn-primary btn-sm w-100" onclick="reprocessar()"><i class="bi bi-arrow-repeat me-1"></i>Reprocessar</button></div>
+            </div>
+            <div id="rp-resultado" class="mt-3"></div>
           </div>
         </div>
 
@@ -482,6 +521,7 @@
               </div>
               <input type="file" id="r-import-file" accept=".csv" style="display:none" onchange="importarRegras(this)">
               <button class="btn btn-sm btn-outline-warning" onclick="lintRegras()" title="Verificar regras ativas (achados estáticos: sem condição, expressão inválida, contas iguais, duplicadas)"><i class="bi bi-shield-check me-1"></i>Verificar</button>
+              <button class="btn btn-sm btn-outline-secondary" onclick="window.open('/api/v1/catalogo-regras','_blank')" title="Catálogo imprimível das regras ativas (HTML/PDF)"><i class="bi bi-file-earmark-text me-1"></i>Catálogo</button>
               <button class="btn btn-sm btn-primary" onclick="abrirNovaRegra()"><i class="bi bi-plus me-1"></i>Nova Regra</button>
             </div>
           </div>
@@ -726,8 +766,14 @@
           </table></div>
         </div>
 
-        <div class="mb-2 d-flex gap-2 align-items-center">
+        <div class="mb-2 d-flex gap-2 align-items-center flex-wrap">
           <button class="btn btn-primary" onclick="simularWhatif()"><i class="bi bi-magic me-1"></i>Simular</button>
+          <div class="input-group input-group-sm" style="width:auto">
+            <span class="input-group-text">Backtest</span>
+            <input type="number" id="wi-bt-dias" class="form-control" style="width:72px" value="10" min="1" max="60" title="Nº de dias com posição a avaliar">
+            <span class="input-group-text">dias</span>
+            <button class="btn btn-outline-primary" onclick="backtestWhatif()" title="Roda esta regra sobre as últimas N datas com posição"><i class="bi bi-graph-up me-1"></i>Rodar</button>
+          </div>
           <button class="btn btn-outline-success" onclick="criarRegraDoWhatif()"><i class="bi bi-plus-circle me-1"></i>Criar regra real</button>
           <div class="form-check ms-2 mb-0"><input class="form-check-input" type="checkbox" id="wi-rascunho" checked><label class="form-check-label small" for="wi-rascunho">Criar como <strong>rascunho</strong> (não vale na geração até você ativar)</label></div>
         </div>
@@ -780,6 +826,50 @@
             <div id="fc-liberacoes-lista" class="text-muted">Carregando…</div>
           </div>
         </div>
+      </div>
+
+      <!-- ==================== AUDITORIA (RF-136) ==================== -->
+      <div id="page-auditoria" class="page">
+        <h4 class="mb-3"><i class="bi bi-clipboard-check me-2"></i>Trilha de auditoria</h4>
+        <p class="text-muted">Log unificado e estruturado das ações do sistema — cadastro, geração, fechamento, liberação e conciliação. Cada evento guarda o quê, quando, a origem e um bloco de dados estruturados (JSON).</p>
+        <div class="card shadow-sm mb-3"><div class="card-body">
+          <div class="row g-2 align-items-end">
+            <div class="col-md-2"><label class="form-label form-label-sm">Categoria</label>
+              <select id="au-categoria" class="form-select form-select-sm">
+                <option value="">Todas</option>
+                <option value="cadastro">Cadastro</option>
+                <option value="geracao">Geração</option>
+                <option value="fechamento">Fechamento</option>
+                <option value="liberacao">Liberação</option>
+                <option value="conciliacao">Conciliação</option>
+              </select></div>
+            <div class="col-md-2"><label class="form-label form-label-sm">De</label><input type="date" id="au-de" class="form-control form-control-sm"></div>
+            <div class="col-md-2"><label class="form-label form-label-sm">Até</label><input type="date" id="au-ate" class="form-control form-control-sm"></div>
+            <div class="col-md-3"><label class="form-label form-label-sm">Busca</label><input type="text" id="au-q" class="form-control form-control-sm" placeholder="ação, entidade, detalhe..." onkeydown="if(event.key==='Enter')carregarAuditoria(1)"></div>
+            <div class="col-md-3 d-flex gap-2">
+              <button class="btn btn-primary btn-sm flex-fill" onclick="carregarAuditoria(1)"><i class="bi bi-search me-1"></i>Filtrar</button>
+              <button class="btn btn-outline-secondary btn-sm" onclick="exportarAuditoria('ndjson')" title="Exportar como NDJSON (um JSON por linha)"><i class="bi bi-filetype-json"></i></button>
+              <button class="btn btn-outline-secondary btn-sm" onclick="exportarAuditoria('csv')" title="Exportar como CSV"><i class="bi bi-filetype-csv"></i></button>
+            </div>
+          </div>
+        </div></div>
+        <div id="au-lista"></div>
+        <div id="au-paginacao" class="d-flex justify-content-between align-items-center mt-2"></div>
+      </div>
+
+      <!-- ==================== [LAB] DIAGNÓSTICO DE DUPLA CONTABILIZAÇÃO (experimental) ==================== -->
+      <div id="page-diagnostico" class="page">
+        <h4 class="mb-1"><i class="bi bi-diagram-3 me-2"></i>Diagnóstico de regras <span class="badge bg-secondary align-middle">experimental</span></h4>
+        <p class="text-muted">Avalia as regras ativas contra a posição de uma data (igual à geração) e aponta <strong>boletos atingidos por mais de uma regra</strong> — risco de lançamento em dobro que o lint estático não pega —, condições que não casaram nada e campos ausentes.</p>
+        <div class="card shadow-sm mb-3"><div class="card-body">
+          <div class="row g-2 align-items-end">
+            <div class="col-auto"><label class="form-label form-label-sm mb-0">Data <span class="text-muted">(vazio = última com posição)</span></label><input type="date" id="diag-data" class="form-control form-control-sm"></div>
+            <div class="col-auto"><label class="form-label form-label-sm mb-0">Produto</label><select id="diag-produto" class="form-select form-select-sm"></select></div>
+            <div class="col-auto"><label class="form-label form-label-sm mb-0">Domínio</label><select id="diag-dominio" class="form-select form-select-sm"></select></div>
+            <div class="col-auto"><button class="btn btn-primary btn-sm" onclick="diagnosticar()"><i class="bi bi-search me-1"></i>Analisar</button></div>
+          </div>
+        </div></div>
+        <div id="diag-resultado"><div class="text-muted"><i class="bi bi-info-circle me-1"></i>Escolha os filtros e clique em <strong>Analisar</strong>.</div></div>
       </div>
 
       <!-- ==================== SOBRE (passo a passo) ==================== -->
@@ -1434,6 +1524,47 @@ NOVA-1;Minha Regra;NDF;Posição;;;Sim;reverte;;valor_mtm &lt; 0;3333333333;4444
   </div>
 </div>
 
+<!-- ==================== HISTÓRICO DE VERSÕES DA REGRA (RF-133) ==================== -->
+<div class="modal fade" id="modalHistorico" tabindex="-1">
+  <div class="modal-dialog modal-xl modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="bi bi-clock-history me-2"></i>Histórico <span id="hist-titulo" class="text-muted fw-normal"></span></h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="row g-3">
+          <div class="col-md-4 col-lg-3">
+            <div class="small text-muted mb-2" id="hist-contagem"></div>
+            <div id="hist-timeline" class="d-flex flex-column gap-2" style="max-height:60vh;overflow:auto"></div>
+          </div>
+          <div class="col-md-8 col-lg-9">
+            <div class="d-flex align-items-center gap-2 mb-3 flex-wrap">
+              <span class="small text-muted">Comparar</span>
+              <select id="hist-a" class="form-select form-select-sm" style="width:auto" onchange="histRenderDiff()"></select>
+              <i class="bi bi-arrow-right"></i>
+              <select id="hist-b" class="form-select form-select-sm" style="width:auto" onchange="histRenderDiff()"></select>
+              <button class="btn btn-sm btn-outline-secondary ms-auto" onclick="histInverter()" title="Inverter A e B"><i class="bi bi-arrow-left-right"></i></button>
+            </div>
+            <div id="hist-diff"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== [LAB] LINHAGEM "por que esse lançamento" (experimental) ==================== -->
+<div class="modal fade" id="modalLinhagem" tabindex="-1">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable"><div class="modal-content">
+    <div class="modal-header">
+      <h5 class="modal-title"><i class="bi bi-signpost-split me-2"></i>Por que esse lançamento?</h5>
+      <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+    </div>
+    <div class="modal-body" id="linhagem-corpo"></div>
+  </div></div>
+</div>
+
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <script>
@@ -1446,6 +1577,10 @@ let todasRegras = []; // cache para filtro client-side
 let regraEditId = null; // regra em edição (null = criação)
 let condicaoEditId = null; // condição em edição (null = criação)
 let condicoesAtuais = []; // condições da regra aberta no modal
+let histVersoes = [];     // versões da regra aberta no modal de histórico (RF-133)
+let histRegraId = null;
+let histRegraDesc = '';
+let labAtivo = false;     // [LAB] feature experimental ligada? (via /api/v1/lab/status)
 
 // ── Navegação ──────────────────────────────────────────────
 function showPage(name) {
@@ -1479,6 +1614,8 @@ function showPage(name) {
   if (name === 'dashboard') { initDashboard(); }
   if (name === 'jobs') { initJobs(); }
   if (name === 'whatif') { initWhatif(); }
+  if (name === 'assistente') { cpInit(); }
+  if (name === 'auditoria') { carregarAuditoria(1); }
   if (name === 'fechamento') {
     preencherSelectOpcoes('fc-esc-produto', 'produto', { incluirVazio: true });
     preencherSelectOpcoes('fc-esc-dominio', 'dominio', { incluirVazio: true });
@@ -1488,9 +1625,15 @@ function showPage(name) {
     carregarFechamento();
   }
   if (name === 'conciliacao') { initConciliacao(); }
+  if (name === 'diagnostico') { // [LAB]
+    preencherSelectOpcoes('diag-produto', 'produto', { incluirVazio: true });
+    preencherSelectOpcoes('diag-dominio', 'dominio', { incluirVazio: true });
+  }
   if (name === 'operacao') {
     preencherSelectOpcoes('op-produto', 'produto', { incluirVazio: true });
     preencherSelectOpcoes('op-dominio', 'dominio', { incluirVazio: true });
+    preencherSelectOpcoes('rp-produto', 'produto', { incluirVazio: true });
+    preencherSelectOpcoes('rp-dominio', 'dominio', { incluirVazio: true });
     const hoje = new Date();
     const mesSel = document.getElementById('op-cal-mes');
     const anoInp = document.getElementById('op-cal-ano');
@@ -2184,6 +2327,63 @@ function wiRenderResultado(r) {
   el.innerHTML = html;
 }
 
+// Backtest (RF-135): roda a MESMA regra candidata sobre as últimas N datas com posição e
+// mostra o impacto agregado (por dia e por par de contas), sem persistir nada.
+async function backtestWhatif() {
+  const condicoes = wiColetarCondicoes();
+  if (condicoes.length === 0) { toast('Informe ao menos uma condição com expressão e campo valor', 'warning'); return; }
+  const dias = parseInt(document.getElementById('wi-bt-dias').value) || 10;
+  const payload = {
+    dias,
+    regra: {
+      produto: document.getElementById('wi-produto').value,
+      dominio: document.getElementById('wi-dominio').value,
+      boleto: document.getElementById('wi-boleto').value.trim(),
+      pre_condicao: document.getElementById('wi-precond').value.trim(),
+      tipo_lancamento: document.getElementById('wi-tipo').value,
+      condicoes,
+    },
+  };
+  spin(true);
+  const r = await api('POST', '/v1/backtest-regra', payload);
+  spin(false);
+  const el = document.getElementById('wi-resultado');
+  if (!r) return;
+  if (r.erro) { el.innerHTML = `<div class="alert alert-danger">${esc(r.erro)}</div>`; return; }
+  btRenderResultado(r);
+}
+
+function btRenderResultado(r) {
+  const el = document.getElementById('wi-resultado');
+  const periodo = r.dias_com_posicao ? `${esc(r.data_inicio)} a ${esc(r.data_fim)}` : '—';
+  let html = `<div class="row g-3 mb-3">
+    <div class="col-6 col-md-3"><div class="card shadow-sm h-100"><div class="card-body text-center"><div class="text-muted small">Dias com posição</div><div class="fs-4 fw-bold">${r.dias_com_posicao}<span class="text-muted fs-6">/${r.dias_solicitados}</span></div></div></div></div>
+    <div class="col-6 col-md-3"><div class="card shadow-sm h-100"><div class="card-body text-center"><div class="text-muted small">Lançamentos</div><div class="fs-4 fw-bold text-success">${r.total_lancamentos}</div></div></div></div>
+    <div class="col-6 col-md-3"><div class="card shadow-sm h-100"><div class="card-body text-center"><div class="text-muted small">Σ Valor</div><div class="fs-5 fw-bold">${wiFmt(r.soma_valor)}</div></div></div></div>
+    <div class="col-6 col-md-3"><div class="card shadow-sm h-100"><div class="card-body text-center"><div class="text-muted small">Inconsistências</div><div class="fs-4 fw-bold text-warning">${r.total_inconsistencias}</div></div></div></div>
+  </div>`;
+  html += `<div class="text-muted small mb-3"><i class="bi bi-calendar-range me-1"></i>Período avaliado: <strong>${periodo}</strong></div>`;
+  if (r.aviso) html += `<div class="alert alert-info py-2"><i class="bi bi-info-circle me-2"></i>${esc(r.aviso)}</div>`;
+
+  const dias = r.dias || [];
+  html += `<div class="card shadow-sm mb-3"><div class="card-header"><i class="bi bi-calendar3 me-2"></i>Impacto por dia</div>
+    <div class="table-responsive" style="max-height:360px;overflow:auto"><table class="table table-sm table-hover mb-0">
+    <thead><tr><th>Data</th><th class="text-end">Posições</th><th class="text-end">Lançamentos</th><th class="text-end">Σ Valor</th><th class="text-end">Σ Valor base</th><th class="text-end">Inconsist.</th></tr></thead><tbody>`;
+  if (dias.length === 0) html += `<tr><td colspan="6" class="text-muted p-3">Nenhuma data com posição avaliada.</td></tr>`;
+  else for (const drow of dias) html += `<tr><td>${esc(drow.data)}</td><td class="text-end">${drow.posicoes_avaliadas}</td><td class="text-end text-success">${drow.total_lancamentos}</td><td class="text-end">${wiFmt(drow.soma_valor)}</td><td class="text-end">${wiFmt(drow.soma_valor_base_veiculo)}</td><td class="text-end ${drow.total_inconsistencias ? 'text-warning' : ''}">${drow.total_inconsistencias}</td></tr>`;
+  html += `</tbody></table></div></div>`;
+
+  const contas = r.por_conta || [];
+  if (contas.length) {
+    html += `<div class="card shadow-sm mb-3"><div class="card-header"><i class="bi bi-bank me-2"></i>Impacto por par de contas</div>
+      <div class="table-responsive" style="max-height:320px;overflow:auto"><table class="table table-sm mb-0">
+      <thead><tr><th>Conta débito</th><th>Conta crédito</th><th class="text-end">Qtd</th><th class="text-end">Σ Valor</th></tr></thead><tbody>`;
+    for (const c of contas) html += `<tr><td>${esc(c.conta_debito)}</td><td>${esc(c.conta_credito)}</td><td class="text-end">${c.qtd}</td><td class="text-end">${wiFmt(c.soma_valor)}</td></tr>`;
+    html += `</tbody></table></div></div>`;
+  }
+  el.innerHTML = html;
+}
+
 // Cria uma regra real a partir da regra candidata da simulação. O escopo produto/domínio
 // vira o produto/domínio da regra; cada condição leva a configuração de moeda base do
 // veículo informada no form. Por padrão cria como RASCUNHO (não vale na geração até ativar);
@@ -2281,6 +2481,37 @@ async function gerarMovimento() {
     el.innerHTML = `<div class="alert alert-danger"><i class="bi bi-x-circle me-2"></i>${r.erro}</div>`;
     toast(r.erro, 'danger');
   }
+}
+
+// ── Reprocessamento seletivo (RF-137) ─────────────────────
+async function reprocessar() {
+  const data = document.getElementById('rp-data').value;
+  if (!data) { toast('Informe a data', 'warning'); return; }
+  const produto = document.getElementById('rp-produto').value;
+  const dominio = document.getElementById('rp-dominio').value;
+  const boleto = document.getElementById('rp-boleto').value.trim();
+  const el = document.getElementById('rp-resultado');
+  el.innerHTML = '<div class="text-muted small"><i class="bi bi-hourglass-split me-1"></i>Reprocessando...</div>';
+  spin(true);
+  const r = await api('POST', '/v1/reprocessar', { data, produto, dominio, boleto });
+  spin(false);
+  if (!r) { el.innerHTML = ''; return; }
+  if (r.erro) { el.innerHTML = `<div class="alert alert-danger py-2"><i class="bi bi-x-circle me-2"></i>${esc(r.erro)}</div>`; return; }
+  const combos = r.combos_processados || [];
+  const linhas = combos.map(c => `<tr>
+    <td>${c.produto ? esc(c.produto) : '<span class="text-muted">todos</span>'}</td>
+    <td>${c.dominio ? esc(c.dominio) : '<span class="text-muted">todos</span>'}</td>
+    <td>${c.bloqueado ? `<span class="badge bg-warning text-dark">bloqueado${c.motivo ? ' · ' + esc(c.motivo) : ''}</span>` : '<span class="badge bg-success">reprocessado</span>'}</td>
+  </tr>`).join('');
+  el.innerHTML = `<div class="alert alert-success py-2"><i class="bi bi-check-circle me-2"></i>${esc(r.mensagem)}</div>
+    <div class="table-responsive"><table class="table table-sm table-hover mb-0">
+      <thead class="table-light"><tr><th>Produto</th><th>Domínio</th><th>Resultado</th></tr></thead>
+      <tbody>${linhas || '<tr><td colspan="3" class="text-muted">—</td></tr>'}</tbody>
+    </table></div>`;
+  // Atualiza as inconsistências/status da data reprocessada.
+  document.getElementById('op-inc-data').value = data; consultarInconsistencias();
+  document.getElementById('op-status-data').value = data; consultarStatus();
+  atualizarNotificacoes();
 }
 
 // ── INCONSISTÊNCIAS ────────────────────────────────────────
@@ -2695,12 +2926,13 @@ function renderGridMovimento() {
     el.innerHTML = '<div class="alert alert-warning">Nenhuma coluna selecionada. Use o botão <strong>Colunas</strong> para exibir.</div>';
     return;
   }
-  const thead = visiveis.map(k => `<th class="mov-th" draggable="true" data-col="${k}"><i class="bi bi-grip-vertical text-muted me-1"></i>${esc(MOV_COLS_MAP[k].label)}</th>`).join('');
-  const rows = movUltimo.lancamentos.map(l => '<tr>' + visiveis.map(k => {
+  const acaoTh = labAtivo ? '<th class="text-center" style="width:36px" title="Por que esse lançamento?"><i class="bi bi-signpost-split text-muted"></i></th>' : ''; // [LAB]
+  const thead = visiveis.map(k => `<th class="mov-th" draggable="true" data-col="${k}"><i class="bi bi-grip-vertical text-muted me-1"></i>${esc(MOV_COLS_MAP[k].label)}</th>`).join('') + acaoTh;
+  const rows = movUltimo.lancamentos.map((l, idx) => '<tr>' + visiveis.map(k => {
     const c = MOV_COLS_MAP[k];
     const v = c.cell(l);
     return `<td class="${c.cls || ''}">${v == null ? '' : v}</td>`;
-  }).join('') + '</tr>').join('');
+  }).join('') + (labAtivo ? `<td class="text-center"><button class="btn btn-sm btn-link p-0" title="Por que esse lançamento?" onclick="abrirLinhagem(${idx})"><i class="bi bi-question-circle"></i></button></td>` : '') + '</tr>').join('');
 
   const tamanho = parseInt(document.getElementById('c-tamanho').value);
   const totalPages = Math.ceil(movUltimo.total / tamanho);
@@ -3187,10 +3419,17 @@ async function consultarIA() {
 }
 
 // ── REGRAS ─────────────────────────────────────────────────
+let historicoResumo = {}; // id_regra -> {versao, resumo, criado_em} (RF-133; vazio se feature off)
+let historicoDisponivel = false;
+
 async function carregarRegras() {
   const r = await api('GET', '/v1/regras');
   // A API retorna null quando não há regras; trata como lista vazia.
   todasRegras = Array.isArray(r) ? r : [];
+  // Resumo do histórico de versões (silencioso: 501 nos backends sem a feature).
+  const hr = await api('GET', '/v1/regra-historico', null, true);
+  if (hr && !hr.erro && typeof hr === 'object') { historicoResumo = hr; historicoDisponivel = true; }
+  else { historicoResumo = {}; historicoDisponivel = false; }
   if (r && r.erro) { renderizarRegras([]); return; }
   renderizarRegras(todasRegras);
 }
@@ -3213,6 +3452,283 @@ async function lintRegras() {
   }
   html += `</tbody></table></div>`;
   el.innerHTML = html;
+}
+
+// ── Histórico de versões do cadastro de regras (RF-133) ────
+// Selo "vN" ao lado do nome da regra na lista (só quando a feature está ligada).
+function seloHistorico(id) {
+  if (!historicoDisponivel) return '';
+  const h = historicoResumo[id];
+  if (!h) return '';
+  return ` <span class="badge bg-light text-secondary border ms-1" title="${esc(h.resumo || '')} · ${esc(histFmt(h.criado_em))}">v${h.versao}</span>`;
+}
+
+function histFmt(ts) {
+  if (!ts) return '';
+  const m = String(ts).match(/(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})/);
+  return m ? `${m[3]}/${m[2]}/${m[1]} ${m[4]}:${m[5]}` : ts;
+}
+
+async function abrirHistorico(id) {
+  const reg = (todasRegras || []).find(r => r.id === id);
+  histRegraId = id;
+  histRegraDesc = reg ? reg.descricao : ('#' + id);
+  document.getElementById('hist-titulo').textContent = `· regra #${id} — ${histRegraDesc}`;
+  const r = await api('GET', '/v1/regra-historico?id_regra=' + id);
+  histVersoes = Array.isArray(r) ? r : [];
+  document.getElementById('hist-contagem').textContent = histVersoes.length + ' versão(ões)';
+  histPopularSelects();
+  histRenderTimeline();
+  bootstrap.Modal.getOrCreateInstance(document.getElementById('modalHistorico')).show();
+  histRenderDiff();
+}
+
+function histPopularSelects() {
+  const opts = histVersoes.map(v => `<option value="${v.versao}">v${v.versao}${v.ativa ? ' (ativa)' : ''} · ${esc(v.resumo)}</option>`).join('');
+  const a = document.getElementById('hist-a'), b = document.getElementById('hist-b');
+  a.innerHTML = opts; b.innerHTML = opts;
+  if (histVersoes.length) {
+    b.value = histVersoes[0].versao;                       // mais recente
+    a.value = (histVersoes[1] || histVersoes[0]).versao;   // anterior
+  }
+}
+
+function histRenderTimeline() {
+  const el = document.getElementById('hist-timeline');
+  if (!histVersoes.length) { el.innerHTML = '<div class="text-muted small">Sem versões.</div>'; return; }
+  el.innerHTML = histVersoes.map(v => `
+    <div class="card ${v.ativa ? 'border-success' : ''}" style="cursor:pointer" onclick="histSelecionar(${v.versao})">
+      <div class="card-body py-2 px-3">
+        <div class="d-flex align-items-center gap-2">
+          <span class="fw-bold">v${v.versao}</span>
+          ${v.ativa ? '<span class="badge bg-success">ativa</span>' : ''}
+        </div>
+        <div class="small">${esc(v.resumo)}</div>
+        <div class="small text-muted">${histFmt(v.criado_em)}${v.origem && v.origem !== 'sistema' ? ' · ' + esc(v.origem) : ''}</div>
+        ${v.ativa ? '' : `<button class="btn btn-sm btn-outline-primary mt-2" onclick="event.stopPropagation();histRestaurar(${v.versao})" title="Restaurar esta versão como ativa"><i class="bi bi-arrow-counterclockwise me-1"></i>Tornar ativa</button>`}
+      </div>
+    </div>`).join('');
+}
+
+function histSelecionar(v) {
+  document.getElementById('hist-b').value = v;
+  const anteriores = histVersoes.filter(x => x.versao < v).map(x => x.versao);
+  document.getElementById('hist-a').value = anteriores.length ? Math.max(...anteriores) : v;
+  histRenderDiff();
+}
+
+function histInverter() {
+  const a = document.getElementById('hist-a'), b = document.getElementById('hist-b');
+  const t = a.value; a.value = b.value; b.value = t;
+  histRenderDiff();
+}
+
+async function histRenderDiff() {
+  if (!histRegraId) return;
+  const a = document.getElementById('hist-a').value, b = document.getElementById('hist-b').value;
+  const el = document.getElementById('hist-diff');
+  const d = await api('GET', `/v1/regra-historico/diff?id_regra=${histRegraId}&a=${a}&b=${b}`);
+  if (!d || d.erro) { el.innerHTML = `<div class="alert alert-danger">${esc(d?.erro || 'erro')}</div>`; return; }
+  el.innerHTML = histDiffHTML(d);
+}
+
+function histDiffHTML(d) {
+  let h = `<div class="small text-muted mb-2">Comparando <strong>v${d.versao_a}</strong> <i class="bi bi-arrow-right"></i> <strong>v${d.versao_b}</strong></div>`;
+  const temCampos = d.campos_regra && d.campos_regra.length;
+  const temCond = d.condicoes && d.condicoes.length;
+  if (!temCampos && !temCond) {
+    return h + '<div class="alert alert-light border"><i class="bi bi-check2 me-1"></i>Nenhuma diferença entre estas versões.</div>';
+  }
+  if (temCampos) {
+    h += `<div class="text-uppercase small text-muted mb-1">Regra</div><div class="card mb-3"><div class="card-body py-2">`;
+    h += d.campos_regra.map(c => `<div class="mb-2"><div class="small text-muted">${esc(c.rotulo)}</div>
+      <div><span class="badge bg-danger-subtle text-danger text-decoration-line-through">${esc(c.de || '—')}</span>
+      <i class="bi bi-arrow-right mx-1"></i>
+      <span class="badge bg-success-subtle text-success">${esc(c.para || '—')}</span></div></div>`).join('');
+    h += `</div></div>`;
+  }
+  h += `<div class="text-uppercase small text-muted mb-1">Condições</div>`;
+  if (temCond) h += d.condicoes.map(histCondHTML).join('');
+  if (d.condicoes_iguais) h += `<div class="text-muted small"><i class="bi bi-dash me-1"></i>${d.condicoes_iguais} condição(ões) sem alteração</div>`;
+  if (!temCond && !d.condicoes_iguais) h += `<div class="text-muted small">—</div>`;
+  return h;
+}
+
+function histCondHTML(c) {
+  if (c.tipo === 'adicionada')
+    return `<div class="border-start border-success border-3 bg-success-subtle p-2 mb-2"><div class="small fw-bold text-success"><i class="bi bi-plus-lg me-1"></i>Adicionada</div><div class="small"><code>${esc(c.rotulo)}</code></div></div>`;
+  if (c.tipo === 'removida')
+    return `<div class="border-start border-danger border-3 bg-danger-subtle p-2 mb-2"><div class="small fw-bold text-danger"><i class="bi bi-dash-lg me-1"></i>Removida</div><div class="small"><code class="text-decoration-line-through">${esc(c.rotulo)}</code></div></div>`;
+  const campos = (c.campos || []).map(f => `<div class="small"><span class="text-muted">${esc(f.rotulo)}:</span> <span class="text-decoration-line-through text-danger">${esc(f.de || '—')}</span> <i class="bi bi-arrow-right"></i> <span class="text-success">${esc(f.para || '—')}</span></div>`).join('');
+  return `<div class="border-start border-warning border-3 bg-warning-subtle p-2 mb-2"><div class="small fw-bold text-warning-emphasis"><i class="bi bi-pencil me-1"></i>Alterada — <code>${esc(c.rotulo)}</code></div>${campos}</div>`;
+}
+
+async function histRestaurar(v) {
+  if (!confirm(`Tornar a versão v${v} a ativa?\n\nIsso sobrescreve o estado atual da regra (campos e condições). Uma nova versão será criada registrando a restauração — nada do histórico se perde.`)) return;
+  const r = await api('POST', `/v1/regra-historico/restaurar?id_regra=${histRegraId}&versao=${v}`);
+  if (r && r.mensagem) {
+    toast('Versão v' + v + ' restaurada.');
+    await abrirHistorico(histRegraId);
+    carregarRegras();
+  } else toast(r?.erro || 'Erro ao restaurar', 'danger');
+}
+
+// ── Assistente IA / copiloto (RF-138) ──────────────────────
+let cpMensagens = [];      // {role, texto, tipo?, operacao?, args?, resumo?, _pending?, _feito?, _resultado?, _cancelado?}
+let cpDisponivel = false;
+let cpOcupado = false;
+
+async function cpInit() {
+  const st = await api('GET', '/v1/copilot/status', null, true);
+  cpDisponivel = !!(st && st.disponivel);
+  const aviso = document.getElementById('cp-aviso');
+  const inp = document.getElementById('cp-input'), btn = document.getElementById('cp-enviar');
+  if (cpDisponivel) {
+    aviso.innerHTML = `<div class="alert alert-success py-2 small mb-2"><i class="bi bi-check-circle me-1"></i>Assistente ativo — provedor <code>${esc(st.provedor || '')}</code>, modelo <code>${esc(st.modelo || '')}</code>.</div>`;
+    inp.disabled = false; btn.disabled = false;
+  } else {
+    aviso.innerHTML = `<div class="alert alert-warning py-2 mb-2">
+      <div class="mb-1"><i class="bi bi-exclamation-triangle me-2"></i><strong>Chat desabilitado</strong> — configure um provedor de IA (variável de ambiente) e reinicie o SRCOff:</div>
+      <ul class="small mb-1">
+        <li><strong>Grátis (Google Gemini):</strong> pegue uma chave gratuita em <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com</a> e defina <code>GEMINI_API_KEY</code>.</li>
+        <li><strong>Grátis e offline (Ollama):</strong> instale o <a href="https://ollama.com" target="_blank" rel="noopener">Ollama</a>, rode <code>ollama run llama3.1</code> e defina <code>AI_PROVIDER=ollama</code>.</li>
+        <li><strong>Claude (pago):</strong> chave em <a href="https://console.anthropic.com" target="_blank" rel="noopener">console.anthropic.com</a> → <code>ANTHROPIC_API_KEY</code>.</li>
+      </ul>
+      <div class="small text-muted">Sem <code>AI_PROVIDER</code>, o sistema usa automaticamente o primeiro configurado (Claude → Gemini → Ollama).</div>
+    </div>`;
+    inp.disabled = true; btn.disabled = true;
+  }
+  cpRender();
+}
+
+function cpRender() {
+  const el = document.getElementById('cp-mensagens');
+  if (!cpMensagens.length) {
+    el.innerHTML = '<div class="text-muted small text-center mt-5"><i class="bi bi-stars me-1"></i>Comece perguntando algo sobre o sistema, ou peça uma ação.</div>';
+    return;
+  }
+  el.innerHTML = cpMensagens.map((m, i) => cpBolha(m, i)).join('');
+  el.scrollTop = el.scrollHeight;
+}
+
+function cpBolha(m, idx) {
+  if (m.role === 'user')
+    return `<div class="d-flex justify-content-end mb-2"><div class="p-2 px-3 rounded-3 bg-primary text-white" style="max-width:78%;white-space:pre-wrap">${esc(m.texto)}</div></div>`;
+  if (m._pending)
+    return `<div class="d-flex justify-content-start mb-2"><div class="p-2 px-3 rounded-3 bg-body-secondary text-muted"><span class="spinner-border spinner-border-sm me-1"></span>pensando…</div></div>`;
+  if (m.tipo === 'confirmacao') return cpConfirmCard(m, idx);
+  if (m.tipo === 'erro')
+    return `<div class="d-flex justify-content-start mb-2"><div class="p-2 px-3 rounded-3 bg-danger-subtle text-danger" style="max-width:85%;white-space:pre-wrap">${esc(m.texto)}</div></div>`;
+  return `<div class="d-flex justify-content-start mb-2"><div class="p-2 px-3 rounded-3 bg-body-secondary" style="max-width:85%;white-space:pre-wrap">${esc(m.texto)}</div></div>`;
+}
+
+function cpConfirmCard(m, idx) {
+  let acao = '';
+  if (m._feito) acao = `<div class="small text-success mt-1"><i class="bi bi-check-circle me-1"></i>${esc(m._resultado || 'Feito.')}</div>`;
+  else if (m._cancelado) acao = '<div class="small text-muted mt-1">Cancelado.</div>';
+  else acao = `<div class="mt-2 d-flex gap-2"><button class="btn btn-sm btn-warning" onclick="cpConfirmar(${idx})"><i class="bi bi-check-lg me-1"></i>Confirmar</button><button class="btn btn-sm btn-outline-secondary" onclick="cpCancelar(${idx})">Cancelar</button></div>`;
+  return `<div class="d-flex justify-content-start mb-2"><div class="p-2 px-3 rounded-3 border border-warning bg-warning-subtle" style="max-width:85%">
+    <div class="small fw-bold text-warning-emphasis"><i class="bi bi-exclamation-circle me-1"></i>Confirmar ação</div>
+    <div class="mt-1">${esc(m.resumo || m.texto || '')}</div>${acao}</div></div>`;
+}
+
+async function cpEnviar() {
+  if (!cpDisponivel || cpOcupado) return;
+  const inp = document.getElementById('cp-input');
+  const txt = inp.value.trim();
+  if (!txt) return;
+  inp.value = '';
+  cpOcupado = true;
+  cpMensagens.push({ role: 'user', texto: txt });
+  cpMensagens.push({ role: 'assistant', _pending: true });
+  cpRender();
+  const payload = {
+    mensagens: cpMensagens
+      .filter(m => !m._pending && (m.texto || m.resumo))
+      .map(m => ({ role: m.role === 'user' ? 'user' : 'assistant', texto: m.texto || m.resumo }))
+  };
+  const resp = await api('POST', '/v1/copilot', payload);
+  cpMensagens = cpMensagens.filter(m => !m._pending);
+  cpAplicarResposta(resp);
+  cpOcupado = false;
+}
+
+function cpAplicarResposta(resp) {
+  if (!resp) { cpMensagens.push({ role: 'assistant', tipo: 'erro', texto: 'Sem resposta do servidor.' }); cpRender(); return; }
+  if (resp.erro) { cpMensagens.push({ role: 'assistant', tipo: 'erro', texto: resp.erro }); cpRender(); return; }
+  if (resp.tipo === 'confirmacao') {
+    cpMensagens.push({ role: 'assistant', tipo: 'confirmacao', resumo: resp.resumo, operacao: resp.operacao, args: resp.args });
+    cpRender(); return;
+  }
+  if (resp.tipo === 'erro') { cpMensagens.push({ role: 'assistant', tipo: 'erro', texto: resp.texto }); cpRender(); return; }
+  cpMensagens.push({ role: 'assistant', texto: resp.texto || '' });
+  cpRender();
+}
+
+async function cpConfirmar(idx) {
+  const m = cpMensagens[idx];
+  if (!m || m._feito || m._cancelado) return;
+  const r = await api('POST', '/v1/copilot/acao', { operacao: m.operacao, args: m.args });
+  m._feito = true;
+  m._resultado = (r && r.texto) ? r.texto : ('Erro: ' + ((r && r.erro) || 'falha ao executar'));
+  cpRender();
+  atualizarNotificacoes();
+}
+
+function cpCancelar(idx) {
+  const m = cpMensagens[idx];
+  if (m) { m._cancelado = true; cpRender(); }
+}
+
+// ── Trilha de auditoria (RF-136) ───────────────────────────
+let auPagina = 1;
+function auQueryString() {
+  const p = new URLSearchParams();
+  const cat = document.getElementById('au-categoria').value; if (cat) p.set('categoria', cat);
+  const de = document.getElementById('au-de').value; if (de) p.set('de', de);
+  const ate = document.getElementById('au-ate').value; if (ate) p.set('ate', ate);
+  const q = document.getElementById('au-q').value.trim(); if (q) p.set('q', q);
+  return p.toString();
+}
+function auCatBadge(c) {
+  const m = { cadastro: 'bg-primary', geracao: 'bg-success', fechamento: 'bg-dark', liberacao: 'bg-info text-dark', conciliacao: 'bg-warning text-dark' };
+  return `<span class="badge ${m[c] || 'bg-secondary'}">${esc(c)}</span>`;
+}
+async function carregarAuditoria(pagina) {
+  auPagina = pagina || 1;
+  const q = auQueryString();
+  const r = await api('GET', `/v1/auditoria?${q}&pagina=${auPagina}&tamanho=50`, null, true);
+  const el = document.getElementById('au-lista');
+  const pg = document.getElementById('au-paginacao');
+  if (!r || r.erro) {
+    el.innerHTML = `<div class="alert alert-warning"><i class="bi bi-info-circle me-2"></i>${esc(r?.erro || 'Erro ao carregar a trilha.')}</div>`;
+    pg.innerHTML = '';
+    return;
+  }
+  const evs = r.eventos || [];
+  if (!evs.length) { el.innerHTML = '<div class="p-3 text-muted">Nenhum evento encontrado para o filtro.</div>'; pg.innerHTML = ''; return; }
+  const rows = evs.map(e => `<tr>
+    <td class="text-nowrap small">${esc(histFmt(e.criado_em))}</td>
+    <td>${auCatBadge(e.categoria)}</td>
+    <td class="small"><code>${esc(e.acao)}</code></td>
+    <td class="small">${esc(e.entidade)}</td>
+    <td class="small">${esc(e.detalhe)}</td>
+    <td class="small">${e.dados ? `<details><summary class="text-muted" style="cursor:pointer">dados</summary><pre class="small mb-0 mt-1" style="white-space:pre-wrap">${esc(JSON.stringify(e.dados, null, 2))}</pre></details>` : '<span class="text-muted">—</span>'}</td>
+  </tr>`).join('');
+  el.innerHTML = `<div class="card shadow-sm"><div class="table-responsive"><table class="table table-sm table-hover mb-0">
+    <thead class="table-dark"><tr><th>Quando</th><th>Categoria</th><th>Ação</th><th>Entidade</th><th>Detalhe</th><th>Dados</th></tr></thead>
+    <tbody>${rows}</tbody></table></div></div>`;
+  const totalPaginas = Math.max(1, Math.ceil(r.total / r.tamanho));
+  pg.innerHTML = `<span class="text-muted small">${r.total} evento(s) · página ${r.pagina}/${totalPaginas}</span>
+    <div class="btn-group btn-group-sm">
+      <button class="btn btn-outline-secondary" ${r.pagina <= 1 ? 'disabled' : ''} onclick="carregarAuditoria(${r.pagina - 1})"><i class="bi bi-chevron-left"></i></button>
+      <button class="btn btn-outline-secondary" ${r.pagina >= totalPaginas ? 'disabled' : ''} onclick="carregarAuditoria(${r.pagina + 1})"><i class="bi bi-chevron-right"></i></button>
+    </div>`;
+}
+function exportarAuditoria(formato) {
+  const q = auQueryString();
+  const fmt = formato === 'csv' ? '&formato=csv' : '';
+  window.open(`/api/v1/auditoria/export?${q}${fmt}`, '_blank');
 }
 
 // ── Lançamento Manual (RF-033) ────────────────────────────
@@ -3512,7 +4028,7 @@ function renderizarRegras(regras) {
   if (!regras.length) { el.innerHTML = '<div class="p-3 text-muted">Nenhuma regra encontrada.</div>'; return; }
   const rows = regras.map(reg => `<tr${reg.status === 'rascunho' ? ' class="table-warning"' : ''}>
     <td>${reg.id}</td>
-    <td><strong>${rotuloRegra(reg)}</strong></td>
+    <td><strong>${rotuloRegra(reg)}</strong>${seloHistorico(reg.id)}</td>
     <td>${reg.descricao}</td>
     <td>${reg.codigo_produto_corporativo ? reg.codigo_produto_corporativo.split(',').map(p => `<span class="badge bg-secondary me-1">${p.trim()}</span>`).join('') : '<span class="text-muted">Todos</span>'}</td>
     <td>${reg.dominio ? reg.dominio.split(',').map(d => `<span class="badge bg-info text-dark me-1">${d.trim()}</span>`).join('') : '<span class="text-muted">Todos</span>'}</td>
@@ -3528,6 +4044,7 @@ function renderizarRegras(regras) {
       </button>
       <button class="btn btn-sm btn-outline-secondary" onclick="abrirEdicaoRegra(${reg.id})" title="Editar regra"><i class="bi bi-pencil"></i></button>
       <button class="btn btn-sm btn-outline-success" onclick="clonarRegra(${reg.id})" title="Clonar regra (com as condições)"><i class="bi bi-copy"></i></button>
+      ${historicoDisponivel ? `<button class="btn btn-sm btn-outline-info" onclick="abrirHistorico(${reg.id})" title="Histórico de versões (comparar e restaurar)"><i class="bi bi-clock-history"></i></button>` : ''}
       <button class="btn btn-sm btn-outline-danger" onclick="excluirRegra(${reg.id}, '${reg.descricao.replace(/'/g,"\\'")}')" title="Excluir regra"><i class="bi bi-trash"></i></button>
     </td>
   </tr>`).join('');
@@ -4001,6 +4518,110 @@ async function fcRemoverLiberacao(id) {
   carregarFechamento();
 }
 
+// ── [LAB] Features experimentais: Diagnóstico de dupla contabilização + Linhagem ──
+async function labInit() {
+  try {
+    const st = await api('GET', '/v1/lab/status', null, true);
+    labAtivo = !!(st && st.ativo);
+  } catch (e) { labAtivo = false; }
+  const nav = document.getElementById('nav-diagnostico');
+  if (nav) nav.style.display = labAtivo ? '' : 'none';
+  if (movUltimo) renderGridMovimento(); // re-render para mostrar a coluna de linhagem
+}
+
+async function diagnosticar() {
+  const el = document.getElementById('diag-resultado');
+  el.innerHTML = '<div class="text-muted p-2"><span class="spinner-border spinner-border-sm me-2"></span>Analisando regras contra a posição…</div>';
+  const data = document.getElementById('diag-data').value;
+  const produto = document.getElementById('diag-produto').value;
+  const dominio = document.getElementById('diag-dominio').value;
+  const qs = new URLSearchParams();
+  if (data) qs.set('data', data);
+  if (produto) qs.set('produto', produto);
+  if (dominio) qs.set('dominio', dominio);
+  const r = await api('GET', '/v1/lab/diagnostico?' + qs.toString());
+  if (!r || r.erro) { el.innerHTML = `<div class="alert alert-danger">${esc((r && r.erro) || 'falha ao diagnosticar')}</div>`; return; }
+  el.innerHTML = diagRender(r);
+}
+
+function diagRender(r) {
+  const n = a => (a || []).length;
+  let html = `<div class="d-flex flex-wrap gap-2 mb-3">
+    <span class="badge bg-dark">Data ${esc(r.data)}</span>
+    <span class="badge bg-secondary">${r.total_posicoes} posição(ões) · ${r.total_boletos} boleto(s)</span>
+    <span class="badge ${n(r.conflitos) ? 'bg-danger' : 'bg-success'}">${n(r.conflitos)} conflito(s) de dupla contabilização</span>
+    <span class="badge bg-light text-dark border">${n(r.sem_correspondencia)} condição(ões) sem correspondência</span>
+    <span class="badge bg-light text-dark border">${n(r.campos_ausentes)} com campo ausente</span>
+  </div>`;
+
+  if (n(r.conflitos)) {
+    const linhas = r.conflitos.map(c => `<tr>
+      <td class="fw-semibold">${esc(c.boleto)}</td>
+      <td class="small text-nowrap">${esc(c.produto || '—')} / ${esc(c.dominio || '—')}</td>
+      <td>${c.regras.map(x => `<div class="small">#${x.id_regra} <strong>${esc(x.regra)}</strong> · <code>${esc(x.condicao || '(sem condição)')}</code> → D <code>${esc(x.conta_debito)}</code> / C <code>${esc(x.conta_credito)}</code></div>`).join('')}</td>
+    </tr>`).join('');
+    html += `<div class="card border-danger shadow-sm mb-3"><div class="card-header bg-danger text-white"><i class="bi bi-exclamation-octagon me-1"></i>Boletos atingidos por mais de uma regra <span class="small">(possível lançamento em dobro)</span></div>
+      <div class="table-responsive"><table class="table table-sm mb-0 align-middle"><thead class="table-light"><tr><th>Boleto</th><th>Prod/Dom</th><th>Regras que disparam no mesmo boleto</th></tr></thead><tbody>${linhas}</tbody></table></div></div>`;
+  } else {
+    html += `<div class="alert alert-success py-2"><i class="bi bi-check-circle me-1"></i>Nenhum boleto é atingido por mais de uma regra nessa data.</div>`;
+  }
+
+  if (n(r.sem_correspondencia)) {
+    const linhas = r.sem_correspondencia.map(x => `<tr><td>#${x.id_regra}</td><td>${esc(x.regra)}</td><td><code>${esc(x.condicao || '(sem condição)')}</code></td></tr>`).join('');
+    html += `<div class="card shadow-sm mb-3"><div class="card-header"><i class="bi bi-slash-circle me-1"></i>Condições que não casaram nenhuma posição em ${esc(r.data)} <span class="text-muted small">(regra possivelmente morta nessa data)</span></div>
+      <div class="table-responsive"><table class="table table-sm mb-0"><thead class="table-light"><tr><th>Regra</th><th>Descrição</th><th>Condição</th></tr></thead><tbody>${linhas}</tbody></table></div></div>`;
+  }
+
+  if (n(r.campos_ausentes)) {
+    const linhas = r.campos_ausentes.map(x => `<tr><td>#${x.id_regra}</td><td>${esc(x.regra)}</td><td><code>${esc(x.condicao || '—')}</code></td><td>${(x.campos || []).map(c => `<span class="badge bg-warning text-dark">${esc(c)}</span>`).join(' ')}</td></tr>`).join('');
+    html += `<div class="card shadow-sm mb-3"><div class="card-header"><i class="bi bi-question-octagon me-1"></i>Condições que referenciam campos ausentes na posição</div>
+      <div class="table-responsive"><table class="table table-sm mb-0"><thead class="table-light"><tr><th>Regra</th><th>Descrição</th><th>Condição</th><th>Campos ausentes</th></tr></thead><tbody>${linhas}</tbody></table></div></div>`;
+  }
+
+  if (r.truncado) html += `<div class="small text-muted">Lista truncada (muitos itens).</div>`;
+  return html;
+}
+
+async function abrirLinhagem(idx) {
+  const l = movUltimo && movUltimo.lancamentos[idx];
+  if (!l) return;
+  const corpo = document.getElementById('linhagem-corpo');
+  corpo.innerHTML = '<div class="text-muted"><span class="spinner-border spinner-border-sm me-2"></span>Reconstruindo a linhagem…</div>';
+  new bootstrap.Modal(document.getElementById('modalLinhagem')).show();
+  const body = {
+    data: (l.data_lote_contabil || '').substring(0, 10),
+    boleto: l.codigo_identificador_boleto,
+    id_regra: l.id_regra_contabil,
+    descricao_condicao: l.descricao_condicao_contabil || '',
+    produto: l.produto || '',
+    dominio: l.dominio || ''
+  };
+  const r = await api('POST', '/v1/lab/linhagem', body);
+  if (!r || r.erro) { corpo.innerHTML = `<div class="alert alert-danger">${esc((r && r.erro) || 'falha ao reconstruir')}</div>`; return; }
+  corpo.innerHTML = linhagemRender(r, l);
+}
+
+function linhagemRender(r, l) {
+  const chip = ok => ok ? '<span class="badge bg-success">casa</span>' : '<span class="badge bg-danger">não casa</span>';
+  let html = '';
+  if (r.observacao) html += `<div class="alert ${r.encontrada ? 'alert-warning' : 'alert-info'} py-2"><i class="bi bi-info-circle me-1"></i>${esc(r.observacao)}</div>`;
+  const versao = r.versao || (l ? l.codigo_versao_conteudo : '—');
+  html += `<dl class="row mb-2">
+    <dt class="col-sm-3">Lançamento</dt><dd class="col-sm-9">Boleto <strong>${esc(r.boleto)}</strong> · ${esc(r.data)} · versão ${versao} · ${esc(r.produto || '—')}/${esc(r.dominio || '—')}</dd>
+    <dt class="col-sm-3">Regra</dt><dd class="col-sm-9">#${r.id_regra} <strong>${esc(r.regra || '—')}</strong> <span class="badge bg-light text-dark border">${esc(r.tipo_lancamento || '')}</span></dd>
+    ${r.pre_condicao ? `<dt class="col-sm-3">Pré-condição</dt><dd class="col-sm-9"><code>${esc(r.pre_condicao)}</code> ${chip(r.pre_condicao_ok)}</dd>` : ''}
+    <dt class="col-sm-3">Condição</dt><dd class="col-sm-9"><code>${esc(r.condicao || '(sem condição)')}</code> ${chip(r.condicao_ok)}</dd>
+    <dt class="col-sm-3">Contas</dt><dd class="col-sm-9">Débito <strong>${esc(r.conta_debito)}</strong> · Crédito <strong>${esc(r.conta_credito)}</strong></dd>
+    <dt class="col-sm-3">Valor</dt><dd class="col-sm-9"><code>${esc(r.campo_valor || '')}</code> = <strong>${Number(r.valor || 0).toFixed(2)}</strong> ${esc(r.moeda || '')}</dd>
+  </dl>`;
+  if (r.campos && r.campos.length) {
+    const linhas = r.campos.map(c => `<tr class="${c.ausente ? 'table-danger' : ''}"><td>${esc(c.nome)} ${c.na_condicao ? '<span class="badge bg-info text-dark">condição</span>' : ''}</td><td>${c.ausente ? '<em class="text-danger">ausente na posição</em>' : esc(c.valor)}</td></tr>`).join('');
+    html += `<h6 class="mt-3">Campos da posição usados pela regra</h6>
+      <div class="table-responsive"><table class="table table-sm table-striped mb-0"><thead class="table-light"><tr><th>Campo</th><th>Valor na posição</th></tr></thead><tbody>${linhas}</tbody></table></div>`;
+  }
+  return html;
+}
+
 // Atualiza o contador periodicamente e na carga inicial.
 atualizarNotificacoes();
 setInterval(atualizarNotificacoes, 15000);
@@ -4008,6 +4629,7 @@ setInterval(atualizarNotificacoes, 15000);
 // Inicializa a página padrão (Operação) na carga — popula combos e preenche o
 // Mês/Ano do calendário com o mês e ano atuais.
 showPage('operacao');
+labInit(); // [LAB] descobre se as features experimentais estão ligadas (mostra/esconde o menu)
 </script>
 </body>
 </html>

@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"log"
 	"strings"
 
 	"srcoff/internal/evaluator"
@@ -22,17 +23,106 @@ type regraContabilRepoFull interface {
 	ExcluirCondicao(ctx context.Context, id int64) error
 }
 
+// regraVersaoRepo é a dependência OPCIONAL do histórico de versões (RF-133). Quando nil
+// (backends file/sqlserver) o versionamento fica desligado e o cadastro funciona normalmente.
+type regraVersaoRepo interface {
+	Carregar(ctx context.Context, idRegra int64) (model.RegraContabil, bool, error)
+	UltimaVersao(ctx context.Context, idRegra int64) (model.RegraVersao, bool, error)
+	Snapshot(ctx context.Context, idRegra int64, regra model.RegraContabil, resumo, origem string) (int, error)
+	Listar(ctx context.Context, idRegra int64) ([]model.RegraVersao, error)
+	Obter(ctx context.Context, idRegra int64, versao int) (model.RegraVersao, bool, error)
+	ResumoTodos(ctx context.Context) ([]model.RegraVersao, error)
+}
+
 type RegraContabilService struct {
-	repo regraContabilRepoFull
+	repo       regraContabilRepoFull
+	versaoRepo regraVersaoRepo   // opcional (sqlite-first)
+	auditoria  *AuditoriaService // opcional: trilha de auditoria (RF-136)
 }
 
 func NewRegraContabilService(repo regraContabilRepoFull) *RegraContabilService {
 	return &RegraContabilService{repo: repo}
 }
 
+// ComVersaoRepo liga o histórico de versões do cadastro (RF-133). Sem ele a feature fica off.
+func (s *RegraContabilService) ComVersaoRepo(r regraVersaoRepo) *RegraContabilService {
+	s.versaoRepo = r
+	return s
+}
+
+// ComAuditoria liga a trilha de auditoria global (RF-136) ao cadastro.
+func (s *RegraContabilService) ComAuditoria(a *AuditoriaService) *RegraContabilService {
+	s.auditoria = a
+	return s
+}
+
+// HistoricoDisponivel informa se o versionamento de regras está ligado neste backend.
+func (s *RegraContabilService) HistoricoDisponivel() bool { return s.versaoRepo != nil }
+
+// capturarVersao grava um snapshot da regra APÓS uma mutação, com resumo derivado do diff
+// contra a última versão. Best-effort: a mutação já foi persistida, então um erro aqui só é
+// logado (não falha a requisição). Não cria versão quando nada mudou de fato.
+func (s *RegraContabilService) capturarVersao(ctx context.Context, idRegra int64, origem string) {
+	s.capturarVersaoComResumo(ctx, idRegra, "", origem)
+}
+
+// capturarVersaoComResumo é como capturarVersao, mas permite forçar o resumo (ex.: restauração).
+// Com resumo vazio, o resumo é calculado pelo diff contra a última versão.
+func (s *RegraContabilService) capturarVersaoComResumo(ctx context.Context, idRegra int64, resumo, origem string) {
+	if s.versaoRepo == nil || idRegra == 0 {
+		return
+	}
+	atual, ok, err := s.versaoRepo.Carregar(ctx, idRegra)
+	if err != nil {
+		log.Printf("[regra-versao] falha ao carregar regra %d para snapshot: %v", idRegra, err)
+		return
+	}
+	if !ok {
+		return
+	}
+	var anterior *model.RegraContabil
+	if ult, ok, err := s.versaoRepo.UltimaVersao(ctx, idRegra); err == nil && ok {
+		a := ult.Regra
+		anterior = &a
+	}
+	if resumo == "" {
+		resumo = model.ResumoAlteracao(anterior, atual)
+		// Nada mudou de fato em relação à última versão → não cria ruído no histórico.
+		if anterior != nil && resumo == "Sem alterações" {
+			return
+		}
+	}
+	if _, err := s.versaoRepo.Snapshot(ctx, idRegra, atual, resumo, origem); err != nil {
+		log.Printf("[regra-versao] falha ao gravar snapshot da regra %d: %v", idRegra, err)
+	}
+}
+
+// idRegraDaCondicao descobre a regra-mãe de uma condição (pelas regras visíveis). Usado para
+// saber qual regra versionar quando a mutação é sobre uma condição. 0 se não encontrada.
+func (s *RegraContabilService) idRegraDaCondicao(ctx context.Context, idCondicao int64) int64 {
+	regras, err := s.repo.ListarRegras(ctx)
+	if err != nil {
+		return 0
+	}
+	for _, rg := range regras {
+		for _, c := range rg.Condicoes {
+			if c.ID == idCondicao {
+				return rg.ID
+			}
+		}
+	}
+	return 0
+}
+
 // ListarRegras devolve as regras visíveis na UI (ativa + rascunho; sem excluídas) — RF-125.
 func (s *RegraContabilService) ListarRegras(ctx context.Context) ([]model.RegraContabil, error) {
 	return s.repo.ListarRegras(ctx)
+}
+
+// RegrasAtivas devolve as regras ATIVAS com as condições ATIVAS embutidas (a "porta" da
+// geração). Usada pelo catálogo de regras (RF-134), relatório legível p/ contábil/auditoria.
+func (s *RegraContabilService) RegrasAtivas(ctx context.Context) ([]model.RegraContabil, error) {
+	return s.repo.ListarRegrasAtivas(ctx)
 }
 
 // normalizarCamposRegra normaliza os nomes de coluna e as expressões de uma regra (e suas
@@ -64,7 +154,14 @@ func (s *RegraContabilService) CriarRegra(ctx context.Context, regra model.Regra
 	}
 	normalizarCamposRegra(&regra)
 	// Produto é opcional: uma regra sem produto se aplica a todas as posições.
-	return s.repo.CriarRegra(ctx, regra)
+	novoID, err := s.repo.CriarRegra(ctx, regra)
+	if err != nil {
+		return 0, err
+	}
+	s.capturarVersao(ctx, novoID, "sistema")
+	s.auditoria.Log(ctx, model.AudCadastro, "regra.criada", fmt.Sprintf("regra #%d", novoID), "sistema", regra.Descricao,
+		map[string]interface{}{"id": novoID, "descricao": regra.Descricao, "produto": regra.CodigoProdutoCorporativo, "dominio": regra.Dominio})
+	return novoID, nil
 }
 
 // ClonarRegra duplica uma regra e todas as suas condições, criando uma nova regra com a
@@ -106,6 +203,7 @@ func (s *RegraContabilService) ClonarRegra(ctx context.Context, id int64) (int64
 			return novoID, err
 		}
 	}
+	s.capturarVersao(ctx, novoID, "sistema")
 	return novoID, nil
 }
 
@@ -127,7 +225,12 @@ func (s *RegraContabilService) ClonarCondicao(ctx context.Context, idCondicao in
 			if c.ID == idCondicao {
 				c.ID = 0
 				c.IDRegra = rg.ID
-				return s.repo.CriarCondicao(ctx, c)
+				novoID, err := s.repo.CriarCondicao(ctx, c)
+				if err != nil {
+					return 0, err
+				}
+				s.capturarVersao(ctx, rg.ID, "sistema")
+				return novoID, nil
 			}
 		}
 	}
@@ -142,14 +245,26 @@ func (s *RegraContabilService) EditarRegra(ctx context.Context, regra model.Regr
 		return fmt.Errorf("campo obrigatório ausente: descricao")
 	}
 	normalizarCamposRegra(&regra)
-	return s.repo.EditarRegra(ctx, regra)
+	if err := s.repo.EditarRegra(ctx, regra); err != nil {
+		return err
+	}
+	s.capturarVersao(ctx, regra.ID, "sistema")
+	s.auditoria.Log(ctx, model.AudCadastro, "regra.editada", fmt.Sprintf("regra #%d", regra.ID), "sistema", regra.Descricao,
+		map[string]interface{}{"id": regra.ID, "descricao": regra.Descricao})
+	return nil
 }
 
 func (s *RegraContabilService) ExcluirRegra(ctx context.Context, id int64) error {
 	if id == 0 {
 		return fmt.Errorf("id da regra é obrigatório")
 	}
-	return s.repo.ExcluirRegra(ctx, id)
+	if err := s.repo.ExcluirRegra(ctx, id); err != nil {
+		return err
+	}
+	s.capturarVersao(ctx, id, "sistema")
+	s.auditoria.Log(ctx, model.AudCadastro, "regra.excluida", fmt.Sprintf("regra #%d", id), "sistema", "exclusão lógica da regra",
+		map[string]interface{}{"id": id})
+	return nil
 }
 
 func (s *RegraContabilService) ListarCondicoes(ctx context.Context, idRegra int64) ([]model.CondicaoRegra, error) {
@@ -180,7 +295,14 @@ func (s *RegraContabilService) CriarCondicao(ctx context.Context, condicao model
 	if err := validarConfigMoedaBase(&condicao); err != nil {
 		return 0, err
 	}
-	return s.repo.CriarCondicao(ctx, condicao)
+	novoID, err := s.repo.CriarCondicao(ctx, condicao)
+	if err != nil {
+		return 0, err
+	}
+	s.capturarVersao(ctx, condicao.IDRegra, "sistema")
+	s.auditoria.Log(ctx, model.AudCadastro, "condicao.criada", fmt.Sprintf("condição #%d (regra #%d)", novoID, condicao.IDRegra), "sistema", condicao.Condicao,
+		map[string]interface{}{"id": novoID, "id_regra": condicao.IDRegra, "condicao": condicao.Condicao, "conta_debito": condicao.ContaDebito, "conta_credito": condicao.ContaCredito})
+	return novoID, nil
 }
 
 // validarConfigMoedaBase valida e normaliza a configuração obrigatória da moeda base do
@@ -229,14 +351,179 @@ func (s *RegraContabilService) EditarCondicao(ctx context.Context, condicao mode
 	if err := validarConfigMoedaBase(&condicao); err != nil {
 		return err
 	}
-	return s.repo.EditarCondicao(ctx, condicao)
+	// Descobre a regra-mãe ANTES da mutação (a condição ainda está visível).
+	idRegra := condicao.IDRegra
+	if s.versaoRepo != nil && idRegra == 0 {
+		idRegra = s.idRegraDaCondicao(ctx, condicao.ID)
+	}
+	if err := s.repo.EditarCondicao(ctx, condicao); err != nil {
+		return err
+	}
+	s.capturarVersao(ctx, idRegra, "sistema")
+	s.auditoria.Log(ctx, model.AudCadastro, "condicao.editada", fmt.Sprintf("condição #%d (regra #%d)", condicao.ID, idRegra), "sistema", condicao.Condicao,
+		map[string]interface{}{"id": condicao.ID, "id_regra": idRegra, "condicao": condicao.Condicao})
+	return nil
 }
 
 func (s *RegraContabilService) ExcluirCondicao(ctx context.Context, id int64) error {
 	if id == 0 {
 		return fmt.Errorf("id da condição é obrigatório")
 	}
-	return s.repo.ExcluirCondicao(ctx, id)
+	// Descobre a regra-mãe ANTES de excluir (depois a condição some das visíveis).
+	var idRegra int64
+	if s.versaoRepo != nil {
+		idRegra = s.idRegraDaCondicao(ctx, id)
+	}
+	if err := s.repo.ExcluirCondicao(ctx, id); err != nil {
+		return err
+	}
+	s.capturarVersao(ctx, idRegra, "sistema")
+	s.auditoria.Log(ctx, model.AudCadastro, "condicao.excluida", fmt.Sprintf("condição #%d (regra #%d)", id, idRegra), "sistema", "exclusão lógica da condição",
+		map[string]interface{}{"id": id, "id_regra": idRegra})
+	return nil
+}
+
+// ── Histórico de versões do cadastro (RF-133) ───────────────────────────────
+
+var errHistoricoOff = fmt.Errorf("histórico de versões indisponível neste backend")
+
+// Historico devolve as versões de uma regra (mais recente primeiro).
+func (s *RegraContabilService) Historico(ctx context.Context, idRegra int64) ([]model.RegraVersao, error) {
+	if s.versaoRepo == nil {
+		return nil, errHistoricoOff
+	}
+	if idRegra == 0 {
+		return nil, fmt.Errorf("id da regra é obrigatório")
+	}
+	return s.versaoRepo.Listar(ctx, idRegra)
+}
+
+// ResumoHistorico devolve a última versão de CADA regra (sem o snapshot pesado), para a lista
+// de regras exibir um selo "vN · alterada em ...". Map vazio quando a feature está off.
+func (s *RegraContabilService) ResumoHistorico(ctx context.Context) (map[int64]model.RegraVersao, error) {
+	out := map[int64]model.RegraVersao{}
+	if s.versaoRepo == nil {
+		return out, nil
+	}
+	ultimas, err := s.versaoRepo.ResumoTodos(ctx)
+	if err != nil {
+		return nil, err
+	}
+	for _, v := range ultimas {
+		out[v.IDRegra] = v
+	}
+	return out, nil
+}
+
+// DiffVersoes compara duas versões da regra. versaoA/versaoB <= 0 assumem, respectivamente, a
+// versão imediatamente anterior e a mais recente ("vigente × anterior").
+func (s *RegraContabilService) DiffVersoes(ctx context.Context, idRegra int64, versaoA, versaoB int) (model.DiffRegraVersoes, error) {
+	if s.versaoRepo == nil {
+		return model.DiffRegraVersoes{}, errHistoricoOff
+	}
+	versoes, err := s.versaoRepo.Listar(ctx, idRegra)
+	if err != nil {
+		return model.DiffRegraVersoes{}, err
+	}
+	if len(versoes) == 0 {
+		return model.DiffRegraVersoes{IDRegra: idRegra, SemAlteracoes: true}, nil
+	}
+	// versoes vem em ordem decrescente de número.
+	maxV := versoes[0].Versao
+	if versaoB <= 0 {
+		versaoB = maxV
+	}
+	if versaoA <= 0 {
+		// versão imediatamente anterior a B dentre as existentes.
+		versaoA = versaoB
+		for _, v := range versoes {
+			if v.Versao < versaoB {
+				versaoA = v.Versao
+				break
+			}
+		}
+	}
+	va, okA, err := s.versaoRepo.Obter(ctx, idRegra, versaoA)
+	if err != nil {
+		return model.DiffRegraVersoes{}, err
+	}
+	vb, okB, err := s.versaoRepo.Obter(ctx, idRegra, versaoB)
+	if err != nil {
+		return model.DiffRegraVersoes{}, err
+	}
+	if !okA || !okB {
+		return model.DiffRegraVersoes{}, fmt.Errorf("versão não encontrada")
+	}
+	d := model.DiffRegras(va.Regra, vb.Regra)
+	d.IDRegra = idRegra
+	d.VersaoA = versaoA
+	d.VersaoB = versaoB
+	return d, nil
+}
+
+// RestaurarVersao torna uma versão antiga o estado vigente da regra (RF-133). O snapshot vira a
+// verdade: os campos da regra e das condições são sobrescritos, condições excluídas depois são
+// ressuscitadas e condições criadas depois são excluídas. É append-only: a restauração gera uma
+// nova versão ("Revertido para vN"), preservando todo o histórico.
+func (s *RegraContabilService) RestaurarVersao(ctx context.Context, idRegra int64, versao int) error {
+	if s.versaoRepo == nil {
+		return errHistoricoOff
+	}
+	if idRegra == 0 || versao <= 0 {
+		return fmt.Errorf("id da regra e versão são obrigatórios")
+	}
+	alvo, ok, err := s.versaoRepo.Obter(ctx, idRegra, versao)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return fmt.Errorf("versão %d não encontrada para a regra %d", versao, idRegra)
+	}
+	snap := alvo.Regra
+	snap.ID = idRegra
+
+	// 1) Restaura os campos da regra (com status, para refazer ativo/status daquela versão).
+	snap.Status = model.NormalizaStatus(snap.Status, snap.Ativo)
+	snap.Ativo = model.AtivoDoStatus(snap.Status)
+	if err := s.repo.EditarRegra(ctx, snap); err != nil {
+		return err
+	}
+
+	// 2) Reconcilia as condições. As do snapshot são restauradas (ressuscitando as que haviam
+	//    sido excluídas, pois a exclusão é lógica e a linha permanece); as criadas depois são
+	//    excluídas. Usa o REPO direto para não gerar uma versão por condição.
+	noSnapshot := map[int64]bool{}
+	for _, c := range snap.Condicoes {
+		noSnapshot[c.ID] = true
+		c.IDRegra = idRegra
+		c.Status = model.NormalizaStatus(c.Status, c.Ativo)
+		c.Ativo = model.AtivoDoStatus(c.Status)
+		if c.ID != 0 {
+			if err := s.repo.EditarCondicao(ctx, c); err != nil {
+				return err
+			}
+		} else {
+			if _, err := s.repo.CriarCondicao(ctx, c); err != nil {
+				return err
+			}
+		}
+	}
+	atual, _, err := s.versaoRepo.Carregar(ctx, idRegra)
+	if err == nil {
+		for _, c := range atual.Condicoes {
+			if !noSnapshot[c.ID] {
+				if err := s.repo.ExcluirCondicao(ctx, c.ID); err != nil {
+					return err
+				}
+			}
+		}
+	}
+
+	// 3) Anexa a nova versão que registra a restauração.
+	s.capturarVersaoComResumo(ctx, idRegra, fmt.Sprintf("Revertido para v%d", versao), "sistema")
+	s.auditoria.Log(ctx, model.AudCadastro, "regra.restaurada", fmt.Sprintf("regra #%d", idRegra), "sistema", fmt.Sprintf("revertida para a versão v%d", versao),
+		map[string]interface{}{"id_regra": idRegra, "versao": versao})
+	return nil
 }
 
 // Lint analisa estaticamente as regras/condições ATIVAS e devolve achados (erro/aviso):

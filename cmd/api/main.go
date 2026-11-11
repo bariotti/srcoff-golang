@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"srcoff/internal/ai"
 	"srcoff/internal/db"
 	"srcoff/internal/evaluator"
 	"srcoff/internal/handler"
@@ -53,6 +54,10 @@ func main() {
 	// Controle de fechamento de competência (RF-132): apenas SQLite por ora (tipo concreto;
 	// nil nos demais backends → feature indisponível).
 	var fechamentoRepo *sqliterepo.ControleFechamentoRepo
+	// Histórico de versões do cadastro de regras (RF-133): também sqlite-first.
+	var regraVersaoRepo *sqliterepo.RegraVersaoRepo
+	// Trilha de auditoria global (RF-136): persistência sqlite-first (a linha de log JSON é sempre emitida).
+	var auditoriaRepo *sqliterepo.AuditoriaRepo
 
 	switch backend {
 	case "file":
@@ -99,6 +104,8 @@ func main() {
 		cotacaoRepo = sqliterepo.NewCotacaoRepo(sdb)
 		jobRepo = sqliterepo.NewJobRepo(sdb)
 		fechamentoRepo = sqliterepo.NewControleFechamentoRepo(sdb)
+		regraVersaoRepo = sqliterepo.NewRegraVersaoRepo(sdb)
+		auditoriaRepo = sqliterepo.NewAuditoriaRepo(sdb)
 
 	default: // sqlserver
 		rawSQLDB = db.Connect()
@@ -126,11 +133,20 @@ func main() {
 	// 2. Instanciar avaliador de expressões
 	eval := evaluator.New()
 
+	// Trilha de auditoria global (RF-136). Sempre existe (emite a linha de log JSON); a
+	// persistência/consulta só liga quando há repositório (sqlite). Evita o "typed nil":
+	// só passa o repo quando não for nil.
+	auditoriaSvc := service.NewAuditoriaService(nil)
+	if auditoriaRepo != nil {
+		auditoriaSvc = service.NewAuditoriaService(auditoriaRepo)
+	}
+
 	// 3. Instanciar serviços
 	movimentoSvc := service.NewMovimentoContabilService(posicaoRepo, regraRepo, movimentoRepo, eval).
 		ComInconsistenciaRepo(inconsistenciaRepo).
 		ComExecucaoRepo(execucaoRepo).
-		ComPadraoRepo(padraoArquivoRepo)
+		ComPadraoRepo(padraoArquivoRepo).
+		ComAuditoria(auditoriaSvc)
 
 	// Saldo em conta (RN-170) ATIVO por padrão. Para desligar, defina SALDO_CONTA_ENABLED=false
 	// (ou 0). Quando desligado, o serviço não mantém nem lê a projeção de saldo: a baixa do
@@ -154,7 +170,12 @@ func main() {
 	execucaoSvc := service.NewExecucaoService(execucaoRepo, padraoArquivoRepo).
 		ComInconsistenciaRepo(inconsistenciaRepo)
 	notificacaoSvc := service.NewNotificacaoService(notificacaoRepo)
-	regraSvc := service.NewRegraContabilService(regraRepo)
+	regraSvc := service.NewRegraContabilService(regraRepo).ComAuditoria(auditoriaSvc)
+	// Histórico de versões do cadastro (RF-133): habilitado quando há repositório de versões
+	// (atualmente só no SQLite). Sem ele, o cadastro funciona normalmente e a feature fica off.
+	if regraVersaoRepo != nil {
+		regraSvc = regraSvc.ComVersaoRepo(regraVersaoRepo)
+	}
 	posicaoSvc := service.NewPosicaoCarteiraService(posicaoRepo)
 	parametrizacaoSvc := service.NewParametrizacaoService(parametrizacaoRepo)
 	padraoArquivoSvc := service.NewPadraoArquivoService(padraoArquivoRepo)
@@ -178,6 +199,9 @@ func main() {
 	// 4. Instanciar handlers
 	movimentoHandler := handler.NewMovimentoContabilHandler(movimentoSvc)
 	regraHandler := handler.NewRegraContabilHandler(regraSvc)
+	regraHistoricoHandler := handler.NewRegraHistoricoHandler(regraSvc)
+	catalogoRegrasHandler := handler.NewCatalogoRegrasHandler(regraSvc)
+	auditoriaHandler := handler.NewAuditoriaHandler(auditoriaSvc)
 	conciliacaoIAHandler := handler.NewConciliacaoIAHandler(movimentoSvc, posicaoSvc)
 	posicaoHandler := handler.NewPosicaoCarteiraHandler(posicaoSvc, padraoArquivoSvc)
 	parametrizacaoHandler := handler.NewParametrizacaoHandler(parametrizacaoSvc)
@@ -194,10 +218,27 @@ func main() {
 	nlQueryHandler := handler.NewNLQueryHandler(rawSQLDB)
 	// Controle de fechamento de competência (RF-132). nil quando o backend não suporta → 501.
 	var fechamentoHandler *handler.FechamentoHandler
+	var fechamentoSvc *service.FechamentoService // reusado pelo copiloto (nil = sem fechamento)
 	if fechamentoRepo != nil {
-		fechamentoHandler = handler.NewFechamentoHandler(service.NewFechamentoService(fechamentoRepo))
+		fechamentoSvc = service.NewFechamentoService(fechamentoRepo).ComAuditoria(auditoriaSvc)
+		fechamentoHandler = handler.NewFechamentoHandler(fechamentoSvc)
 	} else {
 		fechamentoHandler = handler.NewFechamentoHandler(nil)
+	}
+
+	// Copiloto conversacional (RF-138): chat via API da Claude. A chave vem de ANTHROPIC_API_KEY
+	// (ambiente). Habilita-se sozinho quando a chave está presente; sem chave, status indisponível.
+	copilotSvc := service.NewCopilotService(ai.NewCliente(), regraSvc, movimentoSvc, posicaoSvc, fechamentoSvc)
+	copilotHandler := handler.NewCopilotHandler(copilotSvc)
+
+	// [LAB] Features experimentais: Diagnóstico de dupla contabilização + Linhagem de
+	// lançamento. LIGADAS por padrão; desligar com FEATURES_LAB=0 (ou false/off/nao), sem
+	// recompilar. Reusa o mesmo posicaoRepo/regraRepo da geração (funciona em qualquer backend).
+	labFlag := strings.ToLower(strings.TrimSpace(os.Getenv("FEATURES_LAB")))
+	labAtivo := labFlag != "0" && labFlag != "false" && labFlag != "off" && labFlag != "nao" && labFlag != "não"
+	labHandler := handler.NewLabHandler(service.NewLabService(posicaoRepo, regraRepo, eval), labAtivo)
+	if labAtivo {
+		log.Printf("[lab] features experimentais (diagnóstico + linhagem) HABILITADAS")
 	}
 
 	// Watcher de pasta monitorada (varredura periódica em segundo plano).
@@ -320,6 +361,15 @@ func main() {
 			regraHandler.EditarCondicao(w, r)
 		}
 	})
+	// Catálogo de regras (RF-134): documento HTML imprimível das regras ativas.
+	http.HandleFunc("/api/v1/catalogo-regras", catalogoRegrasHandler.Catalogo)
+	// Trilha de auditoria global (RF-136): consulta e exportação (sqlite-first).
+	http.HandleFunc("/api/v1/auditoria", auditoriaHandler.Listar)
+	http.HandleFunc("/api/v1/auditoria/export", auditoriaHandler.Export)
+	// Histórico de versões do cadastro de regras (RF-133). Prefixo distinto de "/api/v1/regras/".
+	http.HandleFunc("/api/v1/regra-historico", regraHistoricoHandler.Raiz)
+	http.HandleFunc("/api/v1/regra-historico/diff", regraHistoricoHandler.Diff)
+	http.HandleFunc("/api/v1/regra-historico/restaurar", regraHistoricoHandler.Restaurar)
 	// Fechamento de competência (RF-132).
 	http.HandleFunc("/api/v1/fechamento", fechamentoHandler.Raiz)
 	http.HandleFunc("/api/v1/fechamento/modo", fechamentoHandler.Modo)
@@ -335,6 +385,18 @@ func main() {
 	http.HandleFunc("/api/v1/preview-expressao", previewExprHandler.Preview)
 	simulacaoWhatIfHandler := handler.NewSimulacaoWhatIfHandler(movimentoSvc)
 	http.HandleFunc("/api/v1/simulacao-whatif", simulacaoWhatIfHandler.Simular)
+	backtestHandler := handler.NewBacktestHandler(movimentoSvc)
+	http.HandleFunc("/api/v1/backtest-regra", backtestHandler.Backtest)
+	reprocessamentoHandler := handler.NewReprocessamentoHandler(movimentoSvc)
+	http.HandleFunc("/api/v1/reprocessar", reprocessamentoHandler.Reprocessar)
+	// Copiloto conversacional (RF-138).
+	http.HandleFunc("/api/v1/copilot", copilotHandler.Chat)
+	http.HandleFunc("/api/v1/copilot/status", copilotHandler.Status)
+	http.HandleFunc("/api/v1/copilot/acao", copilotHandler.Acao)
+	// [LAB] Rotas experimentais (diagnóstico de dupla contabilização + linhagem).
+	http.HandleFunc("/api/v1/lab/status", labHandler.Status)
+	http.HandleFunc("/api/v1/lab/diagnostico", labHandler.Diagnostico)
+	http.HandleFunc("/api/v1/lab/linhagem", labHandler.Linhagem)
 	http.HandleFunc("/api/v1/nlquery", nlQueryHandler.Query)
 	http.HandleFunc("/api/v1/movimento-contabil/export", exportHandler.ExportMovimentoCSV)
 	http.HandleFunc("/api/v1/movimento-contabil/export-txt", exportHandler.ExportMovimentoTXT)

@@ -16,6 +16,8 @@ import (
 
 type posicaoCarteiraRepo interface {
 	BuscarPorDataEVersaoMaxima(ctx context.Context, data time.Time) ([]model.PosicaoCarteira, error)
+	// UltimaDataPosicao: data mais recente com posição importada (backtesting RF-135). ok=false se vazio.
+	UltimaDataPosicao(ctx context.Context) (time.Time, bool, error)
 }
 
 type regraContabilRepo interface {
@@ -79,6 +81,13 @@ type MovimentoContabilService struct {
 	moedaBaseRepo      moedaBaseLookup
 	cotacaoRepo        cotacaoLookup
 	fechamentoRepo     controleFechamentoReader
+	auditoria          *AuditoriaService // opcional: trilha de auditoria (RF-136)
+}
+
+// ComAuditoria liga a trilha de auditoria global (RF-136) à geração e à conciliação.
+func (s *MovimentoContabilService) ComAuditoria(a *AuditoriaService) *MovimentoContabilService {
+	s.auditoria = a
+	return s
 }
 
 // controleFechamentoReader lê a configuração do controle de fechamento (RF-132) para bloquear
@@ -1019,6 +1028,13 @@ func (s *MovimentoContabilService) GerarMovimentoEscopo(ctx context.Context, dat
 
 	log.Printf("[movimento+estorno] persistidos %d lançamentos e %d estornos para %s (escopo produto=%q dominio=%q) [%s]",
 		len(lancamentos), len(estornos), data.Format("2006-01-02"), produtoFiltro, dominioFiltro, strings.Join(detalhes, "; "))
+	s.auditoria.Log(ctx, model.AudGeracao, "movimento.gerado",
+		fmt.Sprintf("%s · %s", data.Format("2006-01-02"), escopoRotulo(produtoFiltro, dominioFiltro)), "sistema",
+		fmt.Sprintf("%d lançamentos, %d estornos, %d combinação(ões) bloqueada(s)", len(lancamentos), len(estornos), len(bloqueios)),
+		map[string]interface{}{
+			"data": data.Format("2006-01-02"), "produto": produtoFiltro, "dominio": dominioFiltro,
+			"lancamentos": len(lancamentos), "estornos": len(estornos), "bloqueios": len(bloqueios),
+		})
 	return bloqueios, nil
 }
 
@@ -1657,6 +1673,13 @@ func (s *MovimentoContabilService) Conciliar(ctx context.Context, data time.Time
 	sort.Slice(res.Orfaos, func(i, j int) bool { return res.Orfaos[i].Boleto < res.Orfaos[j].Boleto })
 
 	res.Truncado = (res.TotDivergentes+res.TotSemPosicao) > len(res.Divergencias) || res.TotOrfaos > len(res.Orfaos)
+	s.auditoria.Log(ctx, model.AudConciliacao, "conciliacao.executada",
+		fmt.Sprintf("%s · %s", data.Format("2006-01-02"), escopoRotulo(prodF, domF)), "sistema",
+		fmt.Sprintf("%d divergente(s), %d sem posição, %d órfão(s)", res.TotDivergentes, res.TotSemPosicao, res.TotOrfaos),
+		map[string]interface{}{
+			"data": data.Format("2006-01-02"), "produto": prodF, "dominio": domF,
+			"divergentes": res.TotDivergentes, "sem_posicao": res.TotSemPosicao, "orfaos": res.TotOrfaos,
+		})
 	return res, nil
 }
 

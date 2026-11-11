@@ -426,6 +426,31 @@ CREATE TABLE IF NOT EXISTS fechamento_liberacao (
   criado_em TEXT
 );
 CREATE UNIQUE INDEX IF NOT EXISTS UX_fechamento_liberacao ON fechamento_liberacao (ano, mes, produto, dominio);
+-- Histórico de versões do cadastro de regras (RF-133): um snapshot (JSON) da regra+condições
+-- por versão. Permite consultar o histórico, comparar versões e restaurar uma versão antiga.
+CREATE TABLE IF NOT EXISTS regra_versao (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  id_regra INTEGER NOT NULL,
+  versao INTEGER NOT NULL,
+  resumo TEXT NOT NULL DEFAULT '',
+  origem TEXT NOT NULL DEFAULT 'sistema',
+  snapshot TEXT NOT NULL,
+  criado_em TEXT
+);
+CREATE INDEX IF NOT EXISTS IX_regra_versao ON regra_versao (id_regra, versao);
+-- Trilha de auditoria global (RF-136): log unificado e estruturado das ações do sistema.
+CREATE TABLE IF NOT EXISTS auditoria (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  criado_em TEXT NOT NULL,
+  categoria TEXT NOT NULL,
+  acao TEXT NOT NULL,
+  entidade TEXT NOT NULL DEFAULT '',
+  origem TEXT NOT NULL DEFAULT 'sistema',
+  detalhe TEXT NOT NULL DEFAULT '',
+  dados TEXT NOT NULL DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS IX_auditoria_criado ON auditoria (criado_em);
+CREATE INDEX IF NOT EXISTS IX_auditoria_categoria ON auditoria (categoria, criado_em);
 `
 
 // ── Helpers de data/hora (SQLite guarda como TEXT) ──────────────────────────

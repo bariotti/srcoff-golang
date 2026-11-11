@@ -36,6 +36,19 @@ func (f *fakePosicaoRepo) BuscarPorDataEVersaoMaxima(ctx context.Context, data t
 	return result, nil
 }
 
+// UltimaDataPosicao devolve a maior data presente nos registros (backtesting RF-135).
+func (f *fakePosicaoRepo) UltimaDataPosicao(context.Context) (time.Time, bool, error) {
+	var max time.Time
+	ok := false
+	for _, r := range f.registros {
+		if !ok || r.DataPosicaoCarteira.After(max) {
+			max = r.DataPosicaoCarteira
+			ok = true
+		}
+	}
+	return max, ok, nil
+}
+
 type fakeRegraRepo struct {
 	regras []model.RegraContabil
 }
